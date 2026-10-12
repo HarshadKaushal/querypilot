@@ -38,7 +38,7 @@ The company does not become a second system of record. **Assumed:** business row
 
 **Enforced:** SQL that is not a single read over allowed tables and columns is rejected by the SQL guard, with a code and a reason. That covers writes, DDL, hidden columns, system catalogs, and functions off the approved list. The guard never runs anything, and no result can exceed the row cap (1,000 by default).
 
-**Assumed:** a write is also impossible at the database, because of the read-only role and a read-only transaction. The read-only role is enforced at connect time. The read-only transaction arrives with the executor.
+**Enforced:** a write is also impossible at the database. The login is checked to be read-only when it connects and on every schema refresh. Every query runs in a READ ONLY transaction that is rolled back, as a single statement, with a statement timeout. A result never exceeds the row cap or 5 MB, and a cut result is marked as truncated.
 
 ## Rules the foundation already follows
 

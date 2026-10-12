@@ -1,6 +1,6 @@
 # Feature Documentation
 
-Status of Ask Your Database against the production blueprint. Phase 4 (the SQL guard) is the current milestone.
+Status of Ask Your Database against the production blueprint. Phase 5 (the executor) is the current milestone.
 
 ## Completed
 
@@ -48,7 +48,7 @@ Status of Ask Your Database against the production blueprint. Phase 4 (the SQL g
 - **API surface.** Health stays unversioned. Auth and the current user live under `/v1`. There is still no Swagger document.
 - **Audit log.** Login, logout, refresh reuse, account deletion, connection create, update, test, and delete, schema refreshes, and allowlist edits are recorded. Rejected queries are a later phase.
 - **Account deletion.** The user row, refresh tokens, connections, snapshots, and allowlists go away. Query history is not stored yet.
-- **Executor.** It can test a connection and read its schema. It does not yet pool, cap rows, or run user SQL.
+- **Executor.** It tests connections, reads schemas, and runs guarded SQL: a READ ONLY transaction, a statement timeout (15 s), an empty `search_path`, a cursor read up to 1,000 rows and 5 MB, then `ROLLBACK`. One statement only, through the extended protocol. Two queries at once per connection across all processes, through Redis slots. A connection pauses for 60 s after 5 connection failures or timeouts in a row. There is one pool per connection, closed when credentials change or the connection is deleted. Errors map to fixed messages with a `retryable` flag. It runs in the API process with no HTTP route; `npm run try-query` runs the pipeline by hand, and Phase 6 moves it to the worker.
 - **SQL cache invalidation.** The schema fingerprint is ready to key the SQL proposal cache, which arrives with the LLM phase.
 
 ## Pending
@@ -56,7 +56,6 @@ Status of Ask Your Database against the production blueprint. Phase 4 (the SQL g
 Locked choices that are not implemented:
 
 - Gemini as the platform LLM, behind a provider interface, with a second call for the summary.
-- Read-only executor, timeouts, row caps, and Redis semaphores.
 - Queue, SSE progress, cancellation, and fair scheduling.
 - History and quotas. Login rate limits are part of the quota phase.
 - React UI (sign-in, connect, ask, history, usage, settings) and every result state.

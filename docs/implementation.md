@@ -119,6 +119,18 @@ The corpus lives in `src/__fixtures__`: one attack or safe query per line, so a 
 
 The guard is one layer. ADR 0009 lists what the executor in Phase 5 must still do: a READ ONLY transaction, a statement timeout, its own row cap, and an empty `search_path` so approved function names resolve in `pg_catalog`. The rewritten SQL from the live check was run that way, as `sample_ro`, against the sample database.
 
+## Phase 5: executor
+
+`QueryExecutor` (ADR 0010) is the one place SQL runs on a user database. A run checks the circuit breaker, takes a Redis slot for the connection, borrows a pooled socket, opens `BEGIN READ ONLY` with `statement_timeout` and an empty `search_path`, declares a cursor over the SQL, fetches up to the row and size caps, and rolls back.
+
+The integration tests found three defects before the commit. pg uses the simple protocol, which runs several statements, unless told otherwise, and an empty `values` array is not enough. A test with a write-capable login ran `SELECT 1; COMMIT; DELETE FROM public.t` and deleted the table's rows. The cursor and fetches now set `queryMode: 'extended'`. Second, two first calls to Redis at the same moment failed, because the second did not wait for the connection the first had started, so `RedisService` now shares one connect attempt. Third, a five-letter Node code such as `EPIPE` was taken for a SQLSTATE.
+
+The live script found a fourth. pg returns a `date` as a JavaScript Date at local midnight, so on this laptop (UTC+5:30) `2025-08-06` printed as `2025-08-05T18:30:00Z`. The pools now return dates, times, timestamps, and intervals as the text PostgreSQL writes.
+
+Slots and the breaker are Lua scripts on Redis, using Redis's clock. A slot is a lease token in a sorted set, valid for the statement timeout plus 10 seconds, so a crashed process frees its slots without help. The breaker counts only connection failures and timeouts. A query with an unknown column proves the database is up, so it resets the count.
+
+`apps/api/scripts/try-query.cjs` runs connect, refresh, guard, and executor in a Nest application context against the sample database. It compiles the API itself instead of chaining `npm run build &&` in `package.json`. On Windows, npm escapes the SQL argument for `cmd.exe` with `^`, and a chained command never removes those escapes.
+
 ## How to extend this
 
 Add a phase only after this phase's checks pass: `npm test`, `npm run lint`, `npm run format:check`, and a ready health response from `npm run up`. New application tables go in a new Prisma migration. New client-visible failures go through `AppException` and an existing or newly documented error code in `@ayd/shared`.

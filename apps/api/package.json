@@ -9,7 +9,8 @@
     "test": "npm run test:unit",
     "test:unit": "npm run build --workspace=@ayd/ssrf-guard && npm run build --workspace=@ayd/crypto && npm run build --workspace=@ayd/sql-guard && npm run generate --workspace=@ayd/database && jest --config jest.unit.config.cjs",
     "test:int": "npm run generate --workspace=@ayd/database && jest --config jest.int.config.cjs --runInBand",
-    "test:e2e": "npm run generate --workspace=@ayd/database && jest --config jest.e2e.config.cjs --runInBand"
+    "test:e2e": "npm run generate --workspace=@ayd/database && jest --config jest.e2e.config.cjs --runInBand",
+    "try-query": "node scripts/try-query.cjs"
   },
   "dependencies": {
     "@ayd/crypto": "*",

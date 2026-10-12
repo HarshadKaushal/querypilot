@@ -2,7 +2,7 @@
 
 Middleware that lets a signed-in user connect their own PostgreSQL database and ask questions in plain English. The platform proposes SQL, checks it, runs it read-only, and returns a table, a chart, the SQL, and a short summary.
 
-This repository is at **Phase 4 (SQL guard)**. The ask pipeline and the web UI are not built yet. See [docs/features.md](docs/features.md).
+This repository is at **Phase 5 (executor)**. The ask pipeline and the web UI are not built yet. See [docs/features.md](docs/features.md).
 
 ## Prerequisites
 
@@ -174,6 +174,16 @@ Invoke-RestMethod "http://localhost:3000/v1/connections/$($conn.id)/sql/check" -
 ```
 
 An allowed query comes back with `allowed: true` and the SQL that would run, rewritten with schema names, with `*` replaced by the allowed columns, and with `LIMIT` capped at `SQL_ROW_CAP` (1,000 by default). A rejected one comes back with `allowed: false`, a `code` such as `column_not_allowed` or `not_select`, and a `reason`. Both are HTTP 200. On the sample, `SELECT email FROM customers` and `DELETE FROM customers` are rejected.
+
+## Run a query end to end
+
+The executor runs guarded SQL on a user database. It has no HTTP route until the worker phase. This script runs the whole pipeline against the sample database: connect with `sample_ro` over SSL, read the schema, check the SQL with the guard, run it read-only, and print the rows.
+
+```powershell
+npm run try-query --workspace=@ayd/api -- "SELECT region, count(*) FROM customers GROUP BY region"
+```
+
+It needs `npm run up:deps`, migrations, and `SAMPLE_DATABASE_URL` in `.env`. It creates a temporary user and deletes it, with its connection and snapshot, before it exits. Rejected SQL prints the guard's reason. The executor's limits are the `EXECUTOR_*` settings in `.env.example`.
 
 Delete the signed-in account with:
 
