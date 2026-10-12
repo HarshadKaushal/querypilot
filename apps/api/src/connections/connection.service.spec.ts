@@ -23,9 +23,9 @@ function service(options?: {
   allowPrivate?: boolean;
 }) {
   const repo = new MemoryConnectionRepository();
-  const resolver: AddressResolver = {
-    lookup: async () => options?.addresses ?? ['1.1.1.1'],
-  };
+  const resolver = {
+    lookup: jest.fn(async () => options?.addresses ?? ['1.1.1.1']),
+  } satisfies AddressResolver;
   const probe = {
     test: jest.fn(async () => options?.probe ?? { ok: true }),
   } as unknown as UserDatabaseProbe;
@@ -39,7 +39,7 @@ function service(options?: {
     SSRF_ALLOW_PRIVATE: options?.allowPrivate ? 'true' : 'false',
   });
   const connections = new ConnectionService(repo, resolver, probe, env);
-  return { connections, repo, probe };
+  return { connections, repo, probe, resolver };
 }
 
 describe('ConnectionService', () => {
@@ -127,6 +127,33 @@ describe('ConnectionService', () => {
     );
     expect(updated.label).toBe('Renamed');
     expect(probe.test).not.toHaveBeenCalled();
+  });
+
+  it('records a retest whose host no longer resolves as failed', async () => {
+    const { connections, repo, probe, resolver } = service();
+    const created = await connections.create('user-1', input, null);
+    resolver.lookup.mockRejectedValueOnce(new Error('getaddrinfo ENOTFOUND db.example'));
+    (probe.test as jest.Mock).mockClear();
+    await expect(connections.test('user-1', created.id, null)).rejects.toMatchObject({
+      code: 'CONNECTION_FAILED',
+    });
+    expect(probe.test).not.toHaveBeenCalled();
+    expect(repo.rows[0]?.status).toBe('failing');
+    expect(repo.audits.at(-1)).toMatchObject({
+      eventType: 'connection.tested',
+      metadata: { connectionId: created.id, result: 'failed' },
+    });
+  });
+
+  it('records a retest whose host now resolves to a blocked address as failed', async () => {
+    const { connections, repo, resolver } = service();
+    const created = await connections.create('user-1', input, null);
+    resolver.lookup.mockResolvedValueOnce(['10.0.0.5']);
+    await expect(connections.test('user-1', created.id, null)).rejects.toMatchObject({
+      code: 'SSRF_BLOCKED',
+    });
+    expect(repo.rows[0]?.status).toBe('failing');
+    expect(repo.audits.at(-1)?.metadata.result).toBe('failed');
   });
 
   it('keeps a failing connection failing when only the label changes', async () => {

@@ -1,3 +1,4 @@
+import type { ClientConfig } from 'pg';
 import { Logger } from 'nestjs-pino';
 import {
   UserDatabaseProbe,
@@ -242,6 +243,44 @@ describe('UserDatabaseProbe', () => {
         return { rows: [] };
       }).introspect(request, { tables: 2, columns: 100 });
       expect(result).toMatchObject({ ok: false, code: 'SCHEMA_TOO_LARGE' });
+    });
+  });
+
+  describe('TLS options', () => {
+    async function configFor(servername: string, sslMode: ProbeRequest['sslMode']) {
+      let seen: ClientConfig | undefined;
+      const factory: PgClientFactory = (config) => {
+        seen = config;
+        return {
+          connect: async () => undefined,
+          query: async (sql) => ({ rows: sql.includes(ROLES_QUERY) ? [LOGIN] : [] }),
+          end: async () => undefined,
+        };
+      };
+      await new UserDatabaseProbe({ warn: jest.fn() } as unknown as Logger, factory).test(
+        {
+          ...request,
+          servername,
+          sslMode,
+        },
+      );
+      return seen?.ssl;
+    }
+
+    it('sends the host name as the TLS server name', async () => {
+      expect(await configFor('db.example.com', 'verify-full')).toEqual({
+        rejectUnauthorized: true,
+        servername: 'db.example.com',
+      });
+    });
+
+    it('sends no server name when the user entered an IP address', async () => {
+      expect(await configFor('203.0.113.7', 'verify-full')).toEqual({
+        rejectUnauthorized: true,
+      });
+      expect(await configFor('2001:db8::7', 'require')).toEqual({
+        rejectUnauthorized: false,
+      });
     });
   });
 });

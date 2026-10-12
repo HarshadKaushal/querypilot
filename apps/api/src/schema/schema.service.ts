@@ -77,8 +77,13 @@ export class SchemaService {
     connectionId: string,
     ip: string | null,
   ): Promise<RefreshSummary> {
-    const { request } = await this.connections.resolveTarget(userId, connectionId);
-    const result = await this.probe.introspect(request);
+    const target = await this.connections.resolveTarget(userId, connectionId);
+    if (!target.ok) {
+      await this.connections.recordTest(userId, connectionId, false);
+      await this.audit(userId, connectionId, ip, { result: 'failed' });
+      throw target.error;
+    }
+    const result = await this.probe.introspect(target.request);
     if (!result.ok) {
       // Too large means the connection works; anything else means it does not.
       if (result.code !== 'SCHEMA_TOO_LARGE') {

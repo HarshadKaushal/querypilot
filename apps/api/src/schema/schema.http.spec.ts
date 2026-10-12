@@ -44,6 +44,7 @@ const firstDocument: SchemaDocument = { formatVersion: 1, tables: [customers] };
 describe('schema routes', () => {
   let app: INestApplication;
   let introspection: IntrospectResult;
+  let lookup: () => Promise<string[]>;
   const connections = new MemoryConnectionRepository();
   const schemas = new MemorySchemaRepository();
 
@@ -53,6 +54,7 @@ describe('schema routes', () => {
     schemas.allowed.clear();
     schemas.owners.clear();
     introspection = { ok: true, document: firstDocument };
+    lookup = async () => ['1.1.1.1'];
     const env = loadEnv({
       NODE_ENV: 'test',
       DATABASE_URL: 'postgresql://ayd:ayd@localhost:5434/ayd',
@@ -78,7 +80,7 @@ describe('schema routes', () => {
         },
         { provide: CONNECTION_REPOSITORY, useValue: connections },
         { provide: SCHEMA_REPOSITORY, useValue: schemas },
-        { provide: ADDRESS_RESOLVER, useValue: { lookup: async () => ['1.1.1.1'] } },
+        { provide: ADDRESS_RESOLVER, useValue: { lookup: () => lookup() } },
         {
           provide: UserDatabaseProbe,
           useValue: {
@@ -265,6 +267,26 @@ describe('schema routes', () => {
     expect(response.body.error.code).toBe('NOT_READ_ONLY');
     expect(connections.rows[0]?.status).toBe('failing');
     expect(schemas.snapshots).toHaveLength(0);
+  });
+
+  it('marks the connection failing when its host no longer resolves', async () => {
+    const user = await signIn('dev@localhost');
+    const id = await connect(user);
+    lookup = async () => {
+      throw new Error('getaddrinfo ENOTFOUND db.example');
+    };
+    const response = await call(
+      'post',
+      `/v1/connections/${id}/schema/refresh`,
+      user.token,
+    );
+    expect(response.body.error.code).toBe('CONNECTION_FAILED');
+    expect(connections.rows[0]?.status).toBe('failing');
+    expect(schemas.snapshots).toHaveLength(0);
+    expect(schemas.audits.at(-1)).toMatchObject({
+      eventType: 'schema.refreshed',
+      metadata: { connectionId: id, result: 'failed' },
+    });
   });
 
   it('refuses a schema above the limits without marking the connection failing', async () => {

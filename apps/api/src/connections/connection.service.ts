@@ -37,6 +37,10 @@ export interface AddressResolver {
 
 export const ADDRESS_RESOLVER = Symbol('ADDRESS_RESOLVER');
 
+export type ConnectionTarget =
+  | { ok: true; row: StoredConnection; request: ProbeRequest }
+  | { ok: false; row: StoredConnection; error: AppException };
+
 const NOT_FOUND = new AppException(
   'NOT_FOUND',
   'That resource was not found.',
@@ -108,19 +112,23 @@ export class ConnectionService {
   }
 
   async test(userId: string, id: string, ip: string | null): Promise<PublicConnection> {
-    const { row, request } = await this.resolveTarget(userId, id);
-    const result = await this.probe.test(request);
-    const updated = await this.recordTest(userId, id, result.ok);
+    const target = await this.resolveTarget(userId, id);
+    let failure = target.ok ? null : target.error;
+    if (target.ok) {
+      const result = await this.probe.test(target.request);
+      failure = result.ok ? null : probeError(result);
+    }
+    const updated = await this.recordTest(userId, id, failure === null);
     await this.repo.writeAudit({
       userId,
       eventType: 'connection.tested',
-      metadata: { connectionId: id, result: result.ok ? 'ok' : 'failed' },
+      metadata: { connectionId: id, result: failure ? 'failed' : 'ok' },
       ip,
     });
-    if (!result.ok) {
-      throw probeError(result);
+    if (failure) {
+      throw failure;
     }
-    return updated ?? strip(row);
+    return updated ?? strip(target.row);
   }
 
   async update(
@@ -192,14 +200,23 @@ export class ConnectionService {
    * Everything the executor needs to open this user's connection: ownership checked,
    * credentials decrypted in memory, and the host resolved and pinned by the SSRF guard.
    */
-  async resolveTarget(
-    userId: string,
-    id: string,
-  ): Promise<{ row: StoredConnection; request: ProbeRequest }> {
+  async resolveTarget(userId: string, id: string): Promise<ConnectionTarget> {
+    // Not yours, or gone: throws NOT_FOUND, because there is no connection to record on.
     const row = await this.requireOwned(userId, id);
+    // An address that no longer resolves, or now resolves somewhere blocked, is returned
+    // instead of thrown, so the caller can record it like any other failed check.
+    let pinned: string;
+    try {
+      pinned = await this.pin(row.host);
+    } catch (error) {
+      if (error instanceof AppException) {
+        return { ok: false, row, error };
+      }
+      throw error;
+    }
     const secrets = openCredentials(row, this.keys);
-    const pinned = await this.pin(row.host);
     return {
+      ok: true,
       row,
       request: {
         hostIp: pinned,

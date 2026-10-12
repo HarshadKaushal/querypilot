@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { Client, type ClientConfig } from 'pg';
 import { Logger } from 'nestjs-pino';
@@ -99,10 +100,13 @@ export class UserDatabaseProbe {
       password: request.password,
       connectionTimeoutMillis: 5000,
       statement_timeout: 5000,
-      ssl:
-        request.sslMode === 'verify-full'
-          ? { rejectUnauthorized: true, servername: request.servername }
-          : { rejectUnauthorized: false, servername: request.servername },
+      ssl: {
+        rejectUnauthorized: request.sslMode === 'verify-full',
+        // The TLS server name (SNI) must be a host name, never an IP (RFC 6066). When the
+        // user entered an IP, leave it unset: the certificate is then checked against that
+        // IP, which is what pg does by default.
+        ...(isIP(request.servername) ? {} : { servername: request.servername }),
+      },
     });
     try {
       await client.connect();

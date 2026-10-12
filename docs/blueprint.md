@@ -10,18 +10,22 @@ A step-by-step workflow for building a scalable, secure AI analytics assistant. 
 
 ## 2. Locked Decisions
 
-| Topic | Decision |
-| --- | --- |
-| Login | Google Sign-In only (OpenID Connect) |
-| Supported databases | PostgreSQL only in v1, behind an adapter interface so others can be added later |
-| AI key | Owned by the platform, never by the user. Users only provide database credentials |
-| LLM usage | Two LLM tasks per question: SQL generation and result summary. Provider is swappable via a provider-agnostic interface |
-| Data sent to LLM | Allowlisted schema for SQL generation; question, column names, a capped sample of rows and computed statistics for the summary |
-| Network | All outbound connections to user databases leave from one fixed static egress IP, which users allowlist in their firewall |
-| Frontend | React + TypeScript |
-| Backend | NestJS + TypeScript, modular monolith with separate API and worker processes |
-| App database | PostgreSQL (stores app data only) |
-| Queue and cache | Redis |
+
+| Topic               | Decision                                                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Login               | Google Sign-In only (OpenID Connect)                                                                                           |
+| Supported databases | PostgreSQL only in v1, behind an adapter interface so others can be added later                                                |
+| AI key              | Owned by the platform, never by the user. Users only provide database credentials                                              |
+| LLM usage           | Two LLM tasks per question: SQL generation and result summary. Provider is swappable via a provider-agnostic interface         |
+| Data sent to LLM    | Allowlisted schema for SQL generation; question, column names, a capped sample of rows and computed statistics for the summary |
+| Network             | All outbound connections to user databases leave from one fixed static egress IP, which users allowlist in their firewall      |
+| Frontend            | React + TypeScript                                                                                                             |
+| Backend             | NestJS + TypeScript, modular monolith with separate API and worker processes                                                   |
+| App database        | PostgreSQL (stores app data only)                                                                                              |
+| Queue and cache     | Redis                                                                                                                          |
+
+
+
 
 ## 3. Architecture Overview
 
@@ -46,6 +50,8 @@ A step-by-step workflow for building a scalable, secure AI analytics assistant. 
 - **Observability:** OpenTelemetry, structured JSON logs, Prometheus-style metrics.
 - **Infrastructure:** Docker, Docker Compose for local, CI pipeline, cloud deployment with a NAT gateway and a single elastic IP.
 
+
+
 ## 5. Repository Structure (Monorepo)
 
 - `apps/api`: NestJS API entry point.
@@ -58,7 +64,9 @@ A step-by-step workflow for building a scalable, secure AI analytics assistant. 
 - `docs`: README, architecture notes, runbooks, evaluation results.
 - `eval`: evaluation dataset and runner.
 
-## 6. Rules for the Implementer (Cursor)
+
+
+## 6. Rules for the Implementer (Claude)
 
 1. Follow the build phases in order. Do not start a phase until the previous phase's acceptance criteria pass.
 2. Safety components (SQL guard, SSRF guard, crypto) are built **test-first**.
@@ -71,21 +79,25 @@ A step-by-step workflow for building a scalable, secure AI analytics assistant. 
 9. Every external call (LLM, user database) has a timeout, a bounded retry policy, and a circuit breaker.
 10. Keep modules small with explicit interfaces so a module can later be split into a service without rewriting callers.
 
+
+
 ## 7. App Database Model
 
 - **users:** id, google subject id (unique), email, name, avatar, plan tier, created and last-login timestamps.
-- **refresh\_tokens:** id, user, token hash, expiry, revoked flag, device info.
+- **refresh_tokens:** id, user, token hash, expiry, revoked flag, device info.
 - **connections:** id, user, label, host, port, database name, SSL mode, encrypted username, encrypted password, key version, status (pending, active, failing, disabled), last tested at, setting for sending sample rows to the LLM.
-- **schema\_snapshots:** id, connection, version number, schema JSON (tables, columns, types, primary keys, foreign keys), created at.
-- **allowed\_objects:** connection, schema name, table name, optional column name, optional description. This is the approved allowlist.
+- **schema_snapshots:** id, connection, version number, schema JSON (tables, columns, types, primary keys, foreign keys), created at.
+- **allowed_objects:** connection, schema name, table name, optional column name, optional description. This is the approved allowlist.
 - **queries:** id, user, connection, question, generated SQL, status, error code, row count, truncated flag, latency per stage, models used, tokens in and out, created at. **No result rows.**
-- **query\_cache:** key of connection + schema version + normalized question, mapped to the validated SQL proposal. Never stores result rows.
-- **usage\_counters:** user, day, questions asked, rows returned, tokens used.
-- **audit\_log:** id, user, event type, metadata, IP, created at.
+- **query_cache:** key of connection + schema version + normalized question, mapped to the validated SQL proposal. Never stores result rows.
+- **usage_counters:** user, day, questions asked, rows returned, tokens used.
+- **audit_log:** id, user, event type, metadata, IP, created at.
 
 **Scaling notes:** partition `queries` and `audit_log` by month with a retention policy; index history by user and created time; use keyset pagination, never offset pagination; put a connection pooler in front of this database.
 
 ## 8. Core Flows
+
+
 
 ### 8.1 Sign in with Google
 
@@ -95,6 +107,8 @@ A step-by-step workflow for building a scalable, secure AI analytics assistant. 
 4. Backend issues a short-lived access token and a rotating refresh token (httpOnly, Secure, SameSite cookie).
 5. Every later request passes through an auth guard; refresh rotation detects reuse and revokes the token family.
 6. Logout revokes the refresh token. Account deletion removes all connections, schema data and history, and writes an audit entry.
+
+
 
 ### 8.2 Connect a database
 
@@ -109,6 +123,8 @@ A step-by-step workflow for building a scalable, secure AI analytics assistant. 
 9. Store the filtered schema snapshot. Provide a Refresh schema action that creates a new version and invalidates cached SQL proposals for that connection.
 10. Write audit entries for create, update, test and delete.
 
+
+
 ### 8.3 Ask a question
 
 1. User picks a connection and types a question.
@@ -118,12 +134,16 @@ A step-by-step workflow for building a scalable, secure AI analytics assistant. 
 5. Frontend renders the table, chart, summary and SQL, with states for loading, ambiguous, rejected, failed and empty results.
 6. The result is recorded in history. The history record holds metadata only.
 
+
+
 ### 8.4 History
 
 - List past questions with status, latency and timestamp, using keyset pagination.
 - Open a past entry to view the generated SQL and summary.
 - Re-run a past question (executes again; result rows are not stored).
 - Delete an entry or all history.
+
+
 
 ## 9. Ask Pipeline (Worker)
 
@@ -138,6 +158,8 @@ A step-by-step workflow for building a scalable, secure AI analytics assistant. 
 9. **LLM call 2, grounded summary:** send the question, column names, a capped sample of rows and server-computed facts (total row count, truncation flag, totals, minimum, maximum, top items). Instruct the model to use only the supplied data and to state when the result was truncated. Optionally verify that every number in the summary appears in the supplied data or statistics, and fall back to a templated summary if not.
 10. **Persist:** save the query record, per-stage latency, models and token counts. Cache the validated SQL proposal. Do not store rows.
 11. **Emit final result** to the progress stream.
+
+
 
 ## 10. SQL Safety Rules (SQL Guard)
 
@@ -159,23 +181,27 @@ The guard is a pure function: SQL text plus the allowlist in, a verdict plus a n
 
 ## 11. Backend Modules
 
-| Module | Responsibility |
-| --- | --- |
-| Auth | Google OIDC, JWT, refresh rotation, guards |
-| Users | Profile, plan tier, account deletion |
-| Connections | Create, test, update, delete; SSRF guard; read-only verification |
-| Crypto | Envelope encryption, key versioning, rotation job |
-| Schema | Introspection, snapshots, allowlist management, schema retrieval for prompts |
-| LLM | Provider interface, adapters, structured output, fallback chain, retries, token accounting |
-| SqlGuard | Wrapper around the sql-guard package |
-| Executor | Only gateway to user databases: pooling, global semaphores, read-only transactions, timeouts, row caps, circuit breakers |
-| Query | Orchestrates the pipeline; owns the job lifecycle |
-| Visualization | Chart-type selection and downsampling |
-| Summary | Builds summary input, statistics and the grounding check |
-| History | Query log, filters, re-run, deletion |
-| Quota | Per-user rate limits and daily counters in Redis |
-| Audit | Security and lifecycle events |
-| Health | Liveness and readiness (app DB, Redis, queue, LLM reachability) |
+
+| Module        | Responsibility                                                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Auth          | Google OIDC, JWT, refresh rotation, guards                                                                               |
+| Users         | Profile, plan tier, account deletion                                                                                     |
+| Connections   | Create, test, update, delete; SSRF guard; read-only verification                                                         |
+| Crypto        | Envelope encryption, key versioning, rotation job                                                                        |
+| Schema        | Introspection, snapshots, allowlist management, schema retrieval for prompts                                             |
+| LLM           | Provider interface, adapters, structured output, fallback chain, retries, token accounting                               |
+| SqlGuard      | Wrapper around the sql-guard package                                                                                     |
+| Executor      | Only gateway to user databases: pooling, global semaphores, read-only transactions, timeouts, row caps, circuit breakers |
+| Query         | Orchestrates the pipeline; owns the job lifecycle                                                                        |
+| Visualization | Chart-type selection and downsampling                                                                                    |
+| Summary       | Builds summary input, statistics and the grounding check                                                                 |
+| History       | Query log, filters, re-run, deletion                                                                                     |
+| Quota         | Per-user rate limits and daily counters in Redis                                                                         |
+| Audit         | Security and lifecycle events                                                                                            |
+| Health        | Liveness and readiness (app DB, Redis, queue, LLM reachability)                                                          |
+
+
+
 
 ## 12. API Surface
 
@@ -222,6 +248,8 @@ Standard error envelope everywhere: a stable error code, a friendly message, and
 - Complete audit trail for logins, connection changes, rejected queries and account deletion.
 - Provide account deletion and data export for privacy compliance.
 
+
+
 ## 15. Observability
 
 - **Tracing** across API, queue, worker, LLM and user database, with a request id and job id propagated everywhere.
@@ -229,6 +257,8 @@ Standard error envelope everywhere: a stable error code, a friendly message, and
 - **Alerts:** growing queue backlog, high LLM failure or fallback rate, spike in rejected SQL (possible abuse), rising connection failures, error-rate increase.
 - **Logs:** structured JSON with no secrets and no rows.
 - **Dashboards:** one for system health, one for query quality and safety.
+
+
 
 ## 16. Frontend Specification
 
@@ -334,6 +364,8 @@ Each phase lists tasks and acceptance criteria. Do not advance until acceptance 
 - Tests (unit, integration, end-to-end) pass in CI; the evaluation report is published.
 - The system scales horizontally: more API instances and more workers require no code change.
 
+
+
 ## 20. Demo Script
 
 1. Sign in with Google and connect the sample database via the wizard, showing the egress IP step and the allowlist.
@@ -342,6 +374,8 @@ Each phase lists tasks and acceptance criteria. Do not advance until acceptance 
 4. Ask for something unsafe (for example "delete all inactive customers") and show the rejection with the reason.
 5. Open history to show status, latency and model usage.
 6. Show the evaluation report and the dashboard.
+
+
 
 ## 21. Out of Scope for v1
 
