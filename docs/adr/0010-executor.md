@@ -1,6 +1,6 @@
 # ADR 0010: Executor
 
-`QueryExecutor` is the only code that runs SQL on a user database (blueprint rule 7). It takes SQL the guard accepted and treats the guard as one layer among several, not the only one.
+`QueryExecutor` is the only code that runs SQL on a user database (blueprint rule 7). It lives with the read-only probe, schema introspection, and the connection pools in `apps/api/src/user-database/`, the blueprint's Executor module. It takes SQL the guard accepted and treats the guard as one layer among several, not the only one.
 
 **One query, step by step.**
 

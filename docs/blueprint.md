@@ -74,7 +74,7 @@ A step-by-step workflow for building a scalable, secure AI analytics assistant. 
 4. Anything shared between instances (rate limits, locks, quotas, caches) lives in Redis.
 5. Never log credentials, tokens, decrypted secrets, or result rows.
 6. Never return raw database or LLM errors to the client. Map them to stable error codes with friendly messages.
-7. Every database access on a user connection must go through the Executor module. No other module may open a connection to a user database.
+7. Every database access on a user connection must go through the Executor module. No other module may open a connection to a user database. (In code: `UserDatabaseModule` in `apps/api/src/user-database/`.)
 8. Every record is scoped by `user_id`. Every query by id must also check ownership.
 9. Every external call (LLM, user database) has a timeout, a bounded retry policy, and a circuit breaker.
 10. Keep modules small with explicit interfaces so a module can later be split into a service without rewriting callers.

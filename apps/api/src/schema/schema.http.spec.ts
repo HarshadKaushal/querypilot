@@ -4,12 +4,12 @@ import { createHttpApp } from '../testing/http-app';
 import { CONNECTION_REPOSITORY } from '../connections/connection.repository';
 import { ADDRESS_RESOLVER, ConnectionService } from '../connections/connection.service';
 import { ConnectionsController } from '../connections/connections.controller';
-import { MemoryConnectionRepository } from '../connections/memory-connection.repository';
+import { MemoryConnectionRepository } from '../testing/memory-connection.repository';
 import {
   UserDatabaseProbe,
   type IntrospectResult,
-} from '../executor/user-database.probe';
-import { MemorySchemaRepository } from './memory-schema.repository';
+} from '../user-database/user-database.probe';
+import { MemorySchemaRepository } from '../testing/memory-schema.repository';
 import { SchemaController } from './schema.controller';
 import type { SchemaDocument } from './schema-document';
 import { SCHEMA_REPOSITORY } from './schema.repository';

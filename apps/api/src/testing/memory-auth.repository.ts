@@ -7,7 +7,7 @@ import {
   type NewRefreshToken,
   type PublicUser,
   type StoredRefresh,
-} from './auth.repository';
+} from '../auth/auth.repository';
 
 interface MemoryUser extends PublicUser {
   googleSubject: string;

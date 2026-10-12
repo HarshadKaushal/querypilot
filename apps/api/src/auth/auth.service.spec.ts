@@ -1,6 +1,6 @@
 import type { AppEnv } from '../config/env';
 import { testEnv } from '../testing/test-env';
-import { MemoryAuthRepository } from './memory-auth.repository';
+import { MemoryAuthRepository } from '../testing/memory-auth.repository';
 import type { GoogleIdentityProvider, GoogleProfile } from './google.client';
 import { AuthService } from './auth.service';
 import { TokenService } from './token.service';

@@ -47,7 +47,7 @@ async function main() {
   );
   const schemas = context.get(dist('schema/schema.service').SchemaService);
   const guard = context.get(dist('sql-guard/sql-guard.service').SqlGuardService);
-  const executor = context.get(dist('executor/query-executor').QueryExecutor);
+  const executor = context.get(dist('user-database/query-executor').QueryExecutor);
 
   const userId = randomUUID();
   try {

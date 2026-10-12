@@ -3,7 +3,7 @@ import type { Logger } from 'nestjs-pino';
 import { loadEnv } from '../../src/config/env';
 import { ConnectionService } from '../../src/connections/connection.service';
 import { PrismaConnectionRepository } from '../../src/connections/prisma-connection.repository';
-import { UserDatabaseProbe } from '../../src/executor/user-database.probe';
+import { UserDatabaseProbe } from '../../src/user-database/user-database.probe';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { PrismaSchemaRepository } from '../../src/schema/prisma-schema.repository';
 import { SchemaService } from '../../src/schema/schema.service';

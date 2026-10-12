@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
-import { ExecutorModule } from '../executor/executor.module';
+import { UserDatabaseModule } from '../user-database/user-database.module';
 import {
   ADDRESS_RESOLVER,
   ConnectionService,
@@ -11,7 +11,7 @@ import { ConnectionsController } from './connections.controller';
 import { PrismaConnectionRepository } from './prisma-connection.repository';
 
 @Module({
-  imports: [AuthModule, ExecutorModule],
+  imports: [AuthModule, UserDatabaseModule],
   controllers: [ConnectionsController],
   providers: [
     ConnectionService,

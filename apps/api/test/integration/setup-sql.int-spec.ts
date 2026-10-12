@@ -1,6 +1,6 @@
 import type { Logger } from 'nestjs-pino';
-import { UserDatabaseProbe } from '../../src/executor/user-database.probe';
-import { SETUP_SQL } from '../../src/meta/meta.controller';
+import { UserDatabaseProbe } from '../../src/user-database/user-database.probe';
+import { SETUP_SQL } from '../../src/egress/egress.controller';
 import {
   createScratchDatabase,
   plainClients,

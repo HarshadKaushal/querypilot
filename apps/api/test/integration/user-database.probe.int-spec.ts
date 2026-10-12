@@ -2,7 +2,7 @@ import type { Logger } from 'nestjs-pino';
 import {
   UserDatabaseProbe,
   type ProbeRequest,
-} from '../../src/executor/user-database.probe';
+} from '../../src/user-database/user-database.probe';
 import {
   createScratchDatabase,
   plainClients,

@@ -8,7 +8,8 @@ import {
   type PoolLike,
   RESULT_TYPES,
 } from './connection-pools';
-import { breakerKey, MemoryCoordination, semaphoreKey } from './coordination';
+import { MemoryCoordination } from '../testing/memory-coordination';
+import { breakerKey, semaphoreKey } from './coordination';
 import { QueryExecutor } from './query-executor';
 import type { ProbeRequest } from './user-database.probe';
 

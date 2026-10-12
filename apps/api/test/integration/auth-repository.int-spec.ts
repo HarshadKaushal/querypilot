@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { AuthRepository } from '../../src/auth/auth.repository';
-import { MemoryAuthRepository } from '../../src/auth/memory-auth.repository';
+import { MemoryAuthRepository } from '../../src/testing/memory-auth.repository';
 import { PrismaAuthRepository } from '../../src/auth/prisma-auth.repository';
 import { loadEnv } from '../../src/config/env';
 import { PrismaService } from '../../src/prisma/prisma.service';

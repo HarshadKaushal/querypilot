@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { AppConfigModule } from '../config/app-config.module';
-import { MetaController } from './meta.controller';
+import { EgressController } from './egress.controller';
 
 @Module({
   imports: [AppConfigModule],
-  controllers: [MetaController],
+  controllers: [EgressController],
 })
-export class MetaModule {}
+export class EgressModule {}

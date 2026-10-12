@@ -3,7 +3,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { AppConfigModule } from './config/app-config.module';
 import { AuthModule } from './auth/auth.module';
 import { ConnectionsModule } from './connections/connections.module';
-import { MetaModule } from './meta/meta.module';
+import { EgressModule } from './egress/egress.module';
 import { HealthModule } from './health/health.module';
 import { AppLoggerModule } from './logger/logger.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -22,7 +22,7 @@ import { UsersModule } from './users/users.module';
     AuthModule,
     UsersModule,
     ConnectionsModule,
-    MetaModule,
+    EgressModule,
     SchemaModule,
     SqlGuardModule,
   ],

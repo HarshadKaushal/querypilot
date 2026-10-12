@@ -1,11 +1,11 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { UserDatabaseProbe } from '../executor/user-database.probe';
+import { UserDatabaseProbe } from '../user-database/user-database.probe';
 import { createHttpApp } from '../testing/http-app';
 import { ADDRESS_RESOLVER, ConnectionService } from './connection.service';
 import { CONNECTION_REPOSITORY } from './connection.repository';
 import { ConnectionsController } from './connections.controller';
-import { MemoryConnectionRepository } from './memory-connection.repository';
+import { MemoryConnectionRepository } from '../testing/memory-connection.repository';
 
 const PASSWORD = 'sample_ro_password';
 

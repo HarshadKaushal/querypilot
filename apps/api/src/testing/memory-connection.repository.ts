@@ -5,7 +5,7 @@ import {
   type NewConnection,
   type PublicConnection,
   type StoredConnection,
-} from './connection.repository';
+} from '../connections/connection.repository';
 
 export class MemoryConnectionRepository implements ConnectionRepository {
   readonly rows: NewConnection[] = [];

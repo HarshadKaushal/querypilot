@@ -24,7 +24,7 @@ export const SETUP_SQL = [
 ].join('\n');
 
 @Controller('v1/meta')
-export class MetaController {
+export class EgressController {
   constructor(@Inject(APP_ENV) private readonly env: AppEnv) {}
 
   @Get('egress')

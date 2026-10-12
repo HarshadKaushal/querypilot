@@ -6,7 +6,7 @@ import { AuthGuard } from '../auth/auth.guard';
 import { AUTH_REPOSITORY } from '../auth/auth.repository';
 import { AuthService } from '../auth/auth.service';
 import { GOOGLE_CLIENT, type GoogleIdentityProvider } from '../auth/google.client';
-import { MemoryAuthRepository } from '../auth/memory-auth.repository';
+import { MemoryAuthRepository } from './memory-auth.repository';
 import { TokenService } from '../auth/token.service';
 import { AllExceptionsFilter } from '../common/filters/all-exceptions.filter';
 import { APP_ENV } from '../config/app-config.module';

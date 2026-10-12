@@ -1,13 +1,13 @@
 import { testEnv } from '../testing/test-env';
-import { MetaController } from './meta.controller';
+import { EgressController } from './egress.controller';
 
 const env = testEnv({
   EGRESS_IP: '192.0.2.10',
 });
 
-describe('MetaController', () => {
+describe('EgressController', () => {
   it('returns the egress IP and SQL that passes the read-only probe', () => {
-    const body = new MetaController(env).egress();
+    const body = new EgressController(env).egress();
     expect(body.egressIp).toBe('192.0.2.10');
     expect(body.setupSql).toContain(
       'GRANT SELECT ON ALL TABLES IN SCHEMA public TO ayd_ro;',
@@ -19,7 +19,7 @@ describe('MetaController', () => {
   });
 
   it('names the table owner for default privileges and covers other schemas', () => {
-    const { setupSql } = new MetaController(env).egress();
+    const { setupSql } = new EgressController(env).egress();
     // Without FOR ROLE, only tables created by the role running the SQL become readable.
     expect(setupSql).toContain(
       'ALTER DEFAULT PRIVILEGES FOR ROLE <table_owner_role> IN SCHEMA public GRANT SELECT ON TABLES TO ayd_ro;',

@@ -1,5 +1,5 @@
 import type { AuditEntry } from '../audit/audit-log';
-import type { AllowlistEntry } from './allowed-schema';
+import type { AllowlistEntry } from '../schema/allowed-schema';
 import {
   SNAPSHOTS_KEPT,
   type CommitOutcome,
@@ -7,7 +7,7 @@ import {
   type DatabaseIdentity,
   type SchemaRepository,
   type StoredSnapshot,
-} from './schema.repository';
+} from '../schema/schema.repository';
 
 // In-memory stand-in for unit tests. `owners` plays the part of connections.user_id.
 export class MemorySchemaRepository implements SchemaRepository {
