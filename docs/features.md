@@ -1,6 +1,6 @@
 # Feature Documentation
 
-Status of Ask Your Database against the production blueprint. Phase 3 (schema introspection and the allowlist) is the current milestone.
+Status of Ask Your Database against the production blueprint. Phase 4 (the SQL guard) is the current milestone.
 
 ## Completed
 
@@ -37,6 +37,8 @@ Status of Ask Your Database against the production blueprint. Phase 3 (schema in
 - Allowlist. The first snapshot allows every table and every column the sensitive-column hint does not flag (emails, phone numbers, addresses, national ids, dates of birth, card and bank numbers, credentials). Later refreshes keep existing choices, drop objects that are gone, and leave new objects hidden. The refresh response lists them.
 - `GET /v1/connections/:id/schema` returns only allowed tables and columns, with descriptions and a fingerprint that changes on every refresh and allowlist edit. `GET /v1/connections/:id/allowlist` lists every object with `allowed` and `sensitive` flags. `PUT /v1/connections/:id/allowlist` saves choices and descriptions against a snapshot version, and returns `SCHEMA_CHANGED` if a refresh happened since.
 - Multi-schema sample database: `inventory` and `support` are readable by `sample_ro`, and `finance` is not.
+- SQL guard in `@ayd/sql-guard`, on PostgreSQL's own parser. It accepts one SELECT, optionally with non-recursive WITH queries, over allowlisted tables and columns, using approved functions, cast types, and operators. Writes, DDL, `COPY`, `SELECT INTO`, locking clauses, system catalogs, hidden columns, whole-row references, recursive queries, and functions in FROM are rejected with a code and a reason. The SQL it returns has schema-qualified tables, alias-qualified columns, `*` expanded to allowed columns, and a top-level LIMIT capped at `SQL_ROW_CAP`. Its output is parsed and checked a second time. 181 attack cases and 82 safe queries.
+- `POST /v1/connections/:id/sql/check` runs the guard against the connection's latest allowlist and returns the verdict. It never runs the SQL.
 
 ## Partial
 
@@ -54,7 +56,6 @@ Status of Ask Your Database against the production blueprint. Phase 3 (schema in
 Locked choices that are not implemented:
 
 - Gemini as the platform LLM, behind a provider interface, with a second call for the summary.
-- SQL guard package and its attack corpus.
 - Read-only executor, timeouts, row caps, and Redis semaphores.
 - Queue, SSE progress, cancellation, and fair scheduling.
 - History and quotas. Login rate limits are part of the quota phase.

@@ -36,7 +36,9 @@ The company does not become a second system of record. **Assumed:** business row
 
 **Assumed:** a successful answer shows the rows (up to a cap), a chart chosen from column types and cardinality, the SQL, the assumptions, and a summary that only uses numbers present in the supplied data. Truncation is visible. History stores status, latency, model, and token counts, and can run the question again. It does not store the rows.
 
-**Assumed:** unsafe requests, including requests to delete or change data, are rejected before execution. A write is also impossible at the database because of the read-only role and a read-only transaction.
+**Enforced:** SQL that is not a single read over allowed tables and columns is rejected by the SQL guard, with a code and a reason. That covers writes, DDL, hidden columns, system catalogs, and functions off the approved list. The guard never runs anything, and no result can exceed the row cap (1,000 by default).
+
+**Assumed:** a write is also impossible at the database, because of the read-only role and a read-only transaction. The read-only role is enforced at connect time. The read-only transaction arrives with the executor.
 
 ## Rules the foundation already follows
 

@@ -2,7 +2,7 @@
 
 Middleware that lets a signed-in user connect their own PostgreSQL database and ask questions in plain English. The platform proposes SQL, checks it, runs it read-only, and returns a table, a chart, the SQL, and a short summary.
 
-This repository is at **Phase 3 (schema and allowlist)**. The ask pipeline and the web UI are not built yet. See [docs/features.md](docs/features.md).
+This repository is at **Phase 4 (SQL guard)**. The ask pipeline and the web UI are not built yet. See [docs/features.md](docs/features.md).
 
 ## Prerequisites
 
@@ -164,6 +164,17 @@ Invoke-RestMethod "http://localhost:3000/v1/connections/$($conn.id)/allowlist" -
 
 A later refresh keeps your choices, and any new table or column stays hidden until you allow it. A save against an older `version` returns `SCHEMA_CHANGED`.
 
+## Check SQL against the allowlist
+
+The SQL guard decides whether a query is one safe read over allowed tables and columns. It never runs the query. Try it on a connection whose schema has been read:
+
+```powershell
+$check = '{"sql":"SELECT * FROM customers"}'
+Invoke-RestMethod "http://localhost:3000/v1/connections/$($conn.id)/sql/check" -Method Post -ContentType "application/json" -Headers @{ Authorization = "Bearer $($login.accessToken)" } -Body $check
+```
+
+An allowed query comes back with `allowed: true` and the SQL that would run, rewritten with schema names, with `*` replaced by the allowed columns, and with `LIMIT` capped at `SQL_ROW_CAP` (1,000 by default). A rejected one comes back with `allowed: false`, a `code` such as `column_not_allowed` or `not_select`, and a `reason`. Both are HTTP 200. On the sample, `SELECT email FROM customers` and `DELETE FROM customers` are rejected.
+
 Delete the signed-in account with:
 
 ```powershell
@@ -211,12 +222,13 @@ packages/crypto       Envelope encryption for connection secrets
 packages/database     Prisma schema, migrations, and client
 packages/shared       Error envelope, request id, health report types
 packages/ssrf-guard   Host and address checks for user databases
+packages/sql-guard    SQL checks and rewriting, on PostgreSQL's own parser
 infra/docker          API and worker images
 infra/sample-db       Seed and TLS entrypoint for the sample user database
 docs                  Index, blueprint, decisions, and reviews
 ```
 
-Start with [docs/README.md](docs/README.md). Later phases add `apps/web`, `packages/sql-guard`, `packages/core`, and `eval`.
+Start with [docs/README.md](docs/README.md). Later phases add `apps/web`, `packages/core`, and `eval`.
 
 ## Decisions already locked for later phases
 

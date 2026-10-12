@@ -9,6 +9,7 @@ import { AppLoggerModule } from './logger/logger.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { SchemaModule } from './schema/schema.module';
+import { SqlGuardModule } from './sql-guard/sql-guard.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -23,6 +24,7 @@ import { UsersModule } from './users/users.module';
     ConnectionsModule,
     MetaModule,
     SchemaModule,
+    SqlGuardModule,
   ],
   providers: [AllExceptionsFilter],
 })

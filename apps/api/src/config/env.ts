@@ -44,6 +44,8 @@ const EnvSchema = z
     CRYPTO_MASTER_KEYS: z.string().min(1),
     SSRF_ALLOW_PRIVATE: z.enum(['true', 'false']).default('false'),
     EGRESS_IP: z.string().default(''),
+    // Most rows one answer may return. The SQL guard adds or lowers LIMIT to this.
+    SQL_ROW_CAP: z.coerce.number().int().min(1).max(10000).default(1000),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && env.DEV_LOGIN_ENABLED === 'true') {

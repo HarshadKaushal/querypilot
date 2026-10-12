@@ -15,5 +15,6 @@ import { SchemaService } from './schema.service';
     PrismaSchemaRepository,
     { provide: SCHEMA_REPOSITORY, useExisting: PrismaSchemaRepository },
   ],
+  exports: [SchemaService],
 })
 export class SchemaModule {}

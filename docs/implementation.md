@@ -105,6 +105,20 @@ Introspection runs in the API process, like the probe, and a refresh can take se
 
 The sample database gained `multi-schema.sql`. It is mounted as a second init script, and a volume created earlier can get it with one `psql` command instead of being recreated.
 
+## Phase 4: SQL guard
+
+The guard is `packages/sql-guard` (ADR 0009). It parses with `libpg-query`, PostgreSQL's parser compiled to WebAssembly, pinned to 17.7.4, so it reads SQL the way the server does. `analyzer.ts` walks the parse tree. It accepts only node types and fields it knows and rejects the rest, and while walking it rewrites the tree: tables get their schema, column references get the alias they resolved to, and `*` over a table becomes the allowed columns. The top-level LIMIT is then capped.
+
+Name resolution needs hidden columns too. The guard is given every snapshot table with every readable column marked allowed or not, and resolves an unqualified column innermost query first, as PostgreSQL does. Otherwise a hidden column in a subquery could be read under the name of an allowed column further out.
+
+`pgsql-deparser` turns the tree back into SQL. It is not PostgreSQL's code, so its output is parsed and checked again, and has to come back unchanged. A test with a faulty deparser shows that a hidden column put back at that step is caught.
+
+The corpus lives in `src/__fixtures__`: one attack or safe query per line, so a new case is one line. The package's Jest config requires 99% statement and 95% branch coverage.
+
+`POST /v1/connections/:id/sql/check` is the API's use of the guard for now. `SqlGuardService` loads the connection's allowlist view, which also checks ownership and that a snapshot exists, and passes it to `checkSql` with `SQL_ROW_CAP`. A rejection is a 200 response, because checking succeeded.
+
+The guard is one layer. ADR 0009 lists what the executor in Phase 5 must still do: a READ ONLY transaction, a statement timeout, its own row cap, and an empty `search_path` so approved function names resolve in `pg_catalog`. The rewritten SQL from the live check was run that way, as `sample_ro`, against the sample database.
+
 ## How to extend this
 
 Add a phase only after this phase's checks pass: `npm test`, `npm run lint`, `npm run format:check`, and a ready health response from `npm run up`. New application tables go in a new Prisma migration. New client-visible failures go through `AppException` and an existing or newly documented error code in `@ayd/shared`.
