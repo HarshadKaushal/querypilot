@@ -201,4 +201,47 @@ describe('UserDatabaseProbe', () => {
     expect(JSON.stringify(result)).toContain('pg_hba.conf');
     expect(JSON.stringify(result)).not.toContain('secret_db');
   });
+
+  describe('introspect', () => {
+    it('stops before reading the schema when the login can write', async () => {
+      const seen: string[] = [];
+      const result = await probe((sql) => {
+        seen.push(sql);
+        if (sql.includes(ROLES_QUERY)) {
+          return { rows: [LOGIN] };
+        }
+        return sql.includes('has_table_privilege')
+          ? { rows: [{ '?column?': 1 }] }
+          : { rows: [] };
+      }).introspect(request);
+      expect(result).toMatchObject({ ok: false, code: 'NOT_READ_ONLY' });
+      expect(seen).not.toContain('BEGIN READ ONLY');
+    });
+
+    it('reads the schema inside a read-only transaction', async () => {
+      const seen: string[] = [];
+      const result = await probe((sql) => {
+        seen.push(sql.trim());
+        return sql.includes(ROLES_QUERY) ? { rows: [LOGIN] } : { rows: [] };
+      }).introspect(request);
+      expect(result).toEqual({ ok: true, document: { formatVersion: 1, tables: [] } });
+      const begin = seen.indexOf('BEGIN READ ONLY');
+      expect(begin).toBeGreaterThan(0);
+      expect(seen[begin + 1]).toMatch(/^SET LOCAL statement_timeout/);
+      expect(seen[seen.length - 1]).toBe('COMMIT');
+    });
+
+    it('returns SCHEMA_TOO_LARGE above the table limit', async () => {
+      const result = await probe((sql) => {
+        if (sql.includes(ROLES_QUERY)) {
+          return { rows: [LOGIN] };
+        }
+        if (sql.includes("has_any_column_privilege(c.oid, 'SELECT')")) {
+          return { rows: [{ oid: 1 }, { oid: 2 }, { oid: 3 }] };
+        }
+        return { rows: [] };
+      }).introspect(request, { tables: 2, columns: 100 });
+      expect(result).toMatchObject({ ok: false, code: 'SCHEMA_TOO_LARGE' });
+    });
+  });
 });

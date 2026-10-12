@@ -34,6 +34,12 @@ const cases: Array<[string, unknown, string, string]> = [
     'does not exist',
   ],
   [
+    'statement timeout',
+    failure('canceling statement due to statement timeout', '57014'),
+    'CONNECTION_FAILED',
+    'too long',
+  ],
+  [
     'server without SSL',
     failure('The server does not support SSL connections'),
     'SSL_REQUIRED',

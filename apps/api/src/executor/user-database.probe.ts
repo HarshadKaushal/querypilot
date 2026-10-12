@@ -2,7 +2,13 @@ import { Inject, Injectable, Optional } from '@nestjs/common';
 import { Client, type ClientConfig } from 'pg';
 import { Logger } from 'nestjs-pino';
 import { safeErrorDetail } from '../common/logging/safe-error';
+import type { SchemaDocument } from '../schema/schema-document';
 import { classifyConnectError, errorCode } from './connect-error';
+import {
+  DEFAULT_LIMITS,
+  readSchema,
+  type IntrospectionLimits,
+} from './schema-introspection';
 
 export const PG_CLIENT_FACTORY = Symbol('PG_CLIENT_FACTORY');
 
@@ -35,6 +41,14 @@ export type ProbeFailure = { ok: false; code: ProbeFailureCode; message: string 
 
 export type ProbeResult = { ok: true } | ProbeFailure;
 
+export type IntrospectResult =
+  | { ok: true; document: SchemaDocument }
+  | ProbeFailure
+  | { ok: false; code: 'SCHEMA_TOO_LARGE'; message: string };
+
+// Introspection reads more than the probe, so it gets a longer statement timeout.
+const INTROSPECTION_TIMEOUT_MS = 15000;
+
 @Injectable()
 export class UserDatabaseProbe {
   constructor(
@@ -43,6 +57,39 @@ export class UserDatabaseProbe {
   ) {}
 
   async test(request: ProbeRequest): Promise<ProbeResult> {
+    return this.withClient(request, (client) => this.verifyReadOnly(client));
+  }
+
+  // Checks the login is still read-only, since grants can change after the connection was
+  // saved, then reads the schema inside a READ ONLY transaction.
+  async introspect(
+    request: ProbeRequest,
+    limits: IntrospectionLimits = DEFAULT_LIMITS,
+  ): Promise<IntrospectResult> {
+    return this.withClient<IntrospectResult>(request, async (client) => {
+      const readOnly = await this.verifyReadOnly(client);
+      if (!readOnly.ok) {
+        return readOnly;
+      }
+      await client.query('BEGIN READ ONLY');
+      await client.query(`SET LOCAL statement_timeout = ${INTROSPECTION_TIMEOUT_MS}`);
+      const outcome = await readSchema(client, limits);
+      await client.query('COMMIT');
+      if (!outcome.ok) {
+        return {
+          ok: false,
+          code: 'SCHEMA_TOO_LARGE',
+          message: `This login can read more than ${limits.tables} tables or ${limits.columns} columns. Grant SELECT only on the tables the assistant should use, then refresh.`,
+        };
+      }
+      return outcome;
+    });
+  }
+
+  private async withClient<T>(
+    request: ProbeRequest,
+    work: (client: PgClientLike) => Promise<T>,
+  ): Promise<T | ProbeFailure> {
     const factory = this.clients ?? ((config: ClientConfig) => new Client(config));
     const client = factory({
       host: request.hostIp,
@@ -59,7 +106,7 @@ export class UserDatabaseProbe {
     });
     try {
       await client.connect();
-      return await this.verifyReadOnly(client);
+      return await work(client);
     } catch (error) {
       this.logger.warn(
         { ...safeErrorDetail(error), code: errorCode(error) },

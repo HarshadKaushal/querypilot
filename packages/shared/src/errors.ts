@@ -10,6 +10,7 @@ export const ERROR_CODES = [
   'SSL_REQUIRED',
   'NOT_READ_ONLY',
   'CONNECTION_FAILED',
+  'SCHEMA_TOO_LARGE',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

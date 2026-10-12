@@ -9,6 +9,8 @@ const SERVER_CODES: Record<string, string> = {
   '28000':
     'The database refused this login. Check that pg_hba.conf has a hostssl line for the egress IP, this user, and this database, and that the role can log in.',
   '3D000': 'That database does not exist on the server. Check the database name.',
+  '57014':
+    'The database took too long to answer. Try again, or grant this login fewer tables.',
 };
 
 const REFUSED = new Set(['ECONNREFUSED']);
