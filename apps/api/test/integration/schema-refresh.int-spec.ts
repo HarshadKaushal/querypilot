@@ -156,6 +156,42 @@ describe('schema refresh end to end', () => {
     expect(versions.map((row) => row.version)).toEqual([3, 4, 5, 6, 7]);
   });
 
+  it('saves allowlist edits and keeps them through the next refresh', async () => {
+    const { version } = await schemas.schema(userId, connectionId);
+    await schemas.updateAllowlist(
+      userId,
+      connectionId,
+      {
+        version,
+        tables: [
+          {
+            schema: 'public',
+            name: 'orders',
+            description: 'One row per order',
+            columns: [
+              { name: 'id' },
+              { name: 'discount', description: 'Discount in dollars' },
+            ],
+          },
+        ],
+      },
+      null,
+    );
+    await schemas.refresh(userId, connectionId, null);
+
+    const schema = await schemas.schema(userId, connectionId);
+    expect(schema.version).toBe(version + 1);
+    expect(schema.tables).toHaveLength(1);
+    expect(schema.tables[0]).toMatchObject({
+      name: 'orders',
+      description: 'One row per order',
+      columns: [
+        { name: 'id', description: null },
+        { name: 'discount', description: 'Discount in dollars' },
+      ],
+    });
+  });
+
   it("does not show one user's schema to another", async () => {
     await expect(schemas.schema(otherUserId, connectionId)).rejects.toMatchObject({
       code: 'NOT_FOUND',

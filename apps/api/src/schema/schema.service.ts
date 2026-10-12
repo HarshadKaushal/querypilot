@@ -12,6 +12,7 @@ import {
   type AllowedTable,
   type AllowlistTableView,
 } from './allowed-schema';
+import { parseAllowlistInput } from './allowlist-input';
 import {
   SCHEMA_REPOSITORY,
   type SchemaRepository,
@@ -48,6 +49,12 @@ export interface AllowlistView {
 const NOT_READY = new AppException(
   'SCHEMA_NOT_READY',
   'The schema for this connection has not been read yet. Refresh the schema first.',
+  HttpStatus.CONFLICT,
+);
+
+const CHANGED = new AppException(
+  'SCHEMA_CHANGED',
+  'The schema was refreshed after this allowlist was loaded. Reload the allowlist and try again.',
   HttpStatus.CONFLICT,
 );
 
@@ -140,6 +147,60 @@ export class SchemaService {
         await this.repo.allowlist(userId, connectionId),
       ),
     };
+  }
+
+  /**
+   * Saves the allowed tables, columns, and descriptions. The body names the snapshot version
+   * it was edited against; if a refresh has happened since, nothing is saved.
+   */
+  async updateAllowlist(
+    userId: string,
+    connectionId: string,
+    body: unknown,
+    ip: string | null,
+  ): Promise<SchemaView> {
+    const snapshot = await this.latest(userId, connectionId);
+    const parsed = parseAllowlistInput(body, snapshot.document);
+    if (!parsed.ok) {
+      throw new AppException(
+        'VALIDATION_ERROR',
+        parsed.reason === 'unknown_object'
+          ? 'The allowlist names a table or column that is not in the latest schema. Reload the allowlist and try again.'
+          : 'The request was not valid.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (parsed.version !== snapshot.version) {
+      throw CHANGED;
+    }
+    const outcome = await this.repo.replaceAllowlist(
+      userId,
+      connectionId,
+      snapshot.version,
+      parsed.entries,
+    );
+    if (outcome === 'missing') {
+      throw NOT_FOUND;
+    }
+    if (outcome === 'stale') {
+      throw CHANGED;
+    }
+    await this.repo.writeAudit({
+      userId,
+      eventType: 'allowlist.updated',
+      metadata: {
+        connectionId,
+        version: String(snapshot.version),
+        tables: String(
+          parsed.entries.filter((entry) => entry.columnName === null).length,
+        ),
+        columns: String(
+          parsed.entries.filter((entry) => entry.columnName !== null).length,
+        ),
+      },
+      ip,
+    });
+    return this.schema(userId, connectionId);
   }
 
   private async latest(userId: string, connectionId: string): Promise<StoredSnapshot> {

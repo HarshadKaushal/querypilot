@@ -133,6 +133,13 @@ describe('schema routes', () => {
     return pending.set('Authorization', `Bearer ${token}`);
   }
 
+  function put(path: string, token: string, body: unknown) {
+    return request(app.getHttpServer())
+      .put(path)
+      .set('Authorization', `Bearer ${token}`)
+      .send(body as object);
+  }
+
   it('requires a signed-in user', async () => {
     const response = await request(app.getHttpServer()).get('/v1/connections/x/schema');
     expect(response.status).toBe(401);
@@ -272,5 +279,80 @@ describe('schema routes', () => {
     expect(response.status).toBe(422);
     expect(response.body.error.code).toBe('SCHEMA_TOO_LARGE');
     expect(connections.rows[0]?.status).toBe('active');
+  });
+
+  describe('PUT allowlist', () => {
+    async function refreshed() {
+      const user = await signIn('dev@localhost');
+      const id = await connect(user);
+      await call('post', `/v1/connections/${id}/schema/refresh`, user.token);
+      return { user, id };
+    }
+
+    it('saves choices and descriptions, and the schema reflects them', async () => {
+      const { user, id } = await refreshed();
+      const before = await call('get', `/v1/connections/${id}/schema`, user.token);
+      const saved = await put(`/v1/connections/${id}/allowlist`, user.token, {
+        version: 1,
+        tables: [
+          {
+            schema: 'public',
+            name: 'customers',
+            description: 'People who buy from us',
+            columns: [{ name: 'id' }, { name: 'email', description: 'Billing contact' }],
+          },
+        ],
+      });
+      expect(saved.status).toBe(200);
+      expect(saved.body.fingerprint).not.toBe(before.body.fingerprint);
+      expect(saved.body.tables[0]).toMatchObject({
+        description: 'People who buy from us',
+        columns: [
+          { name: 'id', description: null },
+          { name: 'email', description: 'Billing contact' },
+        ],
+      });
+      const audit = schemas.audits.find((row) => row.eventType === 'allowlist.updated');
+      expect(audit?.metadata).toEqual({
+        connectionId: id,
+        version: '1',
+        tables: '1',
+        columns: '2',
+      });
+    });
+
+    it('refuses a save made against an older snapshot', async () => {
+      const { user, id } = await refreshed();
+      await call('post', `/v1/connections/${id}/schema/refresh`, user.token);
+      const response = await put(`/v1/connections/${id}/allowlist`, user.token, {
+        version: 1,
+        tables: [],
+      });
+      expect(response.status).toBe(409);
+      expect(response.body.error.code).toBe('SCHEMA_CHANGED');
+    });
+
+    it('rejects a column that is not in the snapshot', async () => {
+      const { user, id } = await refreshed();
+      const response = await put(`/v1/connections/${id}/allowlist`, user.token, {
+        version: 1,
+        tables: [{ schema: 'public', name: 'customers', columns: [{ name: 'ssn' }] }],
+      });
+      expect(response.status).toBe(400);
+      expect(response.body.error).toMatchObject({
+        code: 'VALIDATION_ERROR',
+        message: expect.stringContaining('not in the latest schema'),
+      });
+    });
+
+    it("returns not found for another user's connection", async () => {
+      const { id } = await refreshed();
+      const other = await signIn('other@localhost');
+      const response = await put(`/v1/connections/${id}/allowlist`, other.token, {
+        version: 1,
+        tables: [],
+      });
+      expect(response.status).toBe(404);
+    });
   });
 });

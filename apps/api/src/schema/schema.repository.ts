@@ -39,6 +39,16 @@ export interface SchemaRepository {
     userId: string,
     input: CommitSnapshotInput,
   ): Promise<{ snapshot: StoredSnapshot; previous: SchemaDocument | null } | null>;
+  /**
+   * Replaces the allowlist, but only while `version` is still the latest snapshot, checked
+   * under the same lock a refresh takes.
+   */
+  replaceAllowlist(
+    userId: string,
+    connectionId: string,
+    version: number,
+    entries: AllowlistEntry[],
+  ): Promise<'replaced' | 'stale' | 'missing'>;
   writeAudit(input: {
     userId: string;
     eventType: string;

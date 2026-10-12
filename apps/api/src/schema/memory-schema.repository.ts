@@ -76,6 +76,23 @@ export class MemorySchemaRepository implements SchemaRepository {
     return { snapshot, previous: previous?.document ?? null };
   }
 
+  async replaceAllowlist(
+    userId: string,
+    connectionId: string,
+    version: number,
+    entries: AllowlistEntry[],
+  ): Promise<'replaced' | 'stale' | 'missing'> {
+    if (this.owners.get(connectionId) !== userId) {
+      return 'missing';
+    }
+    const latest = await this.latestSnapshot(userId, connectionId);
+    if (latest?.version !== version) {
+      return 'stale';
+    }
+    this.allowed.set(connectionId, [...entries]);
+    return 'replaced';
+  }
+
   async writeAudit(input: AuditRow): Promise<void> {
     this.audits.push({ ...input, metadata: { ...input.metadata } });
   }

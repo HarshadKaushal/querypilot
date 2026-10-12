@@ -85,6 +85,41 @@ export class PrismaSchemaRepository implements SchemaRepository {
     );
   }
 
+  async replaceAllowlist(
+    userId: string,
+    connectionId: string,
+    version: number,
+    entries: AllowlistEntry[],
+  ): Promise<'replaced' | 'stale' | 'missing'> {
+    return this.prisma.$transaction(
+      async (tx) => {
+        const locked = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM connections
+          WHERE id = ${connectionId} AND user_id = ${userId}
+          FOR UPDATE`;
+        if (locked.length === 0) {
+          return 'missing';
+        }
+        const latest = await tx.schemaSnapshot.findFirst({
+          where: { connectionId },
+          orderBy: { version: 'desc' },
+          select: { version: true },
+        });
+        if (latest?.version !== version) {
+          return 'stale';
+        }
+        await tx.allowedObject.deleteMany({ where: { connectionId } });
+        if (entries.length > 0) {
+          await tx.allowedObject.createMany({
+            data: entries.map((entry) => ({ id: randomUUID(), connectionId, ...entry })),
+          });
+        }
+        return 'replaced';
+      },
+      { timeout: 30000 },
+    );
+  }
+
   async writeAudit(input: {
     userId: string;
     eventType: string;

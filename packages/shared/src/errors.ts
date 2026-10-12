@@ -12,6 +12,7 @@ export const ERROR_CODES = [
   'CONNECTION_FAILED',
   'SCHEMA_TOO_LARGE',
   'SCHEMA_NOT_READY',
+  'SCHEMA_CHANGED',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
 import type { PublicUser } from '../auth/auth.repository';
@@ -28,5 +28,15 @@ export class SchemaController {
   @Get('allowlist')
   allowlist(@CurrentUser() user: PublicUser, @Param('id') id: string) {
     return this.schemas.allowlist(user.id, id);
+  }
+
+  @Put('allowlist')
+  updateAllowlist(
+    @CurrentUser() user: PublicUser,
+    @Param('id') id: string,
+    @Req() request: Request,
+    @Body() body: unknown,
+  ) {
+    return this.schemas.updateAllowlist(user.id, id, body, requestMeta(request).ip);
   }
 }
