@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import type {
-  AuditInput,
-  AuthRepository,
-  GoogleProfileInput,
-  NewRefreshToken,
-  PublicUser,
-  StoredRefresh,
+import type { AuditEntry } from '../audit/audit-log';
+import {
+  toPublicUser,
+  type AuthRepository,
+  type GoogleProfileInput,
+  type NewRefreshToken,
+  type PublicUser,
+  type StoredRefresh,
 } from './auth.repository';
 
 interface MemoryUser extends PublicUser {
@@ -21,7 +22,7 @@ interface MemoryRefresh extends StoredRefresh {
 export class MemoryAuthRepository implements AuthRepository {
   readonly users: MemoryUser[] = [];
   readonly tokens: MemoryRefresh[] = [];
-  readonly audits: AuditInput[] = [];
+  readonly audits: AuditEntry[] = [];
 
   async upsertGoogleUser(input: GoogleProfileInput): Promise<PublicUser> {
     const existing = this.users.find(
@@ -32,7 +33,7 @@ export class MemoryAuthRepository implements AuthRepository {
       existing.name = input.name;
       existing.avatarUrl = input.avatarUrl;
       existing.lastLoginAt = input.lastLoginAt;
-      return publicUser(existing);
+      return toPublicUser(existing);
     }
     const created: MemoryUser = {
       id: randomUUID(),
@@ -44,12 +45,12 @@ export class MemoryAuthRepository implements AuthRepository {
       lastLoginAt: input.lastLoginAt,
     };
     this.users.push(created);
-    return publicUser(created);
+    return toPublicUser(created);
   }
 
   async findUserById(id: string): Promise<PublicUser | null> {
     const user = this.users.find((row) => row.id === id);
-    return user ? publicUser(user) : null;
+    return user ? toPublicUser(user) : null;
   }
 
   async insertRefresh(input: NewRefreshToken): Promise<void> {
@@ -100,9 +101,11 @@ export class MemoryAuthRepository implements AuthRepository {
     if (index >= 0) {
       this.users.splice(index, 1);
     }
-    for (const token of this.tokens) {
-      if (token.userId === userId && !token.revokedAt) {
-        token.revokedAt = new Date();
+    // Mirrors the database: refresh tokens cascade with the user, and audit rows keep
+    // their history with the user id cleared.
+    for (let i = this.tokens.length - 1; i >= 0; i--) {
+      if (this.tokens[i]!.userId === userId) {
+        this.tokens.splice(i, 1);
       }
     }
     for (const audit of this.audits) {
@@ -112,19 +115,9 @@ export class MemoryAuthRepository implements AuthRepository {
     }
   }
 
-  async writeAudit(input: AuditInput): Promise<void> {
-    this.audits.push({ ...input, metadata: { ...input.metadata } });
+  async writeAudit(entry: AuditEntry): Promise<void> {
+    this.audits.push({ ...entry, metadata: { ...entry.metadata } });
   }
-}
-
-function publicUser(user: MemoryUser): PublicUser {
-  return {
-    id: user.id,
-    email: user.email,
-    name: user.name,
-    avatarUrl: user.avatarUrl,
-    planTier: user.planTier,
-  };
 }
 
 function stored(row: MemoryRefresh): StoredRefresh {

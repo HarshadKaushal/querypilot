@@ -1,4 +1,5 @@
-import { classifyConnectError, errorCode } from './connect-error';
+import { errorCode } from '../common/errors/error-code';
+import { classifyConnectError } from './connect-error';
 
 export type ExecutionFailureCode =
   | 'CONNECTION_FAILED'

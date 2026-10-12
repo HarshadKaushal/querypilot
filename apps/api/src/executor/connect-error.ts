@@ -1,3 +1,4 @@
+import { errorCode } from '../common/errors/error-code';
 import type { ProbeFailure } from './user-database.probe';
 
 // Decisions use the SQLSTATE the server sends, Node's socket and TLS codes, and the fixed
@@ -34,14 +35,6 @@ const DRIVER_NO_SSL = new Set([
   'There was an error establishing an SSL connection',
 ]);
 const DRIVER_TIMEOUT = 'timeout expired';
-
-export function errorCode(error: unknown): string | undefined {
-  if (typeof error !== 'object' || error === null) {
-    return undefined;
-  }
-  const code = (error as { code?: unknown }).code;
-  return typeof code === 'string' ? code : undefined;
-}
 
 export function classifyConnectError(error: unknown): ProbeFailure {
   const code = errorCode(error);

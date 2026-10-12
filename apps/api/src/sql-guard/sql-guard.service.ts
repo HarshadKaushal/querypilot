@@ -1,6 +1,6 @@
-import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { checkSql, type RejectionCode } from '@ayd/sql-guard';
-import { AppException } from '../common/errors/app.exception';
+import { invalidRequest } from '../common/errors/app.exception';
 import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env';
 import { SchemaService } from '../schema/schema.service';
@@ -31,11 +31,7 @@ export class SqlGuardService {
     sql: unknown,
   ): Promise<SqlCheckResult> {
     if (typeof sql !== 'string') {
-      throw new AppException(
-        'VALIDATION_ERROR',
-        'The request was not valid.',
-        HttpStatus.BAD_REQUEST,
-      );
+      throw invalidRequest();
     }
     // Checks ownership, and that a snapshot exists, before the guard runs.
     const allowlist = await this.schemas.allowlist(userId, connectionId);

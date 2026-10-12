@@ -43,11 +43,15 @@ export class TokenService {
     return `${header}.${payload}.${signature}`;
   }
 
+  /** Returns the user id from a valid access token, or throws. */
   async verifyAccess(token: string): Promise<string> {
     const parts = token.split('.');
     if (parts.length !== 3) {
       throw new Error('invalid access token');
     }
+    // The signature is always recomputed with HS256 and our secret, whatever the token's
+    // header claims, so a token cannot choose a weaker algorithm. The comparison takes
+    // the same time for every byte, so timing cannot reveal how much of a forgery matched.
     const expected = Buffer.from(
       sign(`${parts[0]}.${parts[1]}`, this.env.AUTH_JWT_SECRET),
       'base64url',
@@ -89,6 +93,11 @@ export class TokenService {
     return hashToken(raw);
   }
 
+  /**
+   * Encrypts the OAuth state and PKCE verifier for the short-lived ayd_oauth cookie, so the
+   * API keeps no session between the redirect to Google and the callback. AES-GCM, so a
+   * tampered cookie fails to open.
+   */
   seal(payload: OAuthSeal): string {
     const key = createHash('sha256').update(this.env.AUTH_JWT_SECRET).digest();
     const iv = randomBytes(12);
@@ -100,6 +109,7 @@ export class TokenService {
     return Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString('base64url');
   }
 
+  /** Returns the sealed payload, or null for anything forged, tampered with, or malformed. */
   open(sealed: string): OAuthSeal | null {
     try {
       const buffer = Buffer.from(sealed, 'base64url');

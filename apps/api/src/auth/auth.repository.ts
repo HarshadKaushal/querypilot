@@ -1,3 +1,5 @@
+import type { AuditEntry } from '../audit/audit-log';
+
 export interface PublicUser {
   id: string;
   email: string;
@@ -24,13 +26,6 @@ export interface NewRefreshToken {
   deviceInfo: string | null;
 }
 
-export interface AuditInput {
-  userId: string | null;
-  eventType: string;
-  metadata: Record<string, string>;
-  ip: string | null;
-}
-
 export interface GoogleProfileInput {
   googleSubject: string;
   email: string;
@@ -48,7 +43,18 @@ export interface AuthRepository {
   revokeFamily(familyId: string, now: Date): Promise<void>;
   revokeToken(id: string, now: Date): Promise<void>;
   deleteUser(userId: string): Promise<void>;
-  writeAudit(input: AuditInput): Promise<void>;
+  writeAudit(entry: AuditEntry): Promise<void>;
 }
 
 export const AUTH_REPOSITORY = Symbol('AUTH_REPOSITORY');
+
+/** Picks the fields a client may see from a stored user. */
+export function toPublicUser(user: PublicUser): PublicUser {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    avatarUrl: user.avatarUrl,
+    planTier: user.planTier,
+  };
+}

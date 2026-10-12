@@ -4,7 +4,7 @@ import { Logger } from 'nestjs-pino';
 import { safeErrorDetail } from '../common/logging/safe-error';
 import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env';
-import { classifyConnectError, errorCode } from './connect-error';
+import { classifyConnectError } from './connect-error';
 import { ConnectionPools, type PoolClientLike } from './connection-pools';
 import {
   breakerKey,
@@ -135,10 +135,7 @@ export class QueryExecutor {
     try {
       client = await pool.connect();
     } catch (error) {
-      this.logger.warn(
-        { ...safeErrorDetail(error), code: errorCode(error) },
-        'user database connection failed',
-      );
+      this.logger.warn(safeErrorDetail(error), 'user database connection failed');
       const connect = classifyConnectError(error);
       return failure(
         connect.code === 'NOT_READ_ONLY' ? 'CONNECTION_FAILED' : connect.code,
@@ -212,10 +209,7 @@ export class QueryExecutor {
       };
     } catch (error) {
       healthy = false;
-      this.logger.warn(
-        { ...safeErrorDetail(error), code: errorCode(error) },
-        'user database query failed',
-      );
+      this.logger.warn(safeErrorDetail(error), 'user database query failed');
       return classifyQueryError(error, timeoutMs);
     } finally {
       // A socket that failed mid-transaction is discarded rather than reused.

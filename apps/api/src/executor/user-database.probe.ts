@@ -3,7 +3,7 @@ import { Client, type ClientConfig } from 'pg';
 import { Logger } from 'nestjs-pino';
 import { safeErrorDetail } from '../common/logging/safe-error';
 import type { SchemaDocument } from '../schema/schema-document';
-import { classifyConnectError, errorCode } from './connect-error';
+import { classifyConnectError } from './connect-error';
 import { userDatabaseConfig } from './connection-config';
 import {
   DEFAULT_LIMITS,
@@ -49,6 +49,12 @@ export type IntrospectResult =
 
 // Introspection reads more than the probe, so it gets a longer statement timeout.
 const INTROSPECTION_TIMEOUT_MS = 15000;
+
+// Shared by the read-only checks below, so every check uses the same rules.
+// Each role the login can act as: itself, roles it inherits from, and roles it can SET ROLE to.
+const ACTING_ROLE = "pg_has_role(current_user, r.oid, 'MEMBER')";
+// Only customer schemas: PostgreSQL's own schemas are not the customer's objects.
+const USER_SCHEMA = "n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')";
 
 @Injectable()
 export class UserDatabaseProbe {
@@ -97,10 +103,7 @@ export class UserDatabaseProbe {
       await client.connect();
       return await work(client);
     } catch (error) {
-      this.logger.warn(
-        { ...safeErrorDetail(error), code: errorCode(error) },
-        'user database probe failed',
-      );
+      this.logger.warn(safeErrorDetail(error), 'user database probe failed');
       return classifyConnectError(error);
     } finally {
       await client.end().catch(() => undefined);
@@ -115,7 +118,7 @@ export class UserDatabaseProbe {
     const roles = await client.query(
       `SELECT r.rolname = current_user AS is_login, r.rolsuper, r.rolcreatedb, r.rolcreaterole
        FROM pg_roles r
-       WHERE pg_has_role(current_user, r.oid, 'MEMBER')`,
+       WHERE ${ACTING_ROLE}`,
     );
     const login = roles.rows.find((row) => row.is_login === true);
     if (!login) {
@@ -149,8 +152,8 @@ export class UserDatabaseProbe {
        FROM pg_roles r
        CROSS JOIN pg_class c
        JOIN pg_namespace n ON n.oid = c.relnamespace
-       WHERE pg_has_role(current_user, r.oid, 'MEMBER')
-         AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+       WHERE ${ACTING_ROLE}
+         AND ${USER_SCHEMA}
          AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
          AND (
            has_table_privilege(r.oid, c.oid, 'INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER')
@@ -174,7 +177,7 @@ export class UserDatabaseProbe {
        FROM pg_class c
        JOIN pg_namespace n ON n.oid = c.relnamespace
        WHERE pg_has_role(c.relowner, 'MEMBER')
-         AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+         AND ${USER_SCHEMA}
          AND c.relkind IN ('r', 'p', 'v', 'm', 'f')`,
     );
     if (Number(owned.rows[0]?.owned ?? 0) > 0) {
@@ -191,10 +194,10 @@ export class UserDatabaseProbe {
     const createSchema = await client.query(
       `SELECT n.nspname, has_schema_privilege('public', n.oid, 'CREATE') AS via_public
        FROM pg_namespace n
-       WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+       WHERE ${USER_SCHEMA}
          AND EXISTS (
            SELECT 1 FROM pg_roles r
-           WHERE pg_has_role(current_user, r.oid, 'MEMBER')
+           WHERE ${ACTING_ROLE}
              AND has_schema_privilege(r.oid, n.oid, 'CREATE')
          )
        ORDER BY via_public DESC, n.nspname = 'public' DESC
@@ -216,7 +219,7 @@ export class UserDatabaseProbe {
     const createDatabase = await client.query(
       `SELECT 1
        FROM pg_roles r
-       WHERE pg_has_role(current_user, r.oid, 'MEMBER')
+       WHERE ${ACTING_ROLE}
          AND has_database_privilege(r.oid, current_database(), 'CREATE')
        LIMIT 1`,
     );

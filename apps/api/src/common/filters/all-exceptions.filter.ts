@@ -9,7 +9,13 @@ import {
 import { errorEnvelope, type ErrorCode } from '@ayd/shared';
 import { Logger } from 'nestjs-pino';
 import type { Request, Response } from 'express';
-import { AppException } from '../errors/app.exception';
+import {
+  AppException,
+  INTERNAL_ERROR_MESSAGE,
+  INVALID_REQUEST_MESSAGE,
+  NOT_FOUND_MESSAGE,
+  UNAUTHENTICATED_MESSAGE,
+} from '../errors/app.exception';
 import { safeErrorDetail } from '../logging/safe-error';
 
 @Catch()
@@ -47,34 +53,34 @@ export class AllExceptionsFilter implements ExceptionFilter {
         return {
           status,
           code: 'INTERNAL_ERROR',
-          message: 'Something went wrong. Try again.',
+          message: INTERNAL_ERROR_MESSAGE,
         };
       }
       if (status === HttpStatus.NOT_FOUND) {
         return {
           status,
           code: 'NOT_FOUND',
-          message: 'That resource was not found.',
+          message: NOT_FOUND_MESSAGE,
         };
       }
       if (status === HttpStatus.UNAUTHORIZED) {
         return {
           status,
           code: 'UNAUTHENTICATED',
-          message: 'Sign in to continue.',
+          message: UNAUTHENTICATED_MESSAGE,
         };
       }
       return {
         status,
         code: 'VALIDATION_ERROR',
-        message: 'The request was not valid.',
+        message: INVALID_REQUEST_MESSAGE,
       };
     }
 
     return {
       status: HttpStatus.INTERNAL_SERVER_ERROR,
       code: 'INTERNAL_ERROR',
-      message: 'Something went wrong. Try again.',
+      message: INTERNAL_ERROR_MESSAGE,
     };
   }
 }

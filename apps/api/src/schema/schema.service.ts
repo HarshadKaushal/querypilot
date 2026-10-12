@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { AppException } from '../common/errors/app.exception';
+import { AppException, invalidRequest, notFound } from '../common/errors/app.exception';
 import { ConnectionService, probeError } from '../connections/connection.service';
 import { UserDatabaseProbe } from '../executor/user-database.probe';
 import {
@@ -58,12 +58,6 @@ const CHANGED = new AppException(
   HttpStatus.CONFLICT,
 );
 
-const NOT_FOUND = new AppException(
-  'NOT_FOUND',
-  'That resource was not found.',
-  HttpStatus.NOT_FOUND,
-);
-
 @Injectable()
 export class SchemaService {
   constructor(
@@ -110,7 +104,7 @@ export class SchemaService {
         previous ? reconcileAllowlist(current, document) : defaultAllowlist(document),
     });
     if (committed.status === 'missing') {
-      throw NOT_FOUND;
+      throw notFound();
     }
     if (committed.status === 'stale') {
       throw new AppException(
@@ -179,13 +173,11 @@ export class SchemaService {
     const snapshot = await this.latest(userId, connectionId);
     const parsed = parseAllowlistInput(body, snapshot.document);
     if (!parsed.ok) {
-      throw new AppException(
-        'VALIDATION_ERROR',
-        parsed.reason === 'unknown_object'
-          ? 'The allowlist names a table or column that is not in the latest schema. Reload the allowlist and try again.'
-          : 'The request was not valid.',
-        HttpStatus.BAD_REQUEST,
-      );
+      throw parsed.reason === 'unknown_object'
+        ? invalidRequest(
+            'The allowlist names a table or column that is not in the latest schema. Reload the allowlist and try again.',
+          )
+        : invalidRequest();
     }
     if (parsed.version !== snapshot.version) {
       throw CHANGED;
@@ -197,7 +189,7 @@ export class SchemaService {
       parsed.entries,
     );
     if (outcome === 'missing') {
-      throw NOT_FOUND;
+      throw notFound();
     }
     if (outcome === 'stale') {
       throw CHANGED;

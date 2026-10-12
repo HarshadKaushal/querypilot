@@ -1,3 +1,4 @@
+import type { AuditEntry } from '../audit/audit-log';
 import type { AllowlistEntry } from './allowed-schema';
 import type { SchemaDocument } from './schema-document';
 
@@ -66,12 +67,7 @@ export interface SchemaRepository {
     version: number,
     entries: AllowlistEntry[],
   ): Promise<'replaced' | 'stale' | 'missing'>;
-  writeAudit(input: {
-    userId: string;
-    eventType: string;
-    metadata: Record<string, string>;
-    ip: string | null;
-  }): Promise<void>;
+  writeAudit(entry: AuditEntry): Promise<void>;
 }
 
 export const SCHEMA_REPOSITORY = Symbol('SCHEMA_REPOSITORY');

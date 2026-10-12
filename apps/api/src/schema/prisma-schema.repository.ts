@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@ayd/database';
+import { writeAuditLog, type AuditEntry } from '../audit/audit-log';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AllowlistEntry } from './allowed-schema';
 import type { SchemaDocument } from './schema-document';
@@ -8,9 +9,47 @@ import {
   SNAPSHOTS_KEPT,
   type CommitOutcome,
   type CommitSnapshotInput,
+  type DatabaseIdentity,
   type SchemaRepository,
   type StoredSnapshot,
 } from './schema.repository';
+
+// A refresh can replace tens of thousands of allowlist rows in one transaction.
+const TRANSACTION_TIMEOUT_MS = 30000;
+
+/**
+ * Locks this user's connection row until the transaction ends and returns where it points,
+ * or null when it is gone or not theirs. Refreshes and allowlist saves take this lock, so
+ * they run one at a time per connection and never take the same version number.
+ */
+async function lockConnection(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  connectionId: string,
+): Promise<DatabaseIdentity | null> {
+  const rows = await tx.$queryRaw<
+    Array<{ host: string; port: number; database_name: string }>
+  >`
+    SELECT host, port, database_name FROM connections
+    WHERE id = ${connectionId} AND user_id = ${userId}
+    FOR UPDATE`;
+  const row = rows[0];
+  return row ? { host: row.host, port: row.port, databaseName: row.database_name } : null;
+}
+
+/** Replaces the connection's whole allowlist with `entries`. */
+async function replaceEntries(
+  tx: Prisma.TransactionClient,
+  connectionId: string,
+  entries: AllowlistEntry[],
+): Promise<void> {
+  await tx.allowedObject.deleteMany({ where: { connectionId } });
+  if (entries.length > 0) {
+    await tx.allowedObject.createMany({
+      data: entries.map((entry) => ({ id: randomUUID(), connectionId, ...entry })),
+    });
+  }
+}
 
 @Injectable()
 export class PrismaSchemaRepository implements SchemaRepository {
@@ -42,23 +81,15 @@ export class PrismaSchemaRepository implements SchemaRepository {
     const { connectionId, database } = input;
     return this.prisma.$transaction(
       async (tx) => {
-        // Locks the connection row, so two refreshes of one connection run one after the
-        // other and never take the same version number.
-        const locked = await tx.$queryRaw<
-          Array<{ host: string; port: number; database_name: string }>
-        >`
-          SELECT host, port, database_name FROM connections
-          WHERE id = ${connectionId} AND user_id = ${userId}
-          FOR UPDATE`;
-        const row = locked[0];
-        if (!row) {
+        const current = await lockConnection(tx, userId, connectionId);
+        if (!current) {
           return { status: 'missing' };
         }
         // The connection was edited to another database while this snapshot was read.
         if (
-          row.host !== database.host ||
-          row.port !== database.port ||
-          row.database_name !== database.databaseName
+          current.host !== database.host ||
+          current.port !== database.port ||
+          current.databaseName !== database.databaseName
         ) {
           return { status: 'stale' };
         }
@@ -66,7 +97,7 @@ export class PrismaSchemaRepository implements SchemaRepository {
           where: { connectionId },
           orderBy: { version: 'desc' },
         });
-        const current = await tx.allowedObject.findMany({ where: { connectionId } });
+        const existing = await tx.allowedObject.findMany({ where: { connectionId } });
         const version = (previous?.version ?? 0) + 1;
         const created = await tx.schemaSnapshot.create({
           data: {
@@ -81,13 +112,11 @@ export class PrismaSchemaRepository implements SchemaRepository {
         const previousDocument = previous
           ? (previous.document as unknown as SchemaDocument)
           : null;
-        const next = input.nextAllowlist(previousDocument, current.map(toEntry));
-        await tx.allowedObject.deleteMany({ where: { connectionId } });
-        if (next.length > 0) {
-          await tx.allowedObject.createMany({
-            data: next.map((entry) => ({ id: randomUUID(), connectionId, ...entry })),
-          });
-        }
+        await replaceEntries(
+          tx,
+          connectionId,
+          input.nextAllowlist(previousDocument, existing.map(toEntry)),
+        );
         await tx.schemaSnapshot.deleteMany({
           where: { connectionId, version: { lte: version - SNAPSHOTS_KEPT } },
         });
@@ -97,7 +126,7 @@ export class PrismaSchemaRepository implements SchemaRepository {
           previous: previousDocument,
         };
       },
-      { timeout: 30000 },
+      { timeout: TRANSACTION_TIMEOUT_MS },
     );
   }
 
@@ -109,11 +138,7 @@ export class PrismaSchemaRepository implements SchemaRepository {
   ): Promise<'replaced' | 'stale' | 'missing'> {
     return this.prisma.$transaction(
       async (tx) => {
-        const locked = await tx.$queryRaw<Array<{ id: string }>>`
-          SELECT id FROM connections
-          WHERE id = ${connectionId} AND user_id = ${userId}
-          FOR UPDATE`;
-        if (locked.length === 0) {
+        if (!(await lockConnection(tx, userId, connectionId))) {
           return 'missing';
         }
         const latest = await tx.schemaSnapshot.findFirst({
@@ -124,33 +149,15 @@ export class PrismaSchemaRepository implements SchemaRepository {
         if (latest?.version !== version) {
           return 'stale';
         }
-        await tx.allowedObject.deleteMany({ where: { connectionId } });
-        if (entries.length > 0) {
-          await tx.allowedObject.createMany({
-            data: entries.map((entry) => ({ id: randomUUID(), connectionId, ...entry })),
-          });
-        }
+        await replaceEntries(tx, connectionId, entries);
         return 'replaced';
       },
-      { timeout: 30000 },
+      { timeout: TRANSACTION_TIMEOUT_MS },
     );
   }
 
-  async writeAudit(input: {
-    userId: string;
-    eventType: string;
-    metadata: Record<string, string>;
-    ip: string | null;
-  }): Promise<void> {
-    await this.prisma.auditLog.create({
-      data: {
-        id: randomUUID(),
-        userId: input.userId,
-        eventType: input.eventType,
-        metadata: input.metadata as Prisma.InputJsonObject,
-        ip: input.ip,
-      },
-    });
+  async writeAudit(entry: AuditEntry): Promise<void> {
+    await writeAuditLog(this.prisma, entry);
   }
 }
 

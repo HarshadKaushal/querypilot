@@ -4,7 +4,7 @@ import { isIP } from 'node:net';
 import { HttpStatus, Inject, Injectable, Optional } from '@nestjs/common';
 import { openCredentials, parseMasterKeyRing, sealCredentials } from '@ayd/crypto';
 import { assessResolution } from '@ayd/ssrf-guard';
-import { AppException } from '../common/errors/app.exception';
+import { AppException, invalidRequest, notFound } from '../common/errors/app.exception';
 import { ConnectionPools } from '../executor/connection-pools';
 import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env';
@@ -16,6 +16,7 @@ import {
 } from '../executor/user-database.probe';
 import {
   CONNECTION_REPOSITORY,
+  toPublicConnection,
   type ConnectionRepository,
   type PublicConnection,
   type StoredConnection,
@@ -41,12 +42,6 @@ export const ADDRESS_RESOLVER = Symbol('ADDRESS_RESOLVER');
 export type ConnectionTarget =
   | { ok: true; row: StoredConnection; request: ProbeRequest }
   | { ok: false; row: StoredConnection; error: AppException };
-
-const NOT_FOUND = new AppException(
-  'NOT_FOUND',
-  'That resource was not found.',
-  HttpStatus.NOT_FOUND,
-);
 
 @Injectable()
 export class DnsAddressResolver implements AddressResolver {
@@ -109,9 +104,9 @@ export class ConnectionService {
   async get(userId: string, id: string): Promise<PublicConnection> {
     const row = await this.repo.findOwned(userId, id);
     if (!row) {
-      throw NOT_FOUND;
+      throw notFound();
     }
-    return strip(row);
+    return toPublicConnection(row);
   }
 
   async test(userId: string, id: string, ip: string | null): Promise<PublicConnection> {
@@ -131,7 +126,7 @@ export class ConnectionService {
     if (failure) {
       throw failure;
     }
-    return updated ?? strip(target.row);
+    return updated ?? toPublicConnection(target.row);
   }
 
   async update(
@@ -189,7 +184,7 @@ export class ConnectionService {
       { resetSchema: databaseChanged },
     );
     if (!updated) {
-      throw NOT_FOUND;
+      throw notFound();
     }
     if (connectionChanged) {
       // Open sockets still use the old host or credentials.
@@ -267,7 +262,7 @@ export class ConnectionService {
   private async requireOwned(userId: string, id: string) {
     const row = await this.repo.findOwned(userId, id);
     if (!row) {
-      throw NOT_FOUND;
+      throw notFound();
     }
     return row;
   }
@@ -294,11 +289,7 @@ export class ConnectionService {
       input.port < 1 ||
       input.port > 65535
     ) {
-      throw new AppException(
-        'VALIDATION_ERROR',
-        'The request was not valid.',
-        HttpStatus.BAD_REQUEST,
-      );
+      throw invalidRequest();
     }
     if (sslMode === 'disable' || sslMode === 'allow' || sslMode === 'prefer') {
       throw new AppException(
@@ -308,11 +299,7 @@ export class ConnectionService {
       );
     }
     if (sslMode !== 'require' && sslMode !== 'verify-full') {
-      throw new AppException(
-        'VALIDATION_ERROR',
-        'The request was not valid.',
-        HttpStatus.BAD_REQUEST,
-      );
+      throw invalidRequest();
     }
     return {
       label,
@@ -382,19 +369,4 @@ export function probeError(result: Exclude<ProbeResult, { ok: true }>): AppExcep
   const status =
     result.code === 'CONNECTION_FAILED' ? HttpStatus.BAD_GATEWAY : HttpStatus.BAD_REQUEST;
   return new AppException(result.code, result.message, status);
-}
-
-function strip(row: PublicConnection): PublicConnection {
-  return {
-    id: row.id,
-    label: row.label,
-    host: row.host,
-    port: row.port,
-    databaseName: row.databaseName,
-    sslMode: row.sslMode,
-    status: row.status,
-    lastTestedAt: row.lastTestedAt,
-    sendSampleRowsToLlm: row.sendSampleRowsToLlm,
-    keyVersion: row.keyVersion,
-  };
 }

@@ -1,30 +1,25 @@
-import type {
-  ConnectionRepository,
-  NewConnection,
-  PublicConnection,
-  StoredConnection,
+import type { AuditEntry } from '../audit/audit-log';
+import {
+  toPublicConnection,
+  type ConnectionRepository,
+  type NewConnection,
+  type PublicConnection,
+  type StoredConnection,
 } from './connection.repository';
-
-interface AuditRow {
-  userId: string | null;
-  eventType: string;
-  metadata: Record<string, string>;
-  ip: string | null;
-}
 
 export class MemoryConnectionRepository implements ConnectionRepository {
   readonly rows: NewConnection[] = [];
-  readonly audits: AuditRow[] = [];
+  readonly audits: AuditEntry[] = [];
   /** Connection ids whose schema an update asked to delete. */
   readonly schemaResets: string[] = [];
 
   async insert(input: NewConnection): Promise<PublicConnection> {
     this.rows.push({ ...input });
-    return toPublic(input);
+    return toPublicConnection(input);
   }
 
   async list(userId: string): Promise<PublicConnection[]> {
-    return this.rows.filter((row) => row.userId === userId).map(toPublic);
+    return this.rows.filter((row) => row.userId === userId).map(toPublicConnection);
   }
 
   async findOwned(userId: string, id: string): Promise<StoredConnection | null> {
@@ -46,7 +41,7 @@ export class MemoryConnectionRepository implements ConnectionRepository {
     if (options.resetSchema) {
       this.schemaResets.push(id);
     }
-    return toPublic(row);
+    return toPublicConnection(row);
   }
 
   async delete(userId: string, id: string): Promise<boolean> {
@@ -58,29 +53,9 @@ export class MemoryConnectionRepository implements ConnectionRepository {
     return true;
   }
 
-  async writeAudit(input: {
-    userId: string;
-    eventType: string;
-    metadata: Record<string, string>;
-    ip: string | null;
-  }): Promise<void> {
-    this.audits.push({ ...input, metadata: { ...input.metadata } });
+  async writeAudit(entry: AuditEntry): Promise<void> {
+    this.audits.push({ ...entry, metadata: { ...entry.metadata } });
   }
-}
-
-function toPublic(row: NewConnection): PublicConnection {
-  return {
-    id: row.id,
-    label: row.label,
-    host: row.host,
-    port: row.port,
-    databaseName: row.databaseName,
-    sslMode: row.sslMode,
-    status: row.status,
-    lastTestedAt: row.lastTestedAt.toISOString(),
-    sendSampleRowsToLlm: row.sendSampleRowsToLlm,
-    keyVersion: row.keyVersion,
-  };
 }
 
 function toStored(row: NewConnection): StoredConnection {

@@ -1,14 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@ayd/database';
+import { writeAuditLog, type AuditEntry } from '../audit/audit-log';
 import { PrismaService } from '../prisma/prisma.service';
-import type {
-  AuditInput,
-  AuthRepository,
-  GoogleProfileInput,
-  NewRefreshToken,
-  PublicUser,
-  StoredRefresh,
+import {
+  toPublicUser,
+  type AuthRepository,
+  type GoogleProfileInput,
+  type NewRefreshToken,
+  type PublicUser,
+  type StoredRefresh,
 } from './auth.repository';
 
 @Injectable()
@@ -93,31 +93,7 @@ export class PrismaAuthRepository implements AuthRepository {
     await this.prisma.user.delete({ where: { id: userId } });
   }
 
-  async writeAudit(input: AuditInput): Promise<void> {
-    await this.prisma.auditLog.create({
-      data: {
-        id: randomUUID(),
-        userId: input.userId,
-        eventType: input.eventType,
-        metadata: input.metadata as Prisma.InputJsonObject,
-        ip: input.ip,
-      },
-    });
+  async writeAudit(entry: AuditEntry): Promise<void> {
+    await writeAuditLog(this.prisma, entry);
   }
-}
-
-function toPublicUser(row: {
-  id: string;
-  email: string;
-  name: string;
-  avatarUrl: string | null;
-  planTier: string;
-}): PublicUser {
-  return {
-    id: row.id,
-    email: row.email,
-    name: row.name,
-    avatarUrl: row.avatarUrl,
-    planTier: row.planTier,
-  };
 }

@@ -1,12 +1,12 @@
-import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@ayd/database';
+import { writeAuditLog, type AuditEntry } from '../audit/audit-log';
 import { PrismaService } from '../prisma/prisma.service';
-import type {
-  ConnectionRepository,
-  NewConnection,
-  PublicConnection,
-  StoredConnection,
+import {
+  toPublicConnection,
+  type ConnectionRepository,
+  type NewConnection,
+  type PublicConnection,
+  type StoredConnection,
 } from './connection.repository';
 
 @Injectable()
@@ -15,7 +15,7 @@ export class PrismaConnectionRepository implements ConnectionRepository {
 
   async insert(input: NewConnection): Promise<PublicConnection> {
     const row = await this.prisma.connection.create({ data: input });
-    return toPublic(row);
+    return toPublicConnection(row);
   }
 
   async list(userId: string): Promise<PublicConnection[]> {
@@ -23,7 +23,7 @@ export class PrismaConnectionRepository implements ConnectionRepository {
       where: { userId },
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map(toPublic);
+    return rows.map(toPublicConnection);
   }
 
   async findOwned(userId: string, id: string): Promise<StoredConnection | null> {
@@ -49,7 +49,7 @@ export class PrismaConnectionRepository implements ConnectionRepository {
         await tx.allowedObject.deleteMany({ where: { connectionId: id } });
         await tx.schemaSnapshot.deleteMany({ where: { connectionId: id } });
       }
-      return toPublic(row);
+      return toPublicConnection(row);
     });
   }
 
@@ -58,52 +58,13 @@ export class PrismaConnectionRepository implements ConnectionRepository {
     return result.count === 1;
   }
 
-  async writeAudit(input: {
-    userId: string;
-    eventType: string;
-    metadata: Record<string, string>;
-    ip: string | null;
-  }): Promise<void> {
-    await this.prisma.auditLog.create({
-      data: {
-        id: randomUUID(),
-        userId: input.userId,
-        eventType: input.eventType,
-        metadata: input.metadata as Prisma.InputJsonObject,
-        ip: input.ip,
-      },
-    });
+  async writeAudit(entry: AuditEntry): Promise<void> {
+    await writeAuditLog(this.prisma, entry);
   }
 }
 
-function toPublic(row: {
-  id: string;
-  label: string;
-  host: string;
-  port: number;
-  databaseName: string;
-  sslMode: string;
-  status: string;
-  lastTestedAt: Date | null;
-  sendSampleRowsToLlm: boolean;
-  keyVersion: number;
-}): PublicConnection {
-  return {
-    id: row.id,
-    label: row.label,
-    host: row.host,
-    port: row.port,
-    databaseName: row.databaseName,
-    sslMode: row.sslMode,
-    status: row.status,
-    lastTestedAt: row.lastTestedAt ? row.lastTestedAt.toISOString() : null,
-    sendSampleRowsToLlm: row.sendSampleRowsToLlm,
-    keyVersion: row.keyVersion,
-  };
-}
-
 function toStored(
-  row: Parameters<typeof toPublic>[0] & {
+  row: Parameters<typeof toPublicConnection>[0] & {
     userId: string;
     usernameCiphertext: string;
     usernameIv: string;
@@ -117,7 +78,7 @@ function toStored(
   },
 ): StoredConnection {
   return {
-    ...toPublic(row),
+    ...toPublicConnection(row),
     userId: row.userId,
     usernameCiphertext: row.usernameCiphertext,
     usernameIv: row.usernameIv,

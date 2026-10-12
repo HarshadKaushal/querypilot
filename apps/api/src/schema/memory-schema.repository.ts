@@ -1,3 +1,4 @@
+import type { AuditEntry } from '../audit/audit-log';
 import type { AllowlistEntry } from './allowed-schema';
 import {
   SNAPSHOTS_KEPT,
@@ -8,13 +9,6 @@ import {
   type StoredSnapshot,
 } from './schema.repository';
 
-interface AuditRow {
-  userId: string;
-  eventType: string;
-  metadata: Record<string, string>;
-  ip: string | null;
-}
-
 // In-memory stand-in for unit tests. `owners` plays the part of connections.user_id.
 export class MemorySchemaRepository implements SchemaRepository {
   readonly owners = new Map<string, string>();
@@ -22,7 +16,7 @@ export class MemorySchemaRepository implements SchemaRepository {
   readonly databases = new Map<string, DatabaseIdentity>();
   readonly snapshots: StoredSnapshot[] = [];
   readonly allowed = new Map<string, AllowlistEntry[]>();
-  readonly audits: AuditRow[] = [];
+  readonly audits: AuditEntry[] = [];
 
   async latestSnapshot(
     userId: string,
@@ -100,7 +94,7 @@ export class MemorySchemaRepository implements SchemaRepository {
     return 'replaced';
   }
 
-  async writeAudit(input: AuditRow): Promise<void> {
-    this.audits.push({ ...input, metadata: { ...input.metadata } });
+  async writeAudit(entry: AuditEntry): Promise<void> {
+    this.audits.push({ ...entry, metadata: { ...entry.metadata } });
   }
 }

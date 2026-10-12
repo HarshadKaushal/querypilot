@@ -1,4 +1,5 @@
 import type { SealedCredentials } from '@ayd/crypto';
+import type { AuditEntry } from '../audit/audit-log';
 
 export interface PublicConnection {
   id: string;
@@ -44,12 +45,40 @@ export interface ConnectionRepository {
     },
   ): Promise<PublicConnection | null>;
   delete(userId: string, id: string): Promise<boolean>;
-  writeAudit(input: {
-    userId: string;
-    eventType: string;
-    metadata: Record<string, string>;
-    ip: string | null;
-  }): Promise<void>;
+  writeAudit(entry: AuditEntry): Promise<void>;
 }
 
 export const CONNECTION_REPOSITORY = Symbol('CONNECTION_REPOSITORY');
+
+/**
+ * Picks the fields a client may see. Everything else on a stored connection, the sealed
+ * credentials above all, is left behind. Accepts a Date or ISO string for lastTestedAt.
+ */
+export function toPublicConnection(row: {
+  id: string;
+  label: string;
+  host: string;
+  port: number;
+  databaseName: string;
+  sslMode: string;
+  status: string;
+  lastTestedAt: Date | string | null;
+  sendSampleRowsToLlm: boolean;
+  keyVersion: number;
+}): PublicConnection {
+  return {
+    id: row.id,
+    label: row.label,
+    host: row.host,
+    port: row.port,
+    databaseName: row.databaseName,
+    sslMode: row.sslMode,
+    status: row.status,
+    lastTestedAt:
+      row.lastTestedAt instanceof Date
+        ? row.lastTestedAt.toISOString()
+        : row.lastTestedAt,
+    sendSampleRowsToLlm: row.sendSampleRowsToLlm,
+    keyVersion: row.keyVersion,
+  };
+}

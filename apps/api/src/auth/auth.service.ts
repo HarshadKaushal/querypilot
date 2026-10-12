@@ -1,6 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { AppException } from '../common/errors/app.exception';
+import {
+  AppException,
+  invalidRequest,
+  notFound,
+  UNAUTHENTICATED_MESSAGE,
+} from '../common/errors/app.exception';
 import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env';
 import { AUTH_REPOSITORY, type AuthRepository, type PublicUser } from './auth.repository';
@@ -22,8 +27,6 @@ export interface RequestMeta {
   ip: string | null;
   deviceInfo: string | null;
 }
-
-const SIGN_IN_MESSAGE = 'Sign in to continue.';
 
 @Injectable()
 export class AuthService {
@@ -103,19 +106,11 @@ export class AuthService {
     meta: RequestMeta;
   }): Promise<SessionResult> {
     if (this.env.NODE_ENV === 'production' || !this.env.DEV_LOGIN_ENABLED) {
-      throw new AppException(
-        'NOT_FOUND',
-        'That resource was not found.',
-        HttpStatus.NOT_FOUND,
-      );
+      throw notFound();
     }
     const email = (input.email?.trim().toLowerCase() || 'dev@localhost').slice(0, 200);
     if (!/^[^\s@]+@[^\s@]+$/.test(email)) {
-      throw new AppException(
-        'VALIDATION_ERROR',
-        'The request was not valid.',
-        HttpStatus.BAD_REQUEST,
-      );
+      throw invalidRequest();
     }
     const name = (input.name?.trim() || 'Local developer').slice(0, 80);
     const user = await this.repo.upsertGoogleUser({
@@ -137,6 +132,8 @@ export class AuthService {
       throw this.unauthenticated();
     }
     const now = new Date();
+    // A refresh token works once. Seeing a used or revoked one again means it was copied,
+    // so every token in its login family is revoked and the owner has to sign in again.
     if (row.revokedAt || row.replacedById) {
       await this.reuse(row.familyId, row.userId, meta.ip, now);
       throw this.unauthenticated();
@@ -145,6 +142,8 @@ export class AuthService {
       throw this.unauthenticated();
     }
     const next = this.tokens.issueRefresh(row.familyId, now);
+    // The claim succeeds only while the row is still unused, so of two concurrent refreshes
+    // with the same token, one wins and the other is treated as reuse.
     const claimed = await this.repo.claimRefresh(row.id, next.id, now);
     if (!claimed) {
       await this.reuse(row.familyId, row.userId, meta.ip, now);
@@ -261,6 +260,10 @@ export class AuthService {
   }
 
   private unauthenticated(): AppException {
-    return new AppException('UNAUTHENTICATED', SIGN_IN_MESSAGE, HttpStatus.UNAUTHORIZED);
+    return new AppException(
+      'UNAUTHENTICATED',
+      UNAUTHENTICATED_MESSAGE,
+      HttpStatus.UNAUTHORIZED,
+    );
   }
 }
