@@ -1,15 +1,9 @@
-import { loadEnv, type AppEnv } from '../config/env';
+import type { AppEnv } from '../config/env';
+import { testEnv } from '../testing/test-env';
 import { TokenService } from './token.service';
 
 function env(): AppEnv {
-  return loadEnv({
-    NODE_ENV: 'test',
-    DATABASE_URL: 'postgresql://ayd:ayd@localhost:5434/ayd',
-    REDIS_URL: 'redis://localhost:6379',
-    AUTH_JWT_SECRET: 'test-jwt-secret-that-is-at-least-32',
-    CRYPTO_MASTER_KEY_VERSION: '1',
-    CRYPTO_MASTER_KEYS: '1:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
-  });
+  return testEnv();
 }
 
 describe('TokenService', () => {

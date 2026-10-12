@@ -1,18 +1,7 @@
 import { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
-import { Logger } from 'nestjs-pino';
 import request from 'supertest';
-import { AuthController } from '../auth/auth.controller';
-import { AuthGuard } from '../auth/auth.guard';
-import { AUTH_REPOSITORY } from '../auth/auth.repository';
-import { AuthService } from '../auth/auth.service';
-import { MemoryAuthRepository } from '../auth/memory-auth.repository';
-import { GOOGLE_CLIENT } from '../auth/google.client';
-import { TokenService } from '../auth/token.service';
-import { AllExceptionsFilter } from '../common/filters/all-exceptions.filter';
-import { APP_ENV } from '../config/app-config.module';
-import { loadEnv } from '../config/env';
 import { UserDatabaseProbe } from '../executor/user-database.probe';
+import { createHttpApp } from '../testing/http-app';
 import { ADDRESS_RESOLVER, ConnectionService } from './connection.service';
 import { CONNECTION_REPOSITORY } from './connection.repository';
 import { ConnectionsController } from './connections.controller';
@@ -27,42 +16,16 @@ describe('connection routes', () => {
   beforeEach(async () => {
     connections.rows.length = 0;
     connections.audits.length = 0;
-    const env = loadEnv({
-      NODE_ENV: 'test',
-      DATABASE_URL: 'postgresql://ayd:ayd@localhost:5434/ayd',
-      REDIS_URL: 'redis://localhost:6379',
-      AUTH_JWT_SECRET: 'test-jwt-secret-that-is-at-least-32',
-      DEV_LOGIN_ENABLED: 'true',
-      CRYPTO_MASTER_KEYS: '1:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
-      CRYPTO_MASTER_KEY_VERSION: '1',
-    });
-    const moduleRef = await Test.createTestingModule({
-      controllers: [AuthController, ConnectionsController],
+    app = await createHttpApp({
+      controllers: [ConnectionsController],
       providers: [
-        AuthService,
-        TokenService,
-        AuthGuard,
         ConnectionService,
-        { provide: APP_ENV, useValue: env },
-        { provide: AUTH_REPOSITORY, useClass: MemoryAuthRepository },
-        {
-          provide: GOOGLE_CLIENT,
-          useValue: { authorizationUrl: () => '', exchangeCode: async () => ({}) },
-        },
         { provide: CONNECTION_REPOSITORY, useValue: connections },
         { provide: ADDRESS_RESOLVER, useValue: { lookup: async () => ['1.1.1.1'] } },
         { provide: UserDatabaseProbe, useValue: { test: async () => ({ ok: true }) } },
       ],
-    }).compile();
-    app = moduleRef.createNestApplication();
-    app.use((req: { id?: string }, _res: unknown, next: () => void) => {
-      req.id = 'req-conn-01';
-      next();
+      requestId: 'req-conn-01',
     });
-    app.useGlobalFilters(
-      new AllExceptionsFilter({ error: jest.fn() } as unknown as Logger),
-    );
-    await app.init();
   });
 
   afterEach(async () => {

@@ -1,15 +1,17 @@
-import { Client, type ClientConfig } from 'pg';
 import type { Logger } from 'nestjs-pino';
 import {
   UserDatabaseProbe,
   type ProbeRequest,
 } from '../../src/executor/user-database.probe';
-import { createScratchDatabase, type ScratchDatabase } from '../helpers/scratch-database';
+import {
+  createScratchDatabase,
+  plainClients,
+  type ScratchDatabase,
+} from '../helpers/scratch-database';
 
 // The application Postgres in Compose and CI has no TLS, so these tests drop the SSL
 // option. They prove the privilege queries against real PostgreSQL rules, which a fake
 // client cannot.
-const plainClients = (config: ClientConfig) => new Client({ ...config, ssl: false });
 
 describe('read-only probe against PostgreSQL', () => {
   const probe = new UserDatabaseProbe(

@@ -1,13 +1,15 @@
-import { Client, type ClientConfig } from 'pg';
 import type { Logger } from 'nestjs-pino';
 import { UserDatabaseProbe } from '../../src/executor/user-database.probe';
 import { SETUP_SQL } from '../../src/meta/meta.controller';
-import { createScratchDatabase, type ScratchDatabase } from '../helpers/scratch-database';
+import {
+  createScratchDatabase,
+  plainClients,
+  type ScratchDatabase,
+} from '../helpers/scratch-database';
 
 // Runs the setup SQL from GET /v1/meta/egress the way a customer would, placeholders filled
 // in, and checks the login it creates passes the read-only probe and can read what it
 // should. The application Postgres has no TLS, so the probe's SSL is turned off.
-const plainClients = (config: ClientConfig) => new Client({ ...config, ssl: false });
 
 describe('setup SQL shown to customers', () => {
   let db: ScratchDatabase;

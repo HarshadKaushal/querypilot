@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { Pool, type PoolConfig } from 'pg';
 import type { Logger } from 'nestjs-pino';
 import { loadEnv } from '../../src/config/env';
 import { ConnectionPools } from '../../src/executor/connection-pools';
@@ -7,14 +6,17 @@ import { RedisCoordination, semaphoreKey } from '../../src/executor/coordination
 import { QueryExecutor } from '../../src/executor/query-executor';
 import type { ProbeRequest } from '../../src/executor/user-database.probe';
 import { RedisService } from '../../src/redis/redis.service';
-import { createScratchDatabase, type ScratchDatabase } from '../helpers/scratch-database';
+import {
+  createScratchDatabase,
+  plainPools,
+  type ScratchDatabase,
+} from '../helpers/scratch-database';
 
 // Phase 5 acceptance against real PostgreSQL and Redis. The application Postgres has no
 // TLS, so the pool factory turns SSL off. Each "process" below is its own executor with its
 // own pools and Redis client, sharing only Redis, as separate workers would.
 
 const logger = { warn: () => undefined } as unknown as Logger;
-const plainPools = (config: PoolConfig) => new Pool({ ...config, ssl: false });
 
 describe('query executor against PostgreSQL and Redis', () => {
   let db: ScratchDatabase;

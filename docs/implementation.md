@@ -139,4 +139,4 @@ Second, a column dropped from the customer's database after the last refresh pro
 
 ## How to extend this
 
-Add a phase only after this phase's checks pass: `npm test`, `npm run lint`, `npm run format:check`, and a ready health response from `npm run up`. New application tables go in a new Prisma migration. New client-visible failures go through `AppException` and an existing or newly documented error code in `@ayd/shared`.
+Add a phase only after this phase's checks pass: `npm test`, `npm run lint`, `npm run format:check`, and a ready health response from `npm run up`. New application tables go in a new Prisma migration. New client-visible failures go through `AppException` and an existing or newly documented error code in `@ayd/shared`. Use `notFound()` for a missing or foreign id (the two must look the same) and `invalidRequest()` for bad input; both live in `common/errors/app.exception.ts`. Audit rows go through `writeAuditLog` in `audit/audit-log.ts`, with ids and outcomes in the metadata and never secrets. Log errors with `safeErrorDetail`, which strips connection URLs.

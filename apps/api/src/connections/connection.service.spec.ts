@@ -1,5 +1,5 @@
 import { parseMasterKeyRing } from '@ayd/crypto';
-import { loadEnv } from '../config/env';
+import { testEnv } from '../testing/test-env';
 import { UserDatabaseProbe, type ProbeResult } from '../executor/user-database.probe';
 import { MemoryConnectionRepository } from './memory-connection.repository';
 import type { ConnectionPools } from '../executor/connection-pools';
@@ -30,13 +30,8 @@ function service(options?: {
   const probe = {
     test: jest.fn(async () => options?.probe ?? { ok: true }),
   } as unknown as UserDatabaseProbe;
-  const env = loadEnv({
-    NODE_ENV: 'test',
-    DATABASE_URL: 'postgresql://ayd:ayd@localhost:5434/ayd',
-    REDIS_URL: 'redis://localhost:6379',
-    AUTH_JWT_SECRET: 'test-jwt-secret-that-is-at-least-32',
+  const env = testEnv({
     CRYPTO_MASTER_KEYS: KEYS,
-    CRYPTO_MASTER_KEY_VERSION: '1',
     SSRF_ALLOW_PRIVATE: options?.allowPrivate ? 'true' : 'false',
   });
   const pools = { evict: jest.fn() } as unknown as ConnectionPools;

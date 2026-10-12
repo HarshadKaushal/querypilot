@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { Client, type ClientConfig } from 'pg';
 import type { Logger } from 'nestjs-pino';
 import { loadEnv } from '../../src/config/env';
 import { ConnectionService } from '../../src/connections/connection.service';
@@ -8,12 +7,15 @@ import { UserDatabaseProbe } from '../../src/executor/user-database.probe';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { PrismaSchemaRepository } from '../../src/schema/prisma-schema.repository';
 import { SchemaService } from '../../src/schema/schema.service';
-import { createScratchDatabase, type ScratchDatabase } from '../helpers/scratch-database';
+import {
+  createScratchDatabase,
+  plainClients,
+  type ScratchDatabase,
+} from '../helpers/scratch-database';
 
 // Phase 3 acceptance, end to end: real services, the application database through Prisma,
 // and a multi-schema scratch database as the user's database. SSL is off because the
 // application Postgres has no TLS.
-const plainClients = (config: ClientConfig) => new Client({ ...config, ssl: false });
 
 describe('schema refresh end to end', () => {
   const env = loadEnv();

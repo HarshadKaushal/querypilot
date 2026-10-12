@@ -1,17 +1,7 @@
 import { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
-import { Logger } from 'nestjs-pino';
 import request from 'supertest';
-import { AuthController } from '../auth/auth.controller';
-import { AuthGuard } from '../auth/auth.guard';
-import { AUTH_REPOSITORY } from '../auth/auth.repository';
-import { AuthService } from '../auth/auth.service';
-import { GOOGLE_CLIENT } from '../auth/google.client';
-import { MemoryAuthRepository } from '../auth/memory-auth.repository';
-import { TokenService } from '../auth/token.service';
-import { AllExceptionsFilter } from '../common/filters/all-exceptions.filter';
-import { APP_ENV } from '../config/app-config.module';
-import { loadEnv } from '../config/env';
+import { createHttpApp } from '../testing/http-app';
+import { testEnv } from '../testing/test-env';
 import { CONNECTION_REPOSITORY } from '../connections/connection.repository';
 import { ADDRESS_RESOLVER, ConnectionService } from '../connections/connection.service';
 import { ConnectionsController } from '../connections/connections.controller';
@@ -64,36 +54,12 @@ describe('SQL check route', () => {
     schemas.snapshots.length = 0;
     schemas.allowed.clear();
     schemas.owners.clear();
-    const env = loadEnv({
-      NODE_ENV: 'test',
-      DATABASE_URL: 'postgresql://ayd:ayd@localhost:5434/ayd',
-      REDIS_URL: 'redis://localhost:6379',
-      AUTH_JWT_SECRET: 'test-jwt-secret-that-is-at-least-32',
-      DEV_LOGIN_ENABLED: 'true',
-      CRYPTO_MASTER_KEYS: '1:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
-      CRYPTO_MASTER_KEY_VERSION: '1',
-      SQL_ROW_CAP: '50',
-    });
-    const moduleRef = await Test.createTestingModule({
-      controllers: [
-        AuthController,
-        ConnectionsController,
-        SchemaController,
-        SqlGuardController,
-      ],
+    app = await createHttpApp({
+      controllers: [ConnectionsController, SchemaController, SqlGuardController],
       providers: [
-        AuthService,
-        TokenService,
-        AuthGuard,
         ConnectionService,
         SchemaService,
         SqlGuardService,
-        { provide: APP_ENV, useValue: env },
-        { provide: AUTH_REPOSITORY, useClass: MemoryAuthRepository },
-        {
-          provide: GOOGLE_CLIENT,
-          useValue: { authorizationUrl: () => '', exchangeCode: async () => ({}) },
-        },
         { provide: CONNECTION_REPOSITORY, useValue: connections },
         { provide: SCHEMA_REPOSITORY, useValue: schemas },
         { provide: ADDRESS_RESOLVER, useValue: { lookup: async () => ['1.1.1.1'] } },
@@ -105,16 +71,9 @@ describe('SQL check route', () => {
           },
         },
       ],
-    }).compile();
-    app = moduleRef.createNestApplication();
-    app.use((req: { id?: string }, _res: unknown, next: () => void) => {
-      req.id = 'req-sql-01';
-      next();
+      env: testEnv({ DEV_LOGIN_ENABLED: 'true', SQL_ROW_CAP: '50' }),
+      requestId: 'req-sql-01',
     });
-    app.useGlobalFilters(
-      new AllExceptionsFilter({ error: jest.fn() } as unknown as Logger),
-    );
-    await app.init();
   });
 
   afterEach(async () => {

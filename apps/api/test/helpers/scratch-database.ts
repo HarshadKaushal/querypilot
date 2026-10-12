@@ -1,10 +1,16 @@
 import { randomBytes } from 'node:crypto';
-import { Client } from 'pg';
+import { Client, Pool, type ClientConfig, type PoolConfig } from 'pg';
 
 // A throwaway database on the server behind DATABASE_URL, for tests that need real
 // PostgreSQL privilege rules. The DATABASE_URL user must be able to create databases and
 // roles (the Compose and CI users are superusers). Roles are cluster-wide, so every role
 // gets the run suffix and is dropped in cleanup.
+
+// The application Postgres in Compose and CI has no TLS, while the probe and the executor
+// always ask for it. These factories turn SSL off for tests against that server only.
+export const plainClients = (config: ClientConfig) =>
+  new Client({ ...config, ssl: false });
+export const plainPools = (config: PoolConfig) => new Pool({ ...config, ssl: false });
 
 export interface ScratchDatabase {
   name: string;

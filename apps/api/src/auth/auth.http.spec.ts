@@ -1,33 +1,17 @@
 import { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
-import { Logger } from 'nestjs-pino';
 import request from 'supertest';
-import { AllExceptionsFilter } from '../common/filters/all-exceptions.filter';
-import { APP_ENV } from '../config/app-config.module';
-import { loadEnv, type AppEnv } from '../config/env';
+import { createHttpApp } from '../testing/http-app';
+import { testEnv } from '../testing/test-env';
 import { UsersController } from '../users/users.controller';
-import { AuthController } from './auth.controller';
-import { AuthGuard } from './auth.guard';
-import { AUTH_REPOSITORY } from './auth.repository';
-import { AuthService } from './auth.service';
-import { GOOGLE_CLIENT, type GoogleIdentityProvider } from './google.client';
-import { MemoryAuthRepository } from './memory-auth.repository';
-import { TokenService } from './token.service';
+import type { GoogleIdentityProvider } from './google.client';
 
-function testEnv(): AppEnv {
-  return loadEnv({
-    NODE_ENV: 'test',
-    DATABASE_URL: 'postgresql://ayd:ayd@localhost:5434/ayd',
-    REDIS_URL: 'redis://localhost:6379',
-    AUTH_JWT_SECRET: 'test-jwt-secret-that-is-at-least-32',
-    CRYPTO_MASTER_KEY_VERSION: '1',
-    CRYPTO_MASTER_KEYS: '1:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
-    DEV_LOGIN_ENABLED: 'true',
-    GOOGLE_CLIENT_ID: 'google-client',
-    GOOGLE_CLIENT_SECRET: 'google-secret',
-    GOOGLE_REDIRECT_URI: 'http://localhost:3000/v1/auth/google/callback',
-  });
-}
+// Google sign-in configured, with a fake client below.
+const GOOGLE_ENV = {
+  DEV_LOGIN_ENABLED: 'true',
+  GOOGLE_CLIENT_ID: 'google-client',
+  GOOGLE_CLIENT_SECRET: 'google-secret',
+  GOOGLE_REDIRECT_URI: 'http://localhost:3000/v1/auth/google/callback',
+};
 
 const google: GoogleIdentityProvider = {
   authorizationUrl: ({ state }) =>
@@ -50,27 +34,12 @@ describe('auth routes', () => {
   let app: INestApplication;
 
   beforeEach(async () => {
-    const env = testEnv();
-    const moduleRef = await Test.createTestingModule({
-      controllers: [AuthController, UsersController],
-      providers: [
-        AuthService,
-        TokenService,
-        AuthGuard,
-        { provide: APP_ENV, useValue: env },
-        { provide: AUTH_REPOSITORY, useClass: MemoryAuthRepository },
-        { provide: GOOGLE_CLIENT, useValue: google },
-      ],
-    }).compile();
-    app = moduleRef.createNestApplication();
-    app.use((req: { id?: string }, _res: unknown, next: () => void) => {
-      req.id = 'req-auth-01';
-      next();
+    app = await createHttpApp({
+      controllers: [UsersController],
+      env: testEnv(GOOGLE_ENV),
+      google,
+      requestId: 'req-auth-01',
     });
-    app.useGlobalFilters(
-      new AllExceptionsFilter({ error: jest.fn() } as unknown as Logger),
-    );
-    await app.init();
   });
 
   afterEach(async () => {
@@ -135,34 +104,8 @@ describe('auth routes', () => {
   });
 
   it('returns 503 when Google sign-in is not configured', async () => {
-    const env = loadEnv({
-      NODE_ENV: 'test',
-      DATABASE_URL: 'postgresql://ayd:ayd@localhost:5434/ayd',
-      REDIS_URL: 'redis://localhost:6379',
-      AUTH_JWT_SECRET: 'test-jwt-secret-that-is-at-least-32',
-      CRYPTO_MASTER_KEY_VERSION: '1',
-      CRYPTO_MASTER_KEYS: '1:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
-      DEV_LOGIN_ENABLED: 'true',
-    });
-    const moduleRef = await Test.createTestingModule({
-      controllers: [AuthController],
-      providers: [
-        AuthService,
-        TokenService,
-        { provide: APP_ENV, useValue: env },
-        { provide: AUTH_REPOSITORY, useClass: MemoryAuthRepository },
-        { provide: GOOGLE_CLIENT, useValue: google },
-      ],
-    }).compile();
-    const bare = moduleRef.createNestApplication();
-    bare.use((req: { id?: string }, _res: unknown, next: () => void) => {
-      req.id = 'req-auth-02';
-      next();
-    });
-    bare.useGlobalFilters(
-      new AllExceptionsFilter({ error: jest.fn() } as unknown as Logger),
-    );
-    await bare.init();
+    // The default test environment has no Google client configured.
+    const bare = await createHttpApp({ google, requestId: 'req-auth-02' });
     const response = await request(bare.getHttpServer()).get('/v1/auth/google/start');
     expect(response.status).toBe(503);
     expect(response.body.error.code).toBe('AUTH_NOT_CONFIGURED');

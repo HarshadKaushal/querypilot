@@ -1,4 +1,5 @@
-import { loadEnv, type AppEnv } from '../config/env';
+import type { AppEnv } from '../config/env';
+import { testEnv } from '../testing/test-env';
 import { MemoryAuthRepository } from './memory-auth.repository';
 import type { GoogleIdentityProvider, GoogleProfile } from './google.client';
 import { AuthService } from './auth.service';
@@ -7,13 +8,7 @@ import { TokenService } from './token.service';
 const meta = { ip: '127.0.0.1', deviceInfo: 'jest' };
 
 function env(overrides: Record<string, string> = {}): AppEnv {
-  return loadEnv({
-    NODE_ENV: 'test',
-    DATABASE_URL: 'postgresql://ayd:ayd@localhost:5434/ayd',
-    REDIS_URL: 'redis://localhost:6379',
-    AUTH_JWT_SECRET: 'test-jwt-secret-that-is-at-least-32',
-    CRYPTO_MASTER_KEY_VERSION: '1',
-    CRYPTO_MASTER_KEYS: '1:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
+  return testEnv({
     DEV_LOGIN_ENABLED: 'true',
     GOOGLE_CLIENT_ID: 'google-client',
     GOOGLE_CLIENT_SECRET: 'google-secret',

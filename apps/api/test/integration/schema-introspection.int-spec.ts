@@ -1,15 +1,17 @@
-import { Client, type ClientConfig } from 'pg';
 import type { Logger } from 'nestjs-pino';
 import {
   UserDatabaseProbe,
   type ProbeRequest,
 } from '../../src/executor/user-database.probe';
 import type { SchemaDocument, SchemaTable } from '../../src/schema/schema-document';
-import { createScratchDatabase, type ScratchDatabase } from '../helpers/scratch-database';
+import {
+  createScratchDatabase,
+  plainClients,
+  type ScratchDatabase,
+} from '../helpers/scratch-database';
 
 // Phase 3 acceptance: introspection against a database with several schemas. The
 // application Postgres has no TLS, so the client factory turns SSL off.
-const plainClients = (config: ClientConfig) => new Client({ ...config, ssl: false });
 
 describe('schema introspection against PostgreSQL', () => {
   const probe = new UserDatabaseProbe(
