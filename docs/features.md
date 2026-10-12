@@ -39,6 +39,8 @@ Status of Ask Your Database against the production blueprint. Phase 5 (the execu
 - Multi-schema sample database: `inventory` and `support` are readable by `sample_ro`, and `finance` is not.
 - SQL guard in `@ayd/sql-guard`, on PostgreSQL's own parser. It accepts one SELECT, optionally with non-recursive WITH queries, over allowlisted tables and columns, using approved functions, cast types, and operators. Writes, DDL, `COPY`, `SELECT INTO`, locking clauses, system catalogs, hidden columns, whole-row references, recursive queries, and functions in FROM are rejected with a code and a reason. The SQL it returns has schema-qualified tables, alias-qualified columns, `*` expanded to allowed columns, and a top-level LIMIT capped at `SQL_ROW_CAP`. Its output is parsed and checked a second time. 181 attack cases and 82 safe queries.
 - `POST /v1/connections/:id/sql/check` runs the guard against the connection's latest allowlist and returns the verdict. It never runs the SQL.
+- Changing a connection's host, port, or database name deletes its snapshots and allowlist in the same transaction. The next refresh starts over with the defaults. A refresh that read the old database during the edit stores nothing (`SCHEMA_CHANGED`).
+- A column, table, or schema the database no longer has returns `QUERY_SCHEMA_CHANGED`, which tells the user to refresh the schema.
 
 ## Partial
 
@@ -55,6 +57,8 @@ Status of Ask Your Database against the production blueprint. Phase 5 (the execu
 
 Locked choices that are not implemented:
 
+- When a query returns `QUERY_SCHEMA_CHANGED`, refresh the schema and retry once against the new snapshot (Phase 7). New objects stay hidden until allowed, so this cannot widen access.
+- Show how old the schema snapshot is, or refresh it on a schedule (Phase 8 or 9).
 - Gemini as the platform LLM, behind a provider interface, with a second call for the summary.
 - Queue, SSE progress, cancellation, and fair scheduling.
 - History and quotas. Login rate limits are part of the quota phase.

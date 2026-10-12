@@ -98,14 +98,26 @@ export class SchemaService {
     const { document } = result;
     const committed = await this.repo.commitSnapshot(userId, {
       connectionId,
+      database: {
+        host: target.row.host,
+        port: target.row.port,
+        databaseName: target.row.databaseName,
+      },
       document,
       tableCount: document.tables.length,
       columnCount: document.tables.reduce((sum, table) => sum + table.columns.length, 0),
       nextAllowlist: (previous, current) =>
         previous ? reconcileAllowlist(current, document) : defaultAllowlist(document),
     });
-    if (!committed) {
+    if (committed.status === 'missing') {
       throw NOT_FOUND;
+    }
+    if (committed.status === 'stale') {
+      throw new AppException(
+        'SCHEMA_CHANGED',
+        'The connection was changed to another database while its schema was being read. Refresh the schema again.',
+        HttpStatus.CONFLICT,
+      );
     }
     await this.connections.recordTest(userId, connectionId, true);
     const { snapshot, previous } = committed;

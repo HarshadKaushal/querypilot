@@ -110,6 +110,19 @@ describe('query executor against PostgreSQL and Redis', () => {
     expect(await rowCount()).toBe(50);
   });
 
+  it('reports a column the database no longer has as a schema change', async () => {
+    const result = await process().run({
+      connectionId: randomUUID(),
+      target: writer,
+      sql: 'SELECT t.dropped_column FROM public.t',
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'QUERY_SCHEMA_CHANGED',
+      retryable: false,
+    });
+  });
+
   it('stops a query at the statement timeout', async () => {
     const started = Date.now();
     const result = await process({ EXECUTOR_STATEMENT_TIMEOUT_MS: '500' }).run({

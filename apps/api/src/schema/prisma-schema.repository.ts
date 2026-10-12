@@ -6,6 +6,7 @@ import type { AllowlistEntry } from './allowed-schema';
 import type { SchemaDocument } from './schema-document';
 import {
   SNAPSHOTS_KEPT,
+  type CommitOutcome,
   type CommitSnapshotInput,
   type SchemaRepository,
   type StoredSnapshot,
@@ -37,18 +38,29 @@ export class PrismaSchemaRepository implements SchemaRepository {
   async commitSnapshot(
     userId: string,
     input: CommitSnapshotInput,
-  ): Promise<{ snapshot: StoredSnapshot; previous: SchemaDocument | null } | null> {
-    const { connectionId } = input;
+  ): Promise<CommitOutcome> {
+    const { connectionId, database } = input;
     return this.prisma.$transaction(
       async (tx) => {
         // Locks the connection row, so two refreshes of one connection run one after the
         // other and never take the same version number.
-        const locked = await tx.$queryRaw<Array<{ id: string }>>`
-          SELECT id FROM connections
+        const locked = await tx.$queryRaw<
+          Array<{ host: string; port: number; database_name: string }>
+        >`
+          SELECT host, port, database_name FROM connections
           WHERE id = ${connectionId} AND user_id = ${userId}
           FOR UPDATE`;
-        if (locked.length === 0) {
-          return null;
+        const row = locked[0];
+        if (!row) {
+          return { status: 'missing' };
+        }
+        // The connection was edited to another database while this snapshot was read.
+        if (
+          row.host !== database.host ||
+          row.port !== database.port ||
+          row.database_name !== database.databaseName
+        ) {
+          return { status: 'stale' };
         }
         const previous = await tx.schemaSnapshot.findFirst({
           where: { connectionId },
@@ -79,7 +91,11 @@ export class PrismaSchemaRepository implements SchemaRepository {
         await tx.schemaSnapshot.deleteMany({
           where: { connectionId, version: { lte: version - SNAPSHOTS_KEPT } },
         });
-        return { snapshot: toSnapshot(created), previous: previousDocument };
+        return {
+          status: 'committed',
+          snapshot: toSnapshot(created),
+          previous: previousDocument,
+        };
       },
       { timeout: 30000 },
     );

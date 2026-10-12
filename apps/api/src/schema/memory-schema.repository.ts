@@ -1,8 +1,9 @@
 import type { AllowlistEntry } from './allowed-schema';
-import type { SchemaDocument } from './schema-document';
 import {
   SNAPSHOTS_KEPT,
+  type CommitOutcome,
   type CommitSnapshotInput,
+  type DatabaseIdentity,
   type SchemaRepository,
   type StoredSnapshot,
 } from './schema.repository';
@@ -17,6 +18,8 @@ interface AuditRow {
 // In-memory stand-in for unit tests. `owners` plays the part of connections.user_id.
 export class MemorySchemaRepository implements SchemaRepository {
   readonly owners = new Map<string, string>();
+  /** Plays the part of each connection's host, port, and database name, when set. */
+  readonly databases = new Map<string, DatabaseIdentity>();
   readonly snapshots: StoredSnapshot[] = [];
   readonly allowed = new Map<string, AllowlistEntry[]>();
   readonly audits: AuditRow[] = [];
@@ -42,9 +45,13 @@ export class MemorySchemaRepository implements SchemaRepository {
   async commitSnapshot(
     userId: string,
     input: CommitSnapshotInput,
-  ): Promise<{ snapshot: StoredSnapshot; previous: SchemaDocument | null } | null> {
+  ): Promise<CommitOutcome> {
     if (this.owners.get(input.connectionId) !== userId) {
-      return null;
+      return { status: 'missing' };
+    }
+    const current = this.databases.get(input.connectionId);
+    if (current && JSON.stringify(current) !== JSON.stringify(input.database)) {
+      return { status: 'stale' };
     }
     const previous = await this.latestSnapshot(userId, input.connectionId);
     const snapshot: StoredSnapshot = {
@@ -73,7 +80,7 @@ export class MemorySchemaRepository implements SchemaRepository {
         this.snapshots.splice(i, 1);
       }
     }
-    return { snapshot, previous: previous?.document ?? null };
+    return { status: 'committed', snapshot, previous: previous?.document ?? null };
   }
 
   async replaceAllowlist(

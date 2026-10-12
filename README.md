@@ -142,6 +142,8 @@ $body = '{"label":"Sample","host":"127.0.0.1","port":5433,"databaseName":"sample
 Invoke-RestMethod http://localhost:3000/v1/connections -Method Post -ContentType "application/json" -Headers @{ Authorization = "Bearer $($login.accessToken)" } -Body $body
 ```
 
+Changing a connection's host, port, or database name deletes its schema snapshot and allowlist, because it may now be a different database. Refresh the schema afterwards and review the allowlist again. A new password or SSL mode keeps them.
+
 Use host `sample-db` and port `5432` when the API itself is the Compose container. `sample_admin` is rejected because it is the owner. `sslMode` must be `require` or `verify-full`. The response does not include the password.
 
 ## Read the schema and choose what the AI sees

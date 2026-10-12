@@ -131,6 +131,12 @@ Slots and the breaker are Lua scripts on Redis, using Redis's clock. A slot is a
 
 `apps/api/scripts/try-query.cjs` runs connect, refresh, guard, and executor in a Nest application context against the sample database. It compiles the API itself instead of chaining `npm run build &&` in `package.json`. On Windows, npm escapes the SQL argument for `cmd.exe` with `^`, and a chained command never removes those escapes.
 
+## Follow-up: schema changes
+
+Two gaps were closed after Phase 5. First, editing a connection to point at another database kept the old snapshot and allowlist, so the guard would have checked queries against the wrong database's tables. `ConnectionService.update` now asks the repository to delete them in the same transaction when the host, port, or database name changes. `commitSnapshot` also refuses a snapshot whose recorded host, port, and database no longer match the connection row, which closes the race with a refresh already running.
+
+Second, a column dropped from the customer's database after the last refresh produced a generic "could not run this query" message. `42703`, `42P01`, and `3F000` now map to `QUERY_SCHEMA_CHANGED`, which says to refresh the schema. The automatic refresh-and-retry on that code is planned for Phase 7.
+
 ## How to extend this
 
 Add a phase only after this phase's checks pass: `npm test`, `npm run lint`, `npm run format:check`, and a ready health response from `npm run up`. New application tables go in a new Prisma migration. New client-visible failures go through `AppException` and an existing or newly documented error code in `@ayd/shared`.

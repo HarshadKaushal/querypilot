@@ -9,6 +9,7 @@ export type ExecutionFailureCode =
   | 'QUERY_WRITE_BLOCKED'
   | 'QUERY_NOT_PERMITTED'
   | 'QUERY_INVALID'
+  | 'QUERY_SCHEMA_CHANGED'
   | 'QUERY_FAILED';
 
 export interface ExecutionFailure {
@@ -64,6 +65,15 @@ export function classifyQueryError(error: unknown, timeoutMs: number): Execution
     return failure(
       'QUERY_NOT_PERMITTED',
       'The database login is not allowed to read part of this query.',
+    );
+  }
+  // The guard checked names against the saved snapshot, so a column, table, or schema the
+  // database no longer has means its structure changed since the last refresh. Retrying
+  // with the same snapshot would fail the same way.
+  if (code === '42703' || code === '42P01' || code === '3F000') {
+    return failure(
+      'QUERY_SCHEMA_CHANGED',
+      "Your database's structure has changed since its schema was last read. Refresh the schema and ask again.",
     );
   }
   // Syntax and naming (42), data (22), cardinality (21), and unsupported features (0A) are

@@ -159,6 +159,13 @@ export class ConnectionService {
       next.username !== secrets.username ||
       next.password !== secrets.password ||
       next.sslMode !== existing.sslMode;
+    // A different host, port, or database may be a different database altogether, so its
+    // old snapshot and allowlist are deleted and the schema has to be read and reviewed
+    // again. New credentials or SSL settings reach the same database and keep them.
+    const databaseChanged =
+      next.host !== existing.host ||
+      next.port !== existing.port ||
+      next.databaseName !== existing.databaseName;
     if (connectionChanged) {
       const pinned = await this.pin(next.host);
       await this.assertReadable(next, pinned);
@@ -166,16 +173,21 @@ export class ConnectionService {
     const sealed = sealCredentials(next.username, next.password, this.keys);
     // Status and test time change only when the probe just ran. A rename keeps a failing
     // connection failing.
-    const updated = await this.repo.update(userId, id, {
-      label: next.label,
-      host: next.host,
-      port: next.port,
-      databaseName: next.databaseName,
-      sslMode: next.sslMode,
-      sendSampleRowsToLlm: next.sendSampleRowsToLlm,
-      ...(connectionChanged ? { status: 'active', lastTestedAt: new Date() } : {}),
-      ...sealed,
-    });
+    const updated = await this.repo.update(
+      userId,
+      id,
+      {
+        label: next.label,
+        host: next.host,
+        port: next.port,
+        databaseName: next.databaseName,
+        sslMode: next.sslMode,
+        sendSampleRowsToLlm: next.sendSampleRowsToLlm,
+        ...(connectionChanged ? { status: 'active', lastTestedAt: new Date() } : {}),
+        ...sealed,
+      },
+      { resetSchema: databaseChanged },
+    );
     if (!updated) {
       throw NOT_FOUND;
     }
@@ -186,7 +198,9 @@ export class ConnectionService {
     await this.repo.writeAudit({
       userId,
       eventType: 'connection.updated',
-      metadata: { connectionId: id },
+      metadata: databaseChanged
+        ? { connectionId: id, schemaReset: 'true' }
+        : { connectionId: id },
       ip,
     });
     return updated;

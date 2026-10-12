@@ -208,4 +208,41 @@ describe('schema refresh end to end', () => {
     expect(audits.length).toBeGreaterThanOrEqual(7);
     expect(JSON.stringify(audits)).not.toContain('password');
   });
+
+  it('refuses a snapshot read from a database the connection no longer points at', async () => {
+    const before = await prisma.schemaSnapshot.count({ where: { connectionId } });
+    const outcome = await new PrismaSchemaRepository(prisma).commitSnapshot(userId, {
+      connectionId,
+      database: { host: 'scratch.example', port: db.port, databaseName: 'some_other_db' },
+      document: { formatVersion: 1, tables: [] },
+      tableCount: 0,
+      columnCount: 0,
+      nextAllowlist: () => [],
+    });
+    expect(outcome).toEqual({ status: 'stale' });
+    expect(await prisma.schemaSnapshot.count({ where: { connectionId } })).toBe(before);
+  });
+
+  it('deletes the snapshots and allowlist when the connection moves to another database', async () => {
+    const other = await createScratchDatabase();
+    try {
+      expect(
+        await prisma.allowedObject.count({ where: { connectionId } }),
+      ).toBeGreaterThan(0);
+      await connections.update(userId, connectionId, { databaseName: other.name }, null);
+      expect(await prisma.schemaSnapshot.count({ where: { connectionId } })).toBe(0);
+      expect(await prisma.allowedObject.count({ where: { connectionId } })).toBe(0);
+      await expect(schemas.schema(userId, connectionId)).rejects.toMatchObject({
+        code: 'SCHEMA_NOT_READY',
+      });
+      // The next refresh starts over, like a new connection.
+      await expect(schemas.refresh(userId, connectionId, null)).resolves.toMatchObject({
+        version: 1,
+        defaultsApplied: true,
+        tableCount: 0,
+      });
+    } finally {
+      await other.drop();
+    }
+  });
 });

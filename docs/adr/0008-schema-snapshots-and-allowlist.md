@@ -6,4 +6,6 @@ The allowlist lives in `allowed_objects`. A row with no column name allows a tab
 
 Every schema output for the model (`GET /v1/connections/:id/schema` now, prompt assembly later) is built by one function from the latest snapshot and the allowlist. It carries a fingerprint: a SHA-256 of the snapshot version and the allowed schema. The SQL proposal cache in the LLM phase keys on that fingerprint, so a refresh or any allowlist change invalidates it without a separate counter.
 
+**When the connection moves.** Changing a connection's host, port, or database name may point it at a different database. Its snapshots and allowlist are deleted in the same transaction as the edit, the schema reports `SCHEMA_NOT_READY`, and the next refresh starts over with the first-snapshot defaults, as for a new connection. A new password, username, or SSL mode reaches the same database and keeps them. A refresh that read the old database while the connection was being edited stores nothing and returns `SCHEMA_CHANGED`: the repository compares host, port, and database name under the same row lock.
+
 Introspection runs in the API, in the executor module, like the read-only probe. It moves to the worker with the rest of the executor before the queue phase.

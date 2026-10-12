@@ -23,4 +23,16 @@ describe('MetaController', () => {
     expect(body.setupSql).toContain('REVOKE CREATE ON SCHEMA public FROM PUBLIC;');
     expect(body.setupSql).not.toMatch(/GRANT (INSERT|UPDATE|DELETE|ALL)/);
   });
+
+  it('names the table owner for default privileges and covers other schemas', () => {
+    const { setupSql } = new MetaController(env).egress();
+    // Without FOR ROLE, only tables created by the role running the SQL become readable.
+    expect(setupSql).toContain(
+      'ALTER DEFAULT PRIVILEGES FOR ROLE <table_owner_role> IN SCHEMA public GRANT SELECT ON TABLES TO ayd_ro;',
+    );
+    expect(setupSql).toContain('--   GRANT USAGE ON SCHEMA <schema> TO ayd_ro;');
+    expect(setupSql).toContain(
+      '--   GRANT SELECT ON ALL TABLES IN SCHEMA <schema> TO ayd_ro;',
+    );
+  });
 });

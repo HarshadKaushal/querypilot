@@ -38,6 +38,10 @@ export interface ConnectionRepository {
     userId: string,
     id: string,
     patch: Partial<NewConnection> & { status?: string; lastTestedAt?: Date | null },
+    options?: {
+      /** Also delete the schema snapshots and allowlist, in the same transaction. */
+      resetSchema?: boolean;
+    },
   ): Promise<PublicConnection | null>;
   delete(userId: string, id: string): Promise<boolean>;
   writeAudit(input: {

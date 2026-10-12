@@ -11,8 +11,20 @@ export interface StoredSnapshot {
   createdAt: string;
 }
 
+/** Where a snapshot was read from. */
+export interface DatabaseIdentity {
+  host: string;
+  port: number;
+  databaseName: string;
+}
+
 export interface CommitSnapshotInput {
   connectionId: string;
+  /**
+   * The database the snapshot was read from. If the connection was edited to point
+   * elsewhere while it was being read, nothing is stored.
+   */
+  database: DatabaseIdentity;
   document: SchemaDocument;
   tableCount: number;
   columnCount: number;
@@ -26,6 +38,11 @@ export interface CommitSnapshotInput {
   ): AllowlistEntry[];
 }
 
+export type CommitOutcome =
+  | { status: 'committed'; snapshot: StoredSnapshot; previous: SchemaDocument | null }
+  | { status: 'missing' }
+  | { status: 'stale' };
+
 /** Older snapshots are deleted once a connection has more than this many. */
 export const SNAPSHOTS_KEPT = 5;
 
@@ -34,11 +51,11 @@ export const SNAPSHOTS_KEPT = 5;
 export interface SchemaRepository {
   latestSnapshot(userId: string, connectionId: string): Promise<StoredSnapshot | null>;
   allowlist(userId: string, connectionId: string): Promise<AllowlistEntry[]>;
-  /** Stores the next version and replaces the allowlist. Null when the connection is gone. */
-  commitSnapshot(
-    userId: string,
-    input: CommitSnapshotInput,
-  ): Promise<{ snapshot: StoredSnapshot; previous: SchemaDocument | null } | null>;
+  /**
+   * Stores the next version and replaces the allowlist. 'missing' when the connection is
+   * gone, 'stale' when it now points at a different database than the snapshot came from.
+   */
+  commitSnapshot(userId: string, input: CommitSnapshotInput): Promise<CommitOutcome>;
   /**
    * Replaces the allowlist, but only while `version` is still the latest snapshot, checked
    * under the same lock a refresh takes.

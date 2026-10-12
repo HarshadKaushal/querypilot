@@ -15,6 +15,8 @@ interface AuditRow {
 export class MemoryConnectionRepository implements ConnectionRepository {
   readonly rows: NewConnection[] = [];
   readonly audits: AuditRow[] = [];
+  /** Connection ids whose schema an update asked to delete. */
+  readonly schemaResets: string[] = [];
 
   async insert(input: NewConnection): Promise<PublicConnection> {
     this.rows.push({ ...input });
@@ -34,12 +36,16 @@ export class MemoryConnectionRepository implements ConnectionRepository {
     userId: string,
     id: string,
     patch: Partial<NewConnection>,
+    options: { resetSchema?: boolean } = {},
   ): Promise<PublicConnection | null> {
     const row = this.rows.find((item) => item.userId === userId && item.id === id);
     if (!row) {
       return null;
     }
     Object.assign(row, patch);
+    if (options.resetSchema) {
+      this.schemaResets.push(id);
+    }
     return toPublic(row);
   }
 

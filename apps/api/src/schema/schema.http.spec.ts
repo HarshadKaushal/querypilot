@@ -53,6 +53,7 @@ describe('schema routes', () => {
     schemas.snapshots.length = 0;
     schemas.allowed.clear();
     schemas.owners.clear();
+    schemas.databases.clear();
     introspection = { ok: true, document: firstDocument };
     lookup = async () => ['1.1.1.1'];
     const env = loadEnv({
@@ -287,6 +288,25 @@ describe('schema routes', () => {
       eventType: 'schema.refreshed',
       metadata: { connectionId: id, result: 'failed' },
     });
+  });
+
+  it('stores nothing if the connection moved to another database during the refresh', async () => {
+    const user = await signIn('dev@localhost');
+    const id = await connect(user);
+    // The connection row now names a different database than the one that was read.
+    schemas.databases.set(id, {
+      host: 'db.example',
+      port: 5432,
+      databaseName: 'other_db',
+    });
+    const response = await call(
+      'post',
+      `/v1/connections/${id}/schema/refresh`,
+      user.token,
+    );
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe('SCHEMA_CHANGED');
+    expect(schemas.snapshots).toHaveLength(0);
   });
 
   it('refuses a schema above the limits without marking the connection failing', async () => {

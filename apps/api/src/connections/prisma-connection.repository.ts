@@ -35,13 +35,22 @@ export class PrismaConnectionRepository implements ConnectionRepository {
     userId: string,
     id: string,
     patch: Partial<NewConnection>,
+    options: { resetSchema?: boolean } = {},
   ): Promise<PublicConnection | null> {
-    const existing = await this.prisma.connection.findFirst({ where: { id, userId } });
-    if (!existing) {
-      return null;
-    }
-    const row = await this.prisma.connection.update({ where: { id }, data: patch });
-    return toPublic(row);
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.connection.findFirst({ where: { id, userId } });
+      if (!existing) {
+        return null;
+      }
+      const row = await tx.connection.update({ where: { id }, data: patch });
+      if (options.resetSchema) {
+        // The connection now points at another database, so the old schema and choices
+        // must not be applied to it.
+        await tx.allowedObject.deleteMany({ where: { connectionId: id } });
+        await tx.schemaSnapshot.deleteMany({ where: { connectionId: id } });
+      }
+      return toPublic(row);
+    });
   }
 
   async delete(userId: string, id: string): Promise<boolean> {

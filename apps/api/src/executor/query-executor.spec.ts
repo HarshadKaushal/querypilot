@@ -56,8 +56,8 @@ function fakeDatabase(
             const statement = typeof config === 'string' ? { text: config } : config;
             statements.push(statement);
             if (options.failOn && statement.text.startsWith(options.failOn)) {
-              throw Object.assign(new Error('column "secret" does not exist'), {
-                code: '42703',
+              throw Object.assign(new Error('syntax error at or near "secret"'), {
+                code: '42601',
               });
             }
             const fetch = /^FETCH FORWARD (\d+)/.exec(statement.text);

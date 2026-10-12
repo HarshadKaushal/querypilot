@@ -25,8 +25,26 @@ const cases: Array<[string, Error, string, boolean]> = [
     false,
   ],
   [
-    'unknown column',
+    'a column the snapshot has but the database dropped',
     pgError('column "nope" does not exist', '42703'),
+    'QUERY_SCHEMA_CHANGED',
+    false,
+  ],
+  [
+    'a table the database dropped',
+    pgError('relation "public.gone" does not exist', '42P01'),
+    'QUERY_SCHEMA_CHANGED',
+    false,
+  ],
+  [
+    'a schema the database dropped',
+    pgError('schema "gone" does not exist', '3F000'),
+    'QUERY_SCHEMA_CHANGED',
+    false,
+  ],
+  [
+    'an operator that does not exist for the types',
+    pgError('operator does not exist: text > integer', '42883'),
     'QUERY_INVALID',
     true,
   ],

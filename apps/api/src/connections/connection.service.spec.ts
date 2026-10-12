@@ -215,4 +215,34 @@ describe('ConnectionService', () => {
     await connections.delete('user-1', created.id, null);
     expect(pools.evict).toHaveBeenCalledTimes(2);
   });
+
+  it('deletes the schema when the host, port, or database changes, and says so in the audit', async () => {
+    const { connections, repo } = service();
+    const created = await connections.create('user-1', input, null);
+    await connections.update('user-1', created.id, { databaseName: 'other_db' }, null);
+    expect(repo.schemaResets).toEqual([created.id]);
+    expect(repo.audits.at(-1)?.metadata).toEqual({
+      connectionId: created.id,
+      schemaReset: 'true',
+    });
+    await connections.update('user-1', created.id, { port: 6543 }, null);
+    await connections.update('user-1', created.id, { host: 'db2.example' }, null);
+    expect(repo.schemaResets).toHaveLength(3);
+  });
+
+  it('keeps the schema for new credentials, SSL mode, or a rename', async () => {
+    const { connections, repo } = service();
+    const created = await connections.create('user-1', input, null);
+    await connections.update(
+      'user-1',
+      created.id,
+      { password: 'rotated-password' },
+      null,
+    );
+    await connections.update('user-1', created.id, { username: 'other_ro' }, null);
+    await connections.update('user-1', created.id, { sslMode: 'verify-full' }, null);
+    await connections.update('user-1', created.id, { label: 'Renamed' }, null);
+    expect(repo.schemaResets).toEqual([]);
+    expect(repo.audits.at(-1)?.metadata).toEqual({ connectionId: created.id });
+  });
 });
