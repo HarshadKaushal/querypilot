@@ -19,7 +19,7 @@ npm run test:e2e
 npm run test:all
 ```
 
-`npm test` is `test:unit`. It has to finish without Docker. Integration and API end-to-end tests expect `npm run up:deps` and `npm run migrate --workspace=@ayd/database` first. They use port 5434 and Redis on 6379 on a laptop. CI points them at its own Postgres and Redis.
+`npm test` is `test:unit`. It has to finish without Docker. The API and worker run Jest through `scripts/jest.cjs`, which turns on Node's VM modules so Jest can load NestJS 12, an ES-module-only package. Integration and API end-to-end tests expect `npm run up:deps` and `npm run migrate --workspace=@ayd/database` first. They use port 5434 and Redis on 6379 on a laptop. CI points them at its own Postgres and Redis.
 
 Playwright and the evaluation runner are not created yet. They get their own commands when those folders exist. Evaluation reports accuracy. It is not a pass/fail suite, and it is the only place a real model is called.
 

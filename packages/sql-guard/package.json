@@ -10,13 +10,13 @@
     "test:unit": "jest --config jest.config.cjs --coverage"
   },
   "dependencies": {
-    "libpg-query": "17.7.4",
-    "pgsql-deparser": "17.18.5"
+    "libpg-query": "18.1.5",
+    "pgsql-deparser": "18.3.10"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
-    "jest": "^30.2.0",
-    "ts-jest": "^29.4.4",
-    "typescript": "^5.9.2"
+    "jest": "^30.5.2",
+    "ts-jest": "^29.4.14",
+    "typescript": "^6.0.3"
   }
 }

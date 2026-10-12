@@ -616,7 +616,16 @@ export class Analyzer {
   }
 
   private operator(body: Node, scope: Scope): void {
-    fields(body, 'operator', ['kind', 'name', 'lexpr', 'rexpr']);
+    // rexpr_list_start and rexpr_list_end (PostgreSQL 18) are the text positions of an IN
+    // list's parentheses, like location. They carry no SQL.
+    fields(body, 'operator', [
+      'kind',
+      'name',
+      'lexpr',
+      'rexpr',
+      'rexpr_list_start',
+      'rexpr_list_end',
+    ]);
     const names = list(body.name).map(str);
     if (names.length !== 1) {
       throw unsupported('Operators written as OPERATOR(schema.op) are not allowed.');

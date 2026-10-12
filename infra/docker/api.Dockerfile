@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /repo
 ENV DATABASE_URL=postgresql://ayd:ayd@localhost:5432/ayd
 COPY package.json package-lock.json ./
@@ -13,7 +13,7 @@ RUN npm ci
 COPY . .
 RUN npm run build --workspace=@ayd/shared && npm run build --workspace=@ayd/ssrf-guard && npm run build --workspace=@ayd/crypto && npm run build --workspace=@ayd/sql-guard && npm run build --workspace=@ayd/database && npm run build --workspace=@ayd/api
 
-FROM node:22-alpine
+FROM node:24-alpine
 WORKDIR /repo
 ENV NODE_ENV=production
 COPY --from=build /repo /repo

@@ -3,4 +3,5 @@ node_modules
 coverage
 package-lock.json
 packages/database/prisma/migrations
+packages/database/src/generated
 docs/blueprint.md

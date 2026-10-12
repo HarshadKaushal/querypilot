@@ -19,13 +19,13 @@ const EnvSchema = z
       .min(1)
       .refine(
         (value) => value.startsWith('postgres://') || value.startsWith('postgresql://'),
-        { message: 'DATABASE_URL must be a postgres URL' },
+        { error: 'DATABASE_URL must be a postgres URL' },
       ),
     REDIS_URL: z
       .string()
       .min(1)
       .refine((value) => value.startsWith('redis://') || value.startsWith('rediss://'), {
-        message: 'REDIS_URL must be a redis URL',
+        error: 'REDIS_URL must be a redis URL',
       }),
     AUTH_JWT_SECRET: z.string().min(32),
     AUTH_ACCESS_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
@@ -36,7 +36,7 @@ const EnvSchema = z
       .max(60 * 60 * 24 * 90)
       .default(60 * 60 * 24 * 14),
     DEV_LOGIN_ENABLED: z.enum(['true', 'false']).default('false'),
-    APP_WEB_ORIGIN: z.string().url().default('http://localhost:5173'),
+    APP_WEB_ORIGIN: z.url().default('http://localhost:5173'),
     GOOGLE_CLIENT_ID: z.string().default(''),
     GOOGLE_CLIENT_SECRET: z.string().default(''),
     GOOGLE_REDIRECT_URI: z.string().default(''),
@@ -72,14 +72,14 @@ const EnvSchema = z
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && env.DEV_LOGIN_ENABLED === 'true') {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['DEV_LOGIN_ENABLED'],
         message: 'DEV_LOGIN_ENABLED cannot be true when NODE_ENV is production',
       });
     }
     if (env.NODE_ENV === 'production' && env.SSRF_ALLOW_PRIVATE === 'true') {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['SSRF_ALLOW_PRIVATE'],
         message: 'SSRF_ALLOW_PRIVATE cannot be true when NODE_ENV is production',
       });
@@ -92,7 +92,7 @@ const EnvSchema = z
       env.GOOGLE_REDIRECT_URI.length > 0;
     if (hasClient && !hasTrio) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['GOOGLE_CLIENT_ID'],
         message: 'Google sign-in requires client id, client secret, and redirect URI',
       });
@@ -105,7 +105,7 @@ const EnvSchema = z
         }
       } catch {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: 'custom',
           path: ['GOOGLE_REDIRECT_URI'],
           message: 'GOOGLE_REDIRECT_URI must be an http(s) URL',
         });

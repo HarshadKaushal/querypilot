@@ -2,7 +2,7 @@
 
 `@ayd/sql-guard` decides whether SQL is one safe read over allowlisted tables and columns. It is a pure function: SQL and the schema snapshot's tables in, a verdict and the SQL to run out. It never opens a network connection or a database.
 
-**Parser.** SQL is parsed by PostgreSQL's own parser, `libpg-query` (libpg_query compiled to WebAssembly), on the PostgreSQL 17 grammar, pinned to an exact version. A guard that reads SQL differently from the server can be fooled through the difference, so a regular-expression or hand-written parser is not used.
+**Parser.** SQL is parsed by PostgreSQL's own parser, `libpg-query` (libpg_query compiled to WebAssembly), on the PostgreSQL 18 grammar, pinned to an exact version. It moved from the 17 grammar on 2026-10-12; the only parse-tree change the guard had to accept was the text positions PostgreSQL 18 records for an IN list. SQL that only a newer server understands fails on an older one with an error, not a different meaning. A guard that reads SQL differently from the server can be fooled through the difference, so a regular-expression or hand-written parser is not used.
 
 **Default deny.** The guard walks the parse tree and accepts only node types and fields it knows. Anything else, including a field a future parser version adds, is rejected. Functions, cast types, and operators come from fixed lists in `allowlists.ts`. One plain SELECT, optionally with non-recursive WITH queries, is the only statement accepted.
 

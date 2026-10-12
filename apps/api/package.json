@@ -7,9 +7,9 @@
     "build": "npm run generate --workspace=@ayd/database && tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "test": "npm run test:unit",
-    "test:unit": "npm run build --workspace=@ayd/ssrf-guard && npm run build --workspace=@ayd/crypto && npm run build --workspace=@ayd/sql-guard && npm run generate --workspace=@ayd/database && jest --config jest.unit.config.cjs",
-    "test:int": "npm run generate --workspace=@ayd/database && jest --config jest.int.config.cjs --runInBand",
-    "test:e2e": "npm run generate --workspace=@ayd/database && jest --config jest.e2e.config.cjs --runInBand",
+    "test:unit": "npm run build --workspace=@ayd/ssrf-guard && npm run build --workspace=@ayd/crypto && npm run build --workspace=@ayd/sql-guard && npm run generate --workspace=@ayd/database && node ../../scripts/jest.cjs --config jest.unit.config.cjs",
+    "test:int": "npm run generate --workspace=@ayd/database && node ../../scripts/jest.cjs --config jest.int.config.cjs --runInBand",
+    "test:e2e": "npm run generate --workspace=@ayd/database && node ../../scripts/jest.cjs --config jest.e2e.config.cjs --runInBand",
     "try-query": "node scripts/try-query.cjs"
   },
   "dependencies": {
@@ -18,28 +18,28 @@
     "@ayd/shared": "*",
     "@ayd/sql-guard": "*",
     "@ayd/ssrf-guard": "*",
-    "@nestjs/common": "^11.1.6",
-    "@nestjs/core": "^11.1.6",
-    "@nestjs/platform-express": "^11.1.6",
-    "dotenv": "^17.2.3",
-    "ioredis": "^5.8.1",
+    "@nestjs/common": "^12.1.3",
+    "@nestjs/core": "^12.1.3",
+    "@nestjs/platform-express": "^12.1.3",
+    "dotenv": "^18.0.7",
+    "ioredis": "^6.0.0",
     "jose": "^6.2.12",
-    "nestjs-pino": "^4.4.0",
-    "pg": "^8.16.3",
-    "pino": "^9.11.0",
+    "nestjs-pino": "^5.3.1",
+    "pg": "^8.23.1",
+    "pino": "^10.4.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
-    "zod": "^3.25.76"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
-    "@nestjs/testing": "^11.1.6",
-    "@types/express": "^5.0.3",
+    "@nestjs/testing": "^12.1.3",
+    "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
-    "@types/pg": "^8.15.5",
-    "@types/supertest": "^6.0.3",
-    "jest": "^30.2.0",
-    "supertest": "^7.1.4",
-    "ts-jest": "^29.4.4",
-    "typescript": "^5.9.2"
+    "@types/pg": "^8.23.1",
+    "@types/supertest": "^7.2.1",
+    "jest": "^30.5.2",
+    "supertest": "^7.3.1",
+    "ts-jest": "^29.4.14",
+    "typescript": "^6.0.3"
   }
 }

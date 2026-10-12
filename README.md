@@ -6,7 +6,7 @@ This repository is at **Phase 5 (executor)**. The ask pipeline and the web UI ar
 
 ## Prerequisites
 
-- Node.js 22 or newer (tested with Node 24)
+- Node.js 24.9 or newer (the current LTS line). Jest needs 24.9 to load NestJS 12.
 - npm 11
 - Docker Desktop, with the Docker Compose v2 plugin
 
@@ -35,7 +35,7 @@ That is `docker compose up --build`. The API listens on port 3000. Stop it with 
 npm run down
 ```
 
-`npm run down` stops containers. Named volumes keep the databases. To recreate the sample seed, remove the `sample_db_data` volume before starting again.
+`npm run down` stops containers. Named volumes keep the databases. To recreate the sample seed, remove the `sample_db_data_18` volume before starting again. The volume names end in the Postgres major version, because Postgres 18 cannot open data written by 16.
 
 ## Run the API on the host
 

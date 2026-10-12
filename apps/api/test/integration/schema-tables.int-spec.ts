@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { PrismaClient } from '@ayd/database';
+import { createPrismaClient } from '@ayd/database';
 
 describe('schema snapshot and allowlist tables', () => {
-  const prisma = new PrismaClient();
+  const prisma = createPrismaClient();
 
   afterAll(async () => {
     await prisma.$disconnect();

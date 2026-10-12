@@ -8,6 +8,7 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/coverage/**',
       'packages/database/prisma/migrations/**',
+      'packages/database/src/generated/**',
       '**/*.cjs',
     ],
   },

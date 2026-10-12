@@ -1,6 +1,6 @@
 services:
   app-db:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_USER: ayd
       POSTGRES_PASSWORD: ayd
@@ -8,7 +8,7 @@ services:
     ports:
       - '5434:5432'
     volumes:
-      - app_db_data:/var/lib/postgresql/data
+      - app_db_data_18:/var/lib/postgresql
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ayd -d ayd']
       interval: 5s
@@ -27,7 +27,7 @@ services:
     volumes:
       - ./infra/sample-db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
       - ./infra/sample-db/multi-schema.sql:/docker-entrypoint-initdb.d/02-multi-schema.sql:ro
-      - sample_db_data:/var/lib/postgresql/data
+      - sample_db_data_18:/var/lib/postgresql
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U sample_admin -d sample']
       interval: 5s
@@ -35,7 +35,7 @@ services:
       retries: 20
 
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     command: ['redis-server', '--appendonly', 'yes']
     ports:
       - '6379:6379'
@@ -97,7 +97,9 @@ services:
       redis:
         condition: service_healthy
 
+# PostgreSQL 18 keeps its data under /var/lib/postgresql/18 and cannot open a 16 data
+# directory, so the database volumes are named per major version.
 volumes:
-  app_db_data:
-  sample_db_data:
+  app_db_data_18:
+  sample_db_data_18:
   redis_data:

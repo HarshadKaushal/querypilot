@@ -14,7 +14,7 @@ const EnvSchema = z.object({
     .string()
     .min(1)
     .refine((value) => value.startsWith('redis://') || value.startsWith('rediss://'), {
-      message: 'REDIS_URL must be a redis URL',
+      error: 'REDIS_URL must be a redis URL',
     }),
 });
 

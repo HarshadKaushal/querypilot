@@ -1,7 +1,7 @@
-import { PrismaClient } from '@ayd/database';
+import { createPrismaClient } from '@ayd/database';
 
 describe('application database', () => {
-  const prisma = new PrismaClient();
+  const prisma = createPrismaClient();
 
   afterAll(async () => {
     await prisma.$disconnect();

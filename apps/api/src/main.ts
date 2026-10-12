@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
+import { ExpressAdapter } from '@nestjs/platform-express';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
@@ -14,7 +15,11 @@ function startupError(error: unknown): string {
 }
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  // The adapter is passed in rather than left for Nest to find. Nest would look it up from
+  // its own install folder, which in this workspace cannot always see the API's packages.
+  const app = await NestFactory.create(AppModule, new ExpressAdapter(), {
+    bufferLogs: true,
+  });
   const logger = app.get(Logger);
   app.useLogger(logger);
   app.useGlobalFilters(app.get(AllExceptionsFilter));
