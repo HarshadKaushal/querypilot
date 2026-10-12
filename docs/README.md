@@ -12,4 +12,4 @@ Read these in order when you are new to the repository.
 | [business-domain.md](business-domain.md)     | Business rules. **Enforced** means the code does it. **Assumed** means it is not built yet. |
 | [testing.md](testing.md)                     | Where tests go, how they are named, and which command runs them.                            |
 | [adr/](adr/)                                 | Short records of decisions that are expensive to reverse.                                   |
-| [ai-reviews/](ai-reviews/)                   | One review per change set: what was checked, what was decided, what is still open.          |
+| [ai-reviews/](ai-reviews/)                   | One review per commit: AI usage, accepted and rejected suggestions, and decisions.          |
