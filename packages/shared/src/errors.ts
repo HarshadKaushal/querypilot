@@ -11,6 +11,7 @@ export const ERROR_CODES = [
   'NOT_READ_ONLY',
   'CONNECTION_FAILED',
   'SCHEMA_TOO_LARGE',
+  'SCHEMA_NOT_READY',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

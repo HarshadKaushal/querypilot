@@ -8,6 +8,7 @@ import { HealthModule } from './health/health.module';
 import { AppLoggerModule } from './logger/logger.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
+import { SchemaModule } from './schema/schema.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -21,6 +22,7 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     ConnectionsModule,
     MetaModule,
+    SchemaModule,
   ],
   providers: [AllExceptionsFilter],
 })

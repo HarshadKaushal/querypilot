@@ -19,5 +19,6 @@ import { PrismaConnectionRepository } from './prisma-connection.repository';
     { provide: CONNECTION_REPOSITORY, useExisting: PrismaConnectionRepository },
     { provide: ADDRESS_RESOLVER, useClass: DnsAddressResolver },
   ],
+  exports: [ConnectionService],
 })
 export class ConnectionsModule {}

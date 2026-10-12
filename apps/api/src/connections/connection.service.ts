@@ -9,6 +9,7 @@ import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env';
 import {
   UserDatabaseProbe,
+  type ProbeRequest,
   type ProbeResult,
   type SslMode,
 } from '../executor/user-database.probe';
@@ -16,6 +17,7 @@ import {
   CONNECTION_REPOSITORY,
   type ConnectionRepository,
   type PublicConnection,
+  type StoredConnection,
 } from './connection.repository';
 
 export interface ConnectionInput {
@@ -106,23 +108,9 @@ export class ConnectionService {
   }
 
   async test(userId: string, id: string, ip: string | null): Promise<PublicConnection> {
-    const row = await this.requireOwned(userId, id);
-    const secrets = openCredentials(row, this.keys);
-    const pinned = await this.pin(row.host);
-    const result = await this.probe.test({
-      hostIp: pinned,
-      port: row.port,
-      database: row.databaseName,
-      username: secrets.username,
-      password: secrets.password,
-      sslMode: row.sslMode as SslMode,
-      servername: row.host,
-    });
-    const status = result.ok ? 'active' : 'failing';
-    const updated = await this.repo.update(userId, id, {
-      status,
-      lastTestedAt: new Date(),
-    });
+    const { row, request } = await this.resolveTarget(userId, id);
+    const result = await this.probe.test(request);
+    const updated = await this.recordTest(userId, id, result.ok);
     await this.repo.writeAudit({
       userId,
       eventType: 'connection.tested',
@@ -198,6 +186,43 @@ export class ConnectionService {
       ip,
     });
     await this.repo.delete(userId, id);
+  }
+
+  /**
+   * Everything the executor needs to open this user's connection: ownership checked,
+   * credentials decrypted in memory, and the host resolved and pinned by the SSRF guard.
+   */
+  async resolveTarget(
+    userId: string,
+    id: string,
+  ): Promise<{ row: StoredConnection; request: ProbeRequest }> {
+    const row = await this.requireOwned(userId, id);
+    const secrets = openCredentials(row, this.keys);
+    const pinned = await this.pin(row.host);
+    return {
+      row,
+      request: {
+        hostIp: pinned,
+        port: row.port,
+        database: row.databaseName,
+        username: secrets.username,
+        password: secrets.password,
+        sslMode: row.sslMode as SslMode,
+        servername: row.host,
+      },
+    };
+  }
+
+  /** Records the outcome of a probe that just ran against this connection. */
+  async recordTest(
+    userId: string,
+    id: string,
+    ok: boolean,
+  ): Promise<PublicConnection | null> {
+    return this.repo.update(userId, id, {
+      status: ok ? 'active' : 'failing',
+      lastTestedAt: new Date(),
+    });
   }
 
   private async requireOwned(userId: string, id: string) {
@@ -314,7 +339,7 @@ export class ConnectionService {
   }
 }
 
-function probeError(result: Exclude<ProbeResult, { ok: true }>): AppException {
+export function probeError(result: Exclude<ProbeResult, { ok: true }>): AppException {
   const status =
     result.code === 'CONNECTION_FAILED' ? HttpStatus.BAD_GATEWAY : HttpStatus.BAD_REQUEST;
   return new AppException(result.code, result.message, status);
