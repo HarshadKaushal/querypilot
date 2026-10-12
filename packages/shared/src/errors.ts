@@ -13,6 +13,13 @@ export const ERROR_CODES = [
   'SCHEMA_TOO_LARGE',
   'SCHEMA_NOT_READY',
   'SCHEMA_CHANGED',
+  'CONNECTION_BUSY',
+  'CONNECTION_PAUSED',
+  'QUERY_TIMEOUT',
+  'QUERY_WRITE_BLOCKED',
+  'QUERY_NOT_PERMITTED',
+  'QUERY_INVALID',
+  'QUERY_FAILED',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

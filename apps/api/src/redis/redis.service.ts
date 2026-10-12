@@ -6,6 +6,7 @@ import type { AppEnv } from '../config/env';
 @Injectable()
 export class RedisService implements OnModuleDestroy {
   private readonly client: Redis;
+  private connecting?: Promise<void>;
 
   constructor(@Inject(APP_ENV) env: AppEnv) {
     this.client = new Redis(env.REDIS_URL, {
@@ -17,13 +18,35 @@ export class RedisService implements OnModuleDestroy {
   }
 
   async ping(): Promise<void> {
-    if (this.client.status === 'wait') {
-      await this.client.connect();
-    }
+    await this.connected();
     const reply = await this.client.ping();
     if (reply !== 'PONG') {
       throw new Error('Redis ping failed');
     }
+  }
+
+  /** Runs a Lua script atomically on Redis. */
+  async run(
+    script: string,
+    keys: string[],
+    args: Array<string | number>,
+  ): Promise<unknown> {
+    await this.connected();
+    return this.client.eval(script, keys.length, ...keys, ...args);
+  }
+
+  // The client connects on first use. Callers that arrive while it is still connecting wait
+  // for the same attempt: with the offline queue off, a command sent before the connection
+  // is ready fails.
+  private async connected(): Promise<void> {
+    if (this.client.status === 'ready') {
+      return;
+    }
+    this.connecting ??= this.client.connect().catch((error: unknown) => {
+      this.connecting = undefined;
+      throw error;
+    });
+    await this.connecting;
   }
 
   async onModuleDestroy(): Promise<void> {

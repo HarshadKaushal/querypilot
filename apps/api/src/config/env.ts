@@ -46,6 +46,28 @@ const EnvSchema = z
     EGRESS_IP: z.string().default(''),
     // Most rows one answer may return. The SQL guard adds or lowers LIMIT to this.
     SQL_ROW_CAP: z.coerce.number().int().min(1).max(10000).default(1000),
+    // Executor limits for queries on user databases (ADR 0010).
+    EXECUTOR_STATEMENT_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(100)
+      .max(300000)
+      .default(15000),
+    EXECUTOR_MAX_RESULT_BYTES: z.coerce
+      .number()
+      .int()
+      .min(1024)
+      .max(100_000_000)
+      .default(5_000_000),
+    EXECUTOR_MAX_CONCURRENT_QUERIES: z.coerce.number().int().min(1).max(50).default(2),
+    EXECUTOR_QUEUE_WAIT_MS: z.coerce.number().int().min(0).max(120000).default(10000),
+    EXECUTOR_BREAKER_FAILURES: z.coerce.number().int().min(1).max(100).default(5),
+    EXECUTOR_BREAKER_COOLDOWN_MS: z.coerce
+      .number()
+      .int()
+      .min(1000)
+      .max(3_600_000)
+      .default(60000),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && env.DEV_LOGIN_ENABLED === 'true') {

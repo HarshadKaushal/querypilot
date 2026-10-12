@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
-import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, Optional } from '@nestjs/common';
 import { openCredentials, parseMasterKeyRing, sealCredentials } from '@ayd/crypto';
 import { assessResolution } from '@ayd/ssrf-guard';
 import { AppException } from '../common/errors/app.exception';
+import { ConnectionPools } from '../executor/connection-pools';
 import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env';
 import {
@@ -64,6 +65,8 @@ export class ConnectionService {
     @Inject(ADDRESS_RESOLVER) private readonly resolver: AddressResolver,
     private readonly probe: UserDatabaseProbe,
     @Inject(APP_ENV) private readonly env: AppEnv,
+    // Optional so unit tests can build the service without the executor.
+    @Optional() private readonly pools?: ConnectionPools,
   ) {
     this.keys = parseMasterKeyRing(env.CRYPTO_MASTER_KEYS, env.CRYPTO_MASTER_KEY_VERSION);
   }
@@ -176,6 +179,10 @@ export class ConnectionService {
     if (!updated) {
       throw NOT_FOUND;
     }
+    if (connectionChanged) {
+      // Open sockets still use the old host or credentials.
+      this.pools?.evict(id);
+    }
     await this.repo.writeAudit({
       userId,
       eventType: 'connection.updated',
@@ -194,6 +201,7 @@ export class ConnectionService {
       ip,
     });
     await this.repo.delete(userId, id);
+    this.pools?.evict(id);
   }
 
   /**

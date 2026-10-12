@@ -1,10 +1,10 @@
-import { isIP } from 'node:net';
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { Client, type ClientConfig } from 'pg';
 import { Logger } from 'nestjs-pino';
 import { safeErrorDetail } from '../common/logging/safe-error';
 import type { SchemaDocument } from '../schema/schema-document';
 import { classifyConnectError, errorCode } from './connect-error';
+import { userDatabaseConfig } from './connection-config';
 import {
   DEFAULT_LIMITS,
   readSchema,
@@ -92,22 +92,7 @@ export class UserDatabaseProbe {
     work: (client: PgClientLike) => Promise<T>,
   ): Promise<T | ProbeFailure> {
     const factory = this.clients ?? ((config: ClientConfig) => new Client(config));
-    const client = factory({
-      host: request.hostIp,
-      port: request.port,
-      database: request.database,
-      user: request.username,
-      password: request.password,
-      connectionTimeoutMillis: 5000,
-      statement_timeout: 5000,
-      ssl: {
-        rejectUnauthorized: request.sslMode === 'verify-full',
-        // The TLS server name (SNI) must be a host name, never an IP (RFC 6066). When the
-        // user entered an IP, leave it unset: the certificate is then checked against that
-        // IP, which is what pg does by default.
-        ...(isIP(request.servername) ? {} : { servername: request.servername }),
-      },
-    });
+    const client = factory({ ...userDatabaseConfig(request), statement_timeout: 5000 });
     try {
       await client.connect();
       return await work(client);

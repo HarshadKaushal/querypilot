@@ -2,6 +2,7 @@ import { parseMasterKeyRing } from '@ayd/crypto';
 import { loadEnv } from '../config/env';
 import { UserDatabaseProbe, type ProbeResult } from '../executor/user-database.probe';
 import { MemoryConnectionRepository } from './memory-connection.repository';
+import type { ConnectionPools } from '../executor/connection-pools';
 import { ConnectionService, type AddressResolver } from './connection.service';
 
 const PASSWORD = 'sample_ro_password';
@@ -38,8 +39,9 @@ function service(options?: {
     CRYPTO_MASTER_KEY_VERSION: '1',
     SSRF_ALLOW_PRIVATE: options?.allowPrivate ? 'true' : 'false',
   });
-  const connections = new ConnectionService(repo, resolver, probe, env);
-  return { connections, repo, probe, resolver };
+  const pools = { evict: jest.fn() } as unknown as ConnectionPools;
+  const connections = new ConnectionService(repo, resolver, probe, env, pools);
+  return { connections, repo, probe, resolver, pools };
 }
 
 describe('ConnectionService', () => {
@@ -196,5 +198,21 @@ describe('ConnectionService', () => {
       null,
     );
     expect(updated.status).toBe('active');
+  });
+
+  it('closes the open pool when credentials change or the connection is deleted', async () => {
+    const { connections, pools } = service();
+    const created = await connections.create('user-1', input, null);
+    await connections.update('user-1', created.id, { label: 'Renamed' }, null);
+    expect(pools.evict).not.toHaveBeenCalled();
+    await connections.update(
+      'user-1',
+      created.id,
+      { password: 'rotated-password' },
+      null,
+    );
+    expect(pools.evict).toHaveBeenCalledWith(created.id);
+    await connections.delete('user-1', created.id, null);
+    expect(pools.evict).toHaveBeenCalledTimes(2);
   });
 });
