@@ -128,4 +128,46 @@ describe('ConnectionService', () => {
     expect(updated.label).toBe('Renamed');
     expect(probe.test).not.toHaveBeenCalled();
   });
+
+  it('keeps a failing connection failing when only the label changes', async () => {
+    const { connections, repo, probe } = service();
+    const created = await connections.create('user-1', input, null);
+    (probe.test as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      code: 'CONNECTION_FAILED',
+      message: 'The database connection could not be completed.',
+    });
+    await expect(connections.test('user-1', created.id, null)).rejects.toMatchObject({
+      code: 'CONNECTION_FAILED',
+    });
+    const testedAt = repo.rows[0]?.lastTestedAt;
+    const updated = await connections.update(
+      'user-1',
+      created.id,
+      { label: 'Renamed' },
+      null,
+    );
+    expect(updated.status).toBe('failing');
+    expect(repo.rows[0]?.lastTestedAt).toEqual(testedAt);
+  });
+
+  it('marks the connection active again after changed credentials pass the probe', async () => {
+    const { connections, probe } = service();
+    const created = await connections.create('user-1', input, null);
+    (probe.test as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      code: 'CONNECTION_FAILED',
+      message: 'The database connection could not be completed.',
+    });
+    await expect(connections.test('user-1', created.id, null)).rejects.toMatchObject({
+      code: 'CONNECTION_FAILED',
+    });
+    const updated = await connections.update(
+      'user-1',
+      created.id,
+      { password: 'a-new-password' },
+      null,
+    );
+    expect(updated.status).toBe('active');
+  });
 });

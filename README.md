@@ -39,7 +39,7 @@ npm run down
 
 ## Run the API on the host
 
-Use this while changing API code. Dependencies stay in Docker; the API reloads with `tsx`.
+Use this while changing API code. Dependencies stay in Docker. `npm run dev` compiles the API with `tsc --watch` and restarts it with `node --watch` when the output changes. It reads the root `.env`.
 
 ```powershell
 npm run up:deps

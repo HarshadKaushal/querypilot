@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "tsx watch src/main.ts",
+    "dev": "npm run generate --workspace=@ayd/database && node scripts/dev.cjs",
     "build": "npm run generate --workspace=@ayd/database && tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "test": "npm run test:unit",
@@ -38,7 +38,6 @@
     "jest": "^30.2.0",
     "supertest": "^7.1.4",
     "ts-jest": "^29.4.4",
-    "tsx": "^4.20.6",
     "typescript": "^5.9.2"
   }
 }

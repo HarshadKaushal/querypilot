@@ -2,7 +2,10 @@ import { config as loadDotenv } from 'dotenv';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
-loadDotenv({ path: resolve(__dirname, '../../../.env'), quiet: true });
+// src/config and dist/config are both four levels below the repository root.
+export const ROOT_ENV_FILE = resolve(__dirname, '../../../../.env');
+
+loadDotenv({ path: ROOT_ENV_FILE, quiet: true });
 
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),

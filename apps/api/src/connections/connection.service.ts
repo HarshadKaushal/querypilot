@@ -165,6 +165,8 @@ export class ConnectionService {
       await this.assertReadable(next, pinned);
     }
     const sealed = sealCredentials(next.username, next.password, this.keys);
+    // Status and test time change only when the probe just ran. A rename keeps a failing
+    // connection failing.
     const updated = await this.repo.update(userId, id, {
       label: next.label,
       host: next.host,
@@ -172,10 +174,7 @@ export class ConnectionService {
       databaseName: next.databaseName,
       sslMode: next.sslMode,
       sendSampleRowsToLlm: next.sendSampleRowsToLlm,
-      status: 'active',
-      lastTestedAt: connectionChanged
-        ? new Date()
-        : new Date(existing.lastTestedAt ?? Date.now()),
+      ...(connectionChanged ? { status: 'active', lastTestedAt: new Date() } : {}),
       ...sealed,
     });
     if (!updated) {

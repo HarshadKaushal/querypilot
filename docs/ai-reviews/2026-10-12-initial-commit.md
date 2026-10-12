@@ -40,4 +40,4 @@ Before `89b478f`: 75 unit tests passed, the API and worker type-checked, ESLint 
 
 ## Still open
 
-Defects found during the review are tracked in [2026-10-12-read-only-probe-fixes.md](2026-10-12-read-only-probe-fixes.md).
+Defects found during the review are tracked in [2026-10-12-probe-and-dev-setup-fixes.md](2026-10-12-probe-and-dev-setup-fixes.md).

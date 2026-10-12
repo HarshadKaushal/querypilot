@@ -27,7 +27,8 @@ Status of Ask Your Database against the production blueprint. Phase 2 (connectio
 - SSRF checks in `@ayd/ssrf-guard`. Metadata, unspecified, and link-local addresses are always rejected. Loopback and private ranges are rejected unless `SSRF_ALLOW_PRIVATE` is on, which production refuses. The hostname `localhost` follows that same switch. A mixed public and private answer is rejected.
 - Connection create, list, get, test, update, and delete under `/v1/connections`. Rows are scoped by `user_id`. Another user's id is `404`.
 - SSL modes `require` and `verify-full` only. `disable`, `allow`, and `prefer` are `SSL_REQUIRED`.
-- Read-only probe in the executor module. Superuser, write grants, table ownership, and schema `CREATE` are `NOT_READ_ONLY` with a fixed message. The probe is the only code that opens a user database.
+- Read-only probe in the executor module. Superuser, write grants, table ownership, and schema `CREATE` are `NOT_READ_ONLY` with a fixed message. Write grants and ownership count when they come through a group role or PUBLIC. The probe is the only code that opens a user database.
+- Connection failures are explained from the Postgres error code or the socket and TLS code, never from the error text: wrong password, a `pg_hba.conf` rejection, an unknown database, a closed port, no answer, no SSL, and a certificate that does not verify each get their own message.
 - Public egress helper at `GET /v1/meta/egress` (`EGRESS_IP`, setup SQL, firewall note).
 - Sample Postgres speaks TLS. The image generates a self-signed certificate on first start.
 - Audit events for login, logout, refresh reuse, and account deletion.

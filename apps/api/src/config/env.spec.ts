@@ -1,4 +1,6 @@
-import { loadEnv } from './env';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { loadEnv, ROOT_ENV_FILE } from './env';
 
 describe('loadEnv', () => {
   const valid = {
@@ -53,5 +55,12 @@ describe('loadEnv', () => {
     expect(() => loadEnv({ ...valid, GOOGLE_CLIENT_ID: 'client-id-only' })).toThrow(
       'Invalid environment: GOOGLE_CLIENT_ID',
     );
+  });
+
+  it('reads .env from the repository root', () => {
+    const rootPackage = JSON.parse(
+      readFileSync(join(dirname(ROOT_ENV_FILE), 'package.json'), 'utf8'),
+    ) as { name: string };
+    expect(rootPackage.name).toBe('ask-your-database');
   });
 });

@@ -81,7 +81,13 @@ Connection passwords are sealed before they touch Prisma. `@ayd/crypto` generate
 
 The sample image generates a self-signed certificate and turns SSL on. Clients use `sslMode: require` against it. `verify-full` is for a server with a certificate that matches the hostname.
 
-The read-only probe is the start of the executor. Create and credential changes call it before saving. A failed retest sets `status` to `failing`, writes `connection.tested`, and returns `CONNECTION_FAILED`, `SSL_REQUIRED`, or `NOT_READ_ONLY`. The response text is written in the probe. Postgres error text is logged through `safeErrorDetail` and is not returned.
+The read-only probe is the start of the executor. Create and credential changes call it before saving. A failed retest sets `status` to `failing`, writes `connection.tested`, and returns `CONNECTION_FAILED`, `SSL_REQUIRED`, or `NOT_READ_ONLY`. The response text is written in the probe. Postgres error text is logged through `safeErrorDetail` and is not returned. An update that does not change the host, port, database, credentials, or SSL mode does not run the probe, so it also leaves `status` and `lastTestedAt` alone.
+
+The privilege checks use `has_table_privilege`, `has_any_column_privilege`, `pg_has_role`, and `has_schema_privilege`. Those functions answer for the role as PostgreSQL sees it, including group roles and PUBLIC. `information_schema.role_table_grants`, used at first, lists only some of those grants and omits PUBLIC. Each check runs for every role where `pg_has_role(current_user, role, 'MEMBER')` is true, which includes roles the login can only reach with `SET ROLE`. Role attributes such as SUPERUSER are not inherited, so checking the login alone missed a login that could switch to a superuser.
+
+`connect-error.ts` turns a failed connection into a message. It reads the SQLSTATE (`28P01`, `28000`, `3D000`), Node's socket and TLS codes, and the two fixed sentences the pg driver writes when SSL negotiation fails. It does not search the server's message. A `pg_hba.conf` rejection says "SSL encryption" in its text, and an earlier version reported it as an SSL problem.
+
+`test/integration/user-database.probe.int-spec.ts` runs the probe against a throwaway database on the application Postgres. That server has no TLS, so the test turns SSL off in the client factory. The SSL path was checked by hand against the sample database.
 
 `GET /v1/meta/egress` is public. Compose sets `EGRESS_IP` to the documentation address `192.0.2.10` until a real NAT gateway exists.
 

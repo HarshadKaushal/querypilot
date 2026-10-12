@@ -8,6 +8,11 @@ const SETUP_SQL = [
   'GRANT USAGE ON SCHEMA public TO ayd_ro;',
   'GRANT SELECT ON ALL TABLES IN SCHEMA public TO ayd_ro;',
   'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO ayd_ro;',
+  '-- PostgreSQL 14 and earlier let every role create tables in the public schema.',
+  '-- This platform refuses a role that can create objects, so remove that default.',
+  '-- If another role creates tables in public, grant it CREATE first:',
+  '--   GRANT CREATE ON SCHEMA public TO <that_role>;',
+  'REVOKE CREATE ON SCHEMA public FROM PUBLIC;',
 ].join('\n');
 
 @Controller('v1/meta')

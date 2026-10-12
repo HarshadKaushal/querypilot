@@ -31,6 +31,7 @@ Playwright and the evaluation runner are not created yet. They get their own com
 - Safety code gets the heavy coverage: the SQL guard, the SSRF guard, authorization, encryption, and read-only execution. There is no global coverage percentage. `@ayd/ssrf-guard` and `@ayd/crypto` are unit-tested with no network.
 - Security cases are data-driven. One attack string is one line in a file under the package that owns the check, so a new case does not need a new test function.
 - Shared fakes and factories go in `packages/test-utils` when a second app needs them. Until then, a fake can live next to the test that uses it.
+- A fake `pg` client cannot prove a privilege rule. Tests that depend on how PostgreSQL resolves grants use `apps/api/test/helpers/scratch-database.ts`, which creates a throwaway database and suffixed roles on the `DATABASE_URL` server and drops them afterward.
 
 ## CI
 

@@ -16,6 +16,15 @@ const request: ProbeRequest = {
   servername: 'localhost',
 };
 
+// The first query lists every role the login can act as; this marks it in the fake.
+const ROLES_QUERY = 'AS is_login';
+const LOGIN = {
+  is_login: true,
+  rolsuper: false,
+  rolcreatedb: false,
+  rolcreaterole: false,
+};
+
 function probe(
   script: (sql: string) => { rows: Record<string, unknown>[] },
 ): UserDatabaseProbe {
@@ -31,8 +40,8 @@ function probe(
 describe('UserDatabaseProbe', () => {
   it('accepts a role that cannot write or own objects', async () => {
     const result = await probe((sql) => {
-      if (sql.includes('pg_roles WHERE rolname')) {
-        return { rows: [{ rolsuper: false, rolcreatedb: false, rolcreaterole: false }] };
+      if (sql.includes(ROLES_QUERY)) {
+        return { rows: [LOGIN] };
       }
       return { rows: [] };
     }).test(request);
@@ -40,9 +49,9 @@ describe('UserDatabaseProbe', () => {
   });
 
   it('rejects a superuser with a helpful message', async () => {
-    const result = await probe(() => ({
-      rows: [{ rolsuper: true, rolcreatedb: false, rolcreaterole: false }],
-    })).test(request);
+    const result = await probe(() => ({ rows: [{ ...LOGIN, rolsuper: true }] })).test(
+      request,
+    );
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.code).toBe('NOT_READ_ONLY');
@@ -51,13 +60,39 @@ describe('UserDatabaseProbe', () => {
     }
   });
 
+  it('rejects a login that can SET ROLE to a superuser', async () => {
+    const result = await probe((sql) => {
+      if (sql.includes(ROLES_QUERY)) {
+        return { rows: [LOGIN, { ...LOGIN, is_login: false, rolsuper: true }] };
+      }
+      return { rows: [] };
+    }).test(request);
+    expect(result).toMatchObject({ ok: false, code: 'NOT_READ_ONLY' });
+    if (!result.ok) {
+      expect(result.message).toContain('SET ROLE');
+    }
+  });
+
+  it('asks about every role the login can act as', async () => {
+    const seen: string[] = [];
+    await probe((sql) => {
+      seen.push(sql);
+      return sql.includes(ROLES_QUERY) ? { rows: [LOGIN] } : { rows: [] };
+    }).test(request);
+    // Every privilege query is scoped to MEMBER roles, which include SET ROLE targets.
+    expect(seen).toHaveLength(5);
+    for (const sql of seen) {
+      expect(sql).toContain("'MEMBER'");
+    }
+  });
+
   it('rejects a role that can insert', async () => {
     const result = await probe((sql) => {
-      if (sql.includes('pg_roles WHERE rolname')) {
-        return { rows: [{ rolsuper: false, rolcreatedb: false, rolcreaterole: false }] };
+      if (sql.includes(ROLES_QUERY)) {
+        return { rows: [LOGIN] };
       }
-      if (sql.includes('role_table_grants')) {
-        return { rows: [{ privilege_type: 'INSERT' }] };
+      if (sql.includes('has_table_privilege')) {
+        return { rows: [{ '?column?': 1 }] };
       }
       return { rows: [] };
     }).test(request);
@@ -67,10 +102,76 @@ describe('UserDatabaseProbe', () => {
     }
   });
 
+  it('checks write grants with inheritance-aware functions', async () => {
+    const seen: string[] = [];
+    await probe((sql) => {
+      seen.push(sql);
+      if (sql.includes(ROLES_QUERY)) {
+        return { rows: [LOGIN] };
+      }
+      return { rows: [] };
+    }).test(request);
+    const all = seen.join('\n');
+    expect(all).toContain('has_table_privilege');
+    expect(all).toContain('has_any_column_privilege');
+    expect(all).toContain('pg_has_role(c.relowner');
+    expect(all).not.toContain('role_table_grants');
+  });
+
+  it('explains how to fix CREATE granted to PUBLIC on the public schema', async () => {
+    const result = await probe((sql) => {
+      if (sql.includes(ROLES_QUERY)) {
+        return { rows: [LOGIN] };
+      }
+      if (sql.includes('has_schema_privilege')) {
+        return { rows: [{ nspname: 'public', via_public: true }] };
+      }
+      return { rows: [] };
+    }).test(request);
+    expect(result).toMatchObject({ ok: false, code: 'NOT_READ_ONLY' });
+    if (!result.ok) {
+      expect(result.message).toContain('REVOKE CREATE ON SCHEMA public FROM PUBLIC');
+    }
+  });
+
+  it('keeps the plain CREATE message when the grant is to this role', async () => {
+    const result = await probe((sql) => {
+      if (sql.includes(ROLES_QUERY)) {
+        return { rows: [LOGIN] };
+      }
+      if (sql.includes('has_schema_privilege')) {
+        return { rows: [{ nspname: 'reporting', via_public: false }] };
+      }
+      return { rows: [] };
+    }).test(request);
+    expect(result).toMatchObject({ ok: false, code: 'NOT_READ_ONLY' });
+    if (!result.ok) {
+      expect(result.message).toContain('This role can create objects');
+      expect(result.message).not.toContain('PUBLIC');
+    }
+  });
+
+  it('rejects a role that can create schemas in the database', async () => {
+    const result = await probe((sql) => {
+      if (sql.includes(ROLES_QUERY)) {
+        return { rows: [LOGIN] };
+      }
+      if (sql.includes('has_database_privilege')) {
+        return { rows: [{ '?column?': 1 }] };
+      }
+      return { rows: [] };
+    }).test(request);
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'NOT_READ_ONLY',
+      message: expect.stringContaining('CREATE on the database'),
+    });
+  });
+
   it('maps an SSL failure without returning the driver text', async () => {
     const client: PgClientLike = {
       connect: async () => {
-        throw new Error('ssl required: postgres://user:secret@db/sample');
+        throw new Error('The server does not support SSL connections');
       },
       query: async () => ({ rows: [] }),
       end: async () => undefined,
@@ -78,6 +179,26 @@ describe('UserDatabaseProbe', () => {
     const logger = { warn: jest.fn() } as unknown as Logger;
     const result = await new UserDatabaseProbe(logger, () => client).test(request);
     expect(result).toMatchObject({ ok: false, code: 'SSL_REQUIRED' });
-    expect(JSON.stringify(result)).not.toContain('secret');
+  });
+
+  it('does not call a pg_hba.conf rejection an SSL problem or echo its text', async () => {
+    const rejected = Object.assign(
+      new Error(
+        'no pg_hba.conf entry for host "192.0.2.10", user "sample_ro", database "secret_db", SSL encryption',
+      ),
+      { code: '28000' },
+    );
+    const client: PgClientLike = {
+      connect: async () => {
+        throw rejected;
+      },
+      query: async () => ({ rows: [] }),
+      end: async () => undefined,
+    };
+    const logger = { warn: jest.fn() } as unknown as Logger;
+    const result = await new UserDatabaseProbe(logger, () => client).test(request);
+    expect(result).toMatchObject({ ok: false, code: 'CONNECTION_FAILED' });
+    expect(JSON.stringify(result)).toContain('pg_hba.conf');
+    expect(JSON.stringify(result)).not.toContain('secret_db');
   });
 });
