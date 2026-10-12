@@ -1,0 +1,9 @@
+# ADR 0008: Schema snapshots and the allowlist
+
+A refresh reads the structure of the user's database and stores it as a numbered snapshot in `schema_snapshots`. It reads names, types, nullability, primary keys, and foreign keys. It never reads rows, and it ignores PostgreSQL comments, because comment text is untrusted and descriptions come only from the user. Only tables, views, materialized views, foreign tables, and partitioned tables the login can SELECT are read, and only columns it can SELECT. Partitions appear through their parent. Objects that belong to an extension are left out. A schema larger than 2,000 tables or 50,000 columns is refused with `SCHEMA_TOO_LARGE`, and the message says to narrow the login's grants.
+
+The allowlist lives in `allowed_objects`. A row with no column name allows a table. A row with a column name allows that column, and only when its table is allowed too. Nothing is allowed by default except on the first snapshot of a connection, which allows every table and every column the sensitive-column hint does not flag. A later refresh drops allowlist rows for objects that no longer exist and leaves new objects hidden until the user allows them. The refresh response lists what was added.
+
+Every schema output for the model (`GET /v1/connections/:id/schema` now, prompt assembly later) is built by one function from the latest snapshot and the allowlist. It carries a fingerprint: a SHA-256 of the snapshot version and the allowed schema. The SQL proposal cache in the LLM phase keys on that fingerprint, so a refresh or any allowlist change invalidates it without a separate counter.
+
+Introspection runs in the API, in the executor module, like the read-only probe. It moves to the worker with the rest of the executor before the queue phase.

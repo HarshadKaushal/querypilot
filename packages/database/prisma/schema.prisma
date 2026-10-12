@@ -24,29 +24,31 @@ model User {
 }
 
 model Connection {
-  id                   String    @id
-  userId               String    @map("user_id")
-  label                String
-  host                 String
-  port                 Int
-  databaseName         String    @map("database_name")
-  sslMode              String    @map("ssl_mode")
-  usernameCiphertext   String    @map("username_ciphertext")
-  usernameIv           String    @map("username_iv")
-  usernameTag          String    @map("username_tag")
-  passwordCiphertext   String    @map("password_ciphertext")
-  passwordIv           String    @map("password_iv")
-  passwordTag          String    @map("password_tag")
-  encryptedDataKey     String    @map("encrypted_data_key")
-  dataKeyIv            String    @map("data_key_iv")
-  dataKeyTag           String    @map("data_key_tag")
-  keyVersion           Int       @map("key_version")
-  status               String
-  lastTestedAt         DateTime? @map("last_tested_at")
-  sendSampleRowsToLlm Boolean   @default(false) @map("send_sample_rows_to_llm")
-  createdAt            DateTime  @default(now()) @map("created_at")
-  updatedAt            DateTime  @updatedAt @map("updated_at")
-  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                  String           @id
+  userId              String           @map("user_id")
+  label               String
+  host                String
+  port                Int
+  databaseName        String           @map("database_name")
+  sslMode             String           @map("ssl_mode")
+  usernameCiphertext  String           @map("username_ciphertext")
+  usernameIv          String           @map("username_iv")
+  usernameTag         String           @map("username_tag")
+  passwordCiphertext  String           @map("password_ciphertext")
+  passwordIv          String           @map("password_iv")
+  passwordTag         String           @map("password_tag")
+  encryptedDataKey    String           @map("encrypted_data_key")
+  dataKeyIv           String           @map("data_key_iv")
+  dataKeyTag          String           @map("data_key_tag")
+  keyVersion          Int              @map("key_version")
+  status              String
+  lastTestedAt        DateTime?        @map("last_tested_at")
+  sendSampleRowsToLlm Boolean          @default(false) @map("send_sample_rows_to_llm")
+  createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
+  user                User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  schemaSnapshots     SchemaSnapshot[]
+  allowedObjects      AllowedObject[]
 
   @@index([userId])
   @@map("connections")
@@ -80,4 +82,32 @@ model AuditLog {
 
   @@index([userId, createdAt])
   @@map("audit_log")
+}
+
+model SchemaSnapshot {
+  id           String     @id
+  connectionId String     @map("connection_id")
+  version      Int
+  document     Json
+  tableCount   Int        @map("table_count")
+  columnCount  Int        @map("column_count")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  connection   Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, version])
+  @@map("schema_snapshots")
+}
+
+model AllowedObject {
+  id           String     @id
+  connectionId String     @map("connection_id")
+  schemaName   String     @map("schema_name")
+  tableName    String     @map("table_name")
+  columnName   String?    @map("column_name")
+  description  String?
+  createdAt    DateTime   @default(now()) @map("created_at")
+  connection   Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([connectionId])
+  @@map("allowed_objects")
 }

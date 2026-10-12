@@ -63,6 +63,6 @@ Ambiguous, unanswerable, and unsafe questions will be added with the evaluation 
 
 ## Privacy
 
-**Enforced:** account deletion removes connections through the foreign key and writes an audit entry.
+**Enforced:** account deletion removes connections through the foreign key and writes an audit entry. Schema snapshots and allowlist rows go with their connection.
 
-**Assumed:** account deletion will also remove schema snapshots and history. A data export will exist. Those tables are not stored yet.
+**Assumed:** account deletion will also remove query history. A data export will exist. History is not stored yet.
