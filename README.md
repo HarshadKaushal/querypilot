@@ -1,0 +1,207 @@
+# Ask Your Database
+
+Middleware that lets a signed-in user connect their own PostgreSQL database and ask questions in plain English. The platform proposes SQL, checks it, runs it read-only, and returns a table, a chart, the SQL, and a short summary.
+
+This repository is at **Phase 2 (connections)**. The ask pipeline and the web UI are not built yet. See [docs/features.md](docs/features.md).
+
+## Prerequisites
+
+- Node.js 22 or newer (tested with Node 24)
+- npm 11
+- Docker Desktop, with the Docker Compose v2 plugin
+
+## First-time setup
+
+From the repository root:
+
+```powershell
+copy .env.example .env
+npm ci
+```
+
+`.env` is for processes you run on the host. It is gitignored. The Compose stack passes its own environment into the `api` and `worker` containers and does not read `.env`.
+
+## Run the full local stack
+
+One command builds the images and starts the application database, Redis, the seeded sample database, the API, and the worker:
+
+```powershell
+npm run up
+```
+
+That is `docker compose up --build`. The API listens on port 3000. Stop it with Ctrl+C, then:
+
+```powershell
+npm run down
+```
+
+`npm run down` stops containers. Named volumes keep the databases. To recreate the sample seed, remove the `sample_db_data` volume before starting again.
+
+## Run the API on the host
+
+Use this while changing API code. Dependencies stay in Docker; the API reloads with `tsx`.
+
+```powershell
+npm run up:deps
+npm run dev
+```
+
+In a second terminal:
+
+```powershell
+npm run dev:worker
+```
+
+Apply database migrations before expecting readiness to pass:
+
+```powershell
+$env:DATABASE_URL = "postgresql://ayd:ayd@localhost:5434/ayd"
+npm run migrate --workspace=@ayd/database
+```
+
+The schema lives in `packages/database`. The container entrypoint runs that migrate command on its own, so `npm run up` does not need this step.
+
+## Check that it is up
+
+Liveness (process only):
+
+```powershell
+curl http://localhost:3000/health/live
+```
+
+Readiness (application Postgres and Redis):
+
+```powershell
+curl http://localhost:3000/health/ready
+```
+
+A healthy readiness body looks like:
+
+```json
+{
+  "status": "ok",
+  "checks": {
+    "appDatabase": { "status": "up", "latencyMs": 3 },
+    "redis": { "status": "up", "latencyMs": 1 }
+  }
+}
+```
+
+If either dependency is down, the status is `degraded` and the HTTP status is 503. Dependency error text is not included in the response.
+
+Every response carries `x-request-id`. Send your own id to correlate logs:
+
+```powershell
+curl -H "x-request-id: demo-req-01" http://localhost:3000/health/live
+```
+
+Ids must be 8 to 128 characters from `A-Z`, `a-z`, `0-9`, `.`, `_`, and `-`. Anything else is replaced with a generated id.
+
+Unknown routes return the error envelope:
+
+```json
+{
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "That resource was not found.",
+    "requestId": "demo-req-01"
+  }
+}
+```
+
+## Sign in
+
+The local Compose stack runs with `NODE_ENV=development` and `DEV_LOGIN_ENABLED=true`. That login is refused if `NODE_ENV` is `production`.
+
+```powershell
+$login = Invoke-RestMethod http://localhost:3000/v1/auth/dev/login -Method Post -ContentType "application/json" -Body '{"email":"dev@localhost","name":"Local developer"}' -SessionVariable session
+$login.user
+```
+
+`$login` contains `accessToken`, `expiresIn`, and `user`. The refresh token is only in the `ayd_refresh` httpOnly cookie, held by `$session`.
+
+```powershell
+Invoke-RestMethod http://localhost:3000/v1/users/me -Headers @{ Authorization = "Bearer $($login.accessToken)" }
+Invoke-RestMethod http://localhost:3000/v1/auth/refresh -Method Post -WebSession $session
+Invoke-RestMethod http://localhost:3000/v1/auth/logout -Method Post -WebSession $session
+```
+
+`POST /v1/auth/refresh` rotates the cookie. Presenting the previous refresh token again revokes that whole login family. A request without a bearer token gets `401` and `UNAUTHENTICATED`.
+
+Google sign-in is `GET /v1/auth/google/start`. It redirects to Google after you set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI`. Until those are set, that route returns `AUTH_NOT_CONFIGURED`.
+
+## Connect a database
+
+`GET /v1/meta/egress` is public. It returns the egress IP to allowlist and SQL for a SELECT-only role.
+
+The sample database speaks SSL. From the host, with `SSRF_ALLOW_PRIVATE=true` in `.env`:
+
+```powershell
+$login = Invoke-RestMethod http://localhost:3000/v1/auth/dev/login -Method Post -ContentType "application/json" -Body '{"email":"dev@localhost","name":"Local developer"}' -SessionVariable session
+$body = '{"label":"Sample","host":"127.0.0.1","port":5433,"databaseName":"sample","username":"sample_ro","password":"sample_ro_password","sslMode":"require"}'
+Invoke-RestMethod http://localhost:3000/v1/connections -Method Post -ContentType "application/json" -Headers @{ Authorization = "Bearer $($login.accessToken)" } -Body $body
+```
+
+Use host `sample-db` and port `5432` when the API itself is the Compose container. `sample_admin` is rejected because it is the owner. `sslMode` must be `require` or `verify-full`. The response does not include the password.
+
+Delete the signed-in account with:
+
+```powershell
+Invoke-RestMethod http://localhost:3000/v1/users/me -Method Delete -Headers @{ Authorization = "Bearer $($login.accessToken)" }
+```
+
+## Local databases
+
+| Service              | Host port | Database | User           | Password             | Role                                |
+| -------------------- | --------- | -------- | -------------- | -------------------- | ----------------------------------- |
+| Application Postgres | 5434      | `ayd`    | `ayd`          | `ayd`                | accounts, sealed connections, audit |
+| Sample Postgres      | 5433      | `sample` | `sample_admin` | `sample_admin`       | owner, local only                   |
+| Sample read-only     | 5433      | `sample` | `sample_ro`    | `sample_ro_password` | `SELECT` only                       |
+| Redis                | 6379      |          |                |                      | queue and cache later               |
+
+These passwords are local defaults. They are not production secrets.
+
+Confirm the sample seed:
+
+```powershell
+docker compose exec sample-db psql -U sample_admin -d sample -c "SELECT count(*) FROM customers;"
+```
+
+The sample schema is a small retail set: customers, products, orders, order items, and payments. It stands in for a customer's database. The application never copies those rows into its own database.
+
+## Checks
+
+```powershell
+npm run lint
+npm run format:check
+npm test
+npm run build
+```
+
+`npm test` is the unit suite and does not need Docker. `npm run test:int` and `npm run test:e2e` need the application Postgres and Redis from `npm run up:deps`, after migrations. See [docs/testing.md](docs/testing.md).
+
+CI runs lint, format, unit tests, and build on every push. A second job runs integration and API end-to-end tests against Postgres and Redis.
+
+## Layout
+
+```text
+apps/api              NestJS HTTP API
+apps/worker           NestJS worker process (boots and checks Redis; no jobs yet)
+packages/crypto       Envelope encryption for connection secrets
+packages/database     Prisma schema, migrations, and client
+packages/shared       Error envelope, request id, health report types
+packages/ssrf-guard   Host and address checks for user databases
+infra/docker          API and worker images
+infra/sample-db       Seed and TLS entrypoint for the sample user database
+docs                  Index, blueprint, decisions, and reviews
+```
+
+Start with [docs/README.md](docs/README.md). Later phases add `apps/web`, `packages/sql-guard`, `packages/core`, and `eval`.
+
+## Decisions already locked for later phases
+
+- LLM provider: Google Gemini, behind a provider interface. The platform owns the API key.
+- Sign-in: Google OIDC, plus a local-only development login so the app can be used without Google credentials.
+- PostgreSQL only in v1. Read-only. Result rows are not stored.
+
+Those pieces are not in this phase. Do not put a Gemini key or a Google client secret in the repository.

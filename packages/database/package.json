@@ -1,0 +1,20 @@
+{
+  "name": "@ayd/database",
+  "version": "0.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "generate": "node scripts/prisma-generate.cjs",
+    "build": "node scripts/prisma-generate.cjs && tsc -p tsconfig.json",
+    "migrate": "node scripts/prisma-migrate.cjs"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.16.3"
+  },
+  "devDependencies": {
+    "dotenv": "^17.2.3",
+    "prisma": "^6.16.3",
+    "typescript": "^5.9.2"
+  }
+}

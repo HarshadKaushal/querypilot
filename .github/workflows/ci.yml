@@ -1,0 +1,66 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run test:unit
+      - run: npm run build
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ayd
+          POSTGRES_PASSWORD: ayd
+          POSTGRES_DB: ayd
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ayd -d ayd"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://ayd:ayd@localhost:5432/ayd
+      REDIS_URL: redis://localhost:6379
+      AUTH_JWT_SECRET: test-jwt-secret-that-is-at-least-32
+      CRYPTO_MASTER_KEY_VERSION: '1'
+      CRYPTO_MASTER_KEYS: '1:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY='
+      DEV_LOGIN_ENABLED: 'true'
+      LOG_LEVEL: error
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build --workspace=@ayd/database
+      - run: npm run migrate --workspace=@ayd/database
+      - run: npm run test:int
+      - run: npm run test:e2e

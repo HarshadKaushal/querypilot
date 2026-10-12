@@ -1,0 +1,41 @@
+# Testing
+
+Unit tests sit next to the code. Everything that needs infrastructure lives in its own folder, config, and command.
+
+| Type               | Needs                                     | Location                                          | Naming                       |
+| ------------------ | ----------------------------------------- | ------------------------------------------------- | ---------------------------- |
+| Unit               | No database, Redis, or network            | Next to the source file                           | `*.spec.ts`                  |
+| Integration        | Real Postgres and Redis                   | `apps/<app>/test/integration/`                    | `*.int-spec.ts`              |
+| API end-to-end     | The Nest app plus real Postgres and Redis | `apps/api/test/e2e/`                              | `*.e2e-spec.ts`              |
+| Browser end-to-end | Web, API, worker, and databases           | `e2e/` at the repo root, when the web app exists  | `*.spec.ts`                  |
+| Evaluation         | A model and the sample database           | `eval/` at the repo root, in the evaluation phase | dataset, runner, and results |
+
+## Commands
+
+```powershell
+npm test
+npm run test:int
+npm run test:e2e
+npm run test:all
+```
+
+`npm test` is `test:unit`. It has to finish without Docker. Integration and API end-to-end tests expect `npm run up:deps` and `npm run migrate --workspace=@ayd/database` first. They use port 5434 and Redis on 6379 on a laptop. CI points them at its own Postgres and Redis.
+
+Playwright and the evaluation runner are not created yet. They get their own commands when those folders exist. Evaluation reports accuracy. It is not a pass/fail suite, and it is the only place a real model is called.
+
+## Rules
+
+- Never call Gemini, or any other live model, from a test. Use a fake provider. Real model calls belong in `eval/`.
+- Each integration test starts from a clean database state. Tests must not depend on rows left by another test.
+- Prefer many unit tests, fewer integration tests, and a short browser suite that covers the demo flow only.
+- Safety code gets the heavy coverage: the SQL guard, the SSRF guard, authorization, encryption, and read-only execution. There is no global coverage percentage. `@ayd/ssrf-guard` and `@ayd/crypto` are unit-tested with no network.
+- Security cases are data-driven. One attack string is one line in a file under the package that owns the check, so a new case does not need a new test function.
+- Shared fakes and factories go in `packages/test-utils` when a second app needs them. Until then, a fake can live next to the test that uses it.
+
+## CI
+
+On every push: lint, format check, unit tests, and build.
+
+On every push, in a second job: migrate a Postgres service, then integration and API end-to-end tests.
+
+Browser tests run when `e2e/` exists, on pull requests. Evaluation runs when `eval/` exists, on a schedule and when prompts or models change.

@@ -1,0 +1,44 @@
+{
+  "name": "@ayd/api",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "npm run generate --workspace=@ayd/database && tsc -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "test": "npm run test:unit",
+    "test:unit": "npm run build --workspace=@ayd/ssrf-guard && npm run build --workspace=@ayd/crypto && npm run generate --workspace=@ayd/database && jest --config jest.unit.config.cjs",
+    "test:int": "npm run generate --workspace=@ayd/database && jest --config jest.int.config.cjs --runInBand",
+    "test:e2e": "npm run generate --workspace=@ayd/database && jest --config jest.e2e.config.cjs --runInBand"
+  },
+  "dependencies": {
+    "@ayd/crypto": "*",
+    "@ayd/database": "*",
+    "@ayd/shared": "*",
+    "@ayd/ssrf-guard": "*",
+    "@nestjs/common": "^11.1.6",
+    "@nestjs/core": "^11.1.6",
+    "@nestjs/platform-express": "^11.1.6",
+    "dotenv": "^17.2.3",
+    "ioredis": "^5.8.1",
+    "jose": "^6.2.12",
+    "nestjs-pino": "^4.4.0",
+    "pg": "^8.16.3",
+    "pino": "^9.11.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^11.1.6",
+    "@types/express": "^5.0.3",
+    "@types/jest": "^30.0.0",
+    "@types/pg": "^8.15.5",
+    "@types/supertest": "^6.0.3",
+    "jest": "^30.2.0",
+    "supertest": "^7.1.4",
+    "ts-jest": "^29.4.4",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.2"
+  }
+}

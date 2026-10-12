@@ -1,0 +1,34 @@
+{
+  "name": "ask-your-database",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=@ayd/api",
+    "dev:worker": "npm run dev --workspace=@ayd/worker",
+    "build": "npm run build --workspace=@ayd/shared && npm run build --workspace=@ayd/ssrf-guard && npm run build --workspace=@ayd/crypto && npm run build --workspace=@ayd/database && npm run build --workspace=@ayd/api && npm run build --workspace=@ayd/worker",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "npm run test:unit",
+    "test:unit": "npm run build --workspace=@ayd/shared && npm run build --workspace=@ayd/ssrf-guard && npm run build --workspace=@ayd/crypto && npm run build --workspace=@ayd/database && npm run test:unit --workspaces --if-present",
+    "test:int": "npm run build --workspace=@ayd/ssrf-guard && npm run build --workspace=@ayd/crypto && npm run build --workspace=@ayd/database && npm run test:int --workspace=@ayd/api",
+    "test:e2e": "npm run build --workspace=@ayd/ssrf-guard && npm run build --workspace=@ayd/crypto && npm run build --workspace=@ayd/database && npm run test:e2e --workspace=@ayd/api",
+    "test:all": "npm run test:unit && npm run test:int && npm run test:e2e",
+    "up": "docker compose up --build",
+    "up:deps": "docker compose up -d app-db sample-db redis",
+    "down": "docker compose down"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "eslint": "^9.36.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.44.0"
+  }
+}

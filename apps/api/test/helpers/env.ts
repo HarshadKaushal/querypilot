@@ -1,0 +1,9 @@
+process.env.NODE_ENV ??= 'test';
+process.env.DATABASE_URL ??= 'postgresql://ayd:ayd@localhost:5434/ayd';
+process.env.REDIS_URL ??= 'redis://localhost:6379';
+process.env.AUTH_JWT_SECRET ??= 'test-jwt-secret-that-is-at-least-32';
+process.env.CRYPTO_MASTER_KEY_VERSION ??= '1';
+process.env.CRYPTO_MASTER_KEYS ??= '1:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=';
+process.env.SSRF_ALLOW_PRIVATE ??= 'true';
+process.env.DEV_LOGIN_ENABLED ??= 'true';
+process.env.LOG_LEVEL ??= 'error';
