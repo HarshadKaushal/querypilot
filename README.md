@@ -2,7 +2,7 @@
 
 Middleware that lets a signed-in user connect their own PostgreSQL database and ask questions in plain English. The platform proposes SQL, checks it, runs it read-only, and returns a table, a chart, the SQL, and a short summary.
 
-This repository is at **Phase 2 (connections)**. The ask pipeline and the web UI are not built yet. See [docs/features.md](docs/features.md).
+This repository is at **Phase 3 (schema and allowlist)**. The ask pipeline and the web UI are not built yet. See [docs/features.md](docs/features.md).
 
 ## Prerequisites
 
@@ -144,6 +144,26 @@ Invoke-RestMethod http://localhost:3000/v1/connections -Method Post -ContentType
 
 Use host `sample-db` and port `5432` when the API itself is the Compose container. `sample_admin` is rejected because it is the owner. `sslMode` must be `require` or `verify-full`. The response does not include the password.
 
+## Read the schema and choose what the AI sees
+
+Read a connection's schema. The first refresh allows every table and every column that does not look sensitive:
+
+```powershell
+$conn = Invoke-RestMethod http://localhost:3000/v1/connections -Method Post -ContentType "application/json" -Headers @{ Authorization = "Bearer $($login.accessToken)" } -Body $body
+Invoke-RestMethod "http://localhost:3000/v1/connections/$($conn.id)/schema/refresh" -Method Post -Headers @{ Authorization = "Bearer $($login.accessToken)" }
+```
+
+`GET /v1/connections/{id}/schema` returns what the model may see: allowed tables and columns only, plus a `fingerprint`. On the sample database, `customers.email` and `support.tickets.contact_phone` start hidden, and the `finance` schema never appears because `sample_ro` cannot read it.
+
+`GET /v1/connections/{id}/allowlist` lists every table and column with `allowed` and `sensitive` flags. Save changes with `PUT`, naming the snapshot `version` you edited:
+
+```powershell
+$allow = '{"version":1,"tables":[{"schema":"public","name":"orders","description":"One row per order","columns":[{"name":"id"},{"name":"status"}]}]}'
+Invoke-RestMethod "http://localhost:3000/v1/connections/$($conn.id)/allowlist" -Method Put -ContentType "application/json" -Headers @{ Authorization = "Bearer $($login.accessToken)" } -Body $allow
+```
+
+A later refresh keeps your choices, and any new table or column stays hidden until you allow it. A save against an older `version` returns `SCHEMA_CHANGED`.
+
 Delete the signed-in account with:
 
 ```powershell
@@ -167,7 +187,7 @@ Confirm the sample seed:
 docker compose exec sample-db psql -U sample_admin -d sample -c "SELECT count(*) FROM customers;"
 ```
 
-The sample schema is a small retail set: customers, products, orders, order items, and payments. It stands in for a customer's database. The application never copies those rows into its own database.
+The sample is a small retail set: customers, products, orders, order items, and payments in `public`, warehouses and stock in `inventory`, tickets in `support`, and a `finance` schema that `sample_ro` cannot read. It stands in for a customer's database. A volume created before `infra/sample-db/multi-schema.sql` existed can get it with the command at the top of that file. The application never copies those rows into its own database.
 
 ## Checks
 

@@ -22,11 +22,13 @@ The company does not become a second system of record. **Assumed:** business row
 
 **Enforced:** `GET /v1/meta/egress` returns the platform egress IP from `EGRESS_IP` and SQL that creates a SELECT-only role. A real fixed egress IP is still a deployment task. The local value is the documentation address `192.0.2.10`.
 
-**Enforced in the sample:** `infra/sample-db/init.sql` creates `sample_ro` with `SELECT` on the public tables. `sample_admin` exists so the container can create the database. The connection flow should reject `sample_admin` and accept `sample_ro`. From the host the host is `127.0.0.1` and the port is `5433`. From the API container the host is `sample-db` and the port is `5432`. The name `localhost` is allowed only while private addresses are allowed.
+**Enforced in the sample:** `infra/sample-db/init.sql` creates `sample_ro` with `SELECT` on the public tables. `multi-schema.sql` adds `inventory` and `support`, which it can read, and `finance`, which it cannot. `sample_admin` exists so the container can create the database. The connection flow should reject `sample_admin` and accept `sample_ro`. From the host the host is `127.0.0.1` and the port is `5433`. From the API container the host is `sample-db` and the port is `5432`. The name `localhost` is allowed only while private addresses are allowed.
 
 ## What the model is allowed to see
 
-**Assumed:** the platform owns the Gemini API key. Users do not bring a model key. SQL generation sees the allowlisted schema, not the whole catalog. The summary sees the question, column names, a capped sample of rows, and computed statistics. Schema comments, names, and cell values are untrusted. A user can hide columns. Columns that look like emails, phone numbers, tokens, or national IDs default to hidden. The sample `customers.email` values exist so that hint has something to flag later.
+**Enforced:** a schema snapshot holds only what the login can SELECT: names, types, nullability, and keys. It never holds rows or PostgreSQL comments. A user chooses which tables and columns are allowed and can describe them. On a connection's first snapshot, columns that look like emails, phone numbers, addresses, national IDs, dates of birth, card or bank numbers, or credentials start hidden, and everything else starts allowed. A table or column found by a later refresh starts hidden. Every schema output for the model comes from one function that applies the allowlist, to primary and foreign keys as well. On the sample, `customers.email` and `support.tickets.contact_phone` start hidden.
+
+**Assumed:** the platform owns the Gemini API key. Users do not bring a model key. SQL generation sees the allowlisted schema, not the whole catalog. The summary sees the question, column names, a capped sample of rows, and computed statistics. Schema names, descriptions, and cell values are untrusted.
 
 **Assumed:** if the question is ambiguous or cannot be answered from the allowlist, nothing is executed. The user gets a clarification or an explanation.
 

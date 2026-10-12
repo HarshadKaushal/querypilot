@@ -1,6 +1,6 @@
 # Feature Documentation
 
-Status of Ask Your Database against the production blueprint. Phase 2 (connections, encryption, and the SSRF guard) is the current milestone.
+Status of Ask Your Database against the production blueprint. Phase 3 (schema introspection and the allowlist) is the current milestone.
 
 ## Completed
 
@@ -22,7 +22,7 @@ Status of Ask Your Database against the production blueprint. Phase 2 (connectio
 - Local development login at `POST /v1/auth/dev/login`, enabled only when `DEV_LOGIN_ENABLED=true` and `NODE_ENV` is not `production`.
 - Short-lived HS256 access tokens and rotating refresh tokens. The refresh token is stored as a hash and returned only in an httpOnly cookie.
 - Refresh reuse revokes the token family. Logout revokes the presented token. `GET /v1/users/me` rejects missing or invalid access tokens.
-- Account deletion removes the user and refresh tokens and writes an audit row. Connections are removed by a foreign key `ON DELETE CASCADE`. Query history is not stored yet.
+- Account deletion removes the user and refresh tokens and writes an audit row. Connections, schema snapshots, and allowlist rows are removed by foreign keys with `ON DELETE CASCADE`. Query history is not stored yet.
 - Envelope encryption in `@ayd/crypto`. A random data key encrypts the username and password. The current master key wraps that data key. `rewrapCredentials` rotates only the wrap.
 - SSRF checks in `@ayd/ssrf-guard`. Metadata, unspecified, and link-local addresses are always rejected. Loopback and private ranges are rejected unless `SSRF_ALLOW_PRIVATE` is on, which production refuses. The hostname `localhost` follows that same switch. A mixed public and private answer is rejected.
 - Connection create, list, get, test, update, and delete under `/v1/connections`. Rows are scoped by `user_id`. Another user's id is `404`.
@@ -33,6 +33,10 @@ Status of Ask Your Database against the production blueprint. Phase 2 (connectio
 - Sample Postgres speaks TLS. The image generates a self-signed certificate on first start.
 - Audit events for login, logout, refresh reuse, and account deletion.
 - Application tables `users`, `refresh_tokens`, and `audit_log`.
+- Schema refresh at `POST /v1/connections/:id/schema/refresh`. It re-checks that the login is read-only, then reads the tables, views, materialized views, foreign tables, and partitioned tables the login can SELECT, with columns, types, nullability, primary keys, and foreign keys, inside a READ ONLY transaction. It reads no rows and no comments. Each refresh stores a new snapshot version, and the newest five are kept. Above 2,000 tables or 50,000 columns it returns `SCHEMA_TOO_LARGE`.
+- Allowlist. The first snapshot allows every table and every column the sensitive-column hint does not flag (emails, phone numbers, addresses, national ids, dates of birth, card and bank numbers, credentials). Later refreshes keep existing choices, drop objects that are gone, and leave new objects hidden. The refresh response lists them.
+- `GET /v1/connections/:id/schema` returns only allowed tables and columns, with descriptions and a fingerprint that changes on every refresh and allowlist edit. `GET /v1/connections/:id/allowlist` lists every object with `allowed` and `sensitive` flags. `PUT /v1/connections/:id/allowlist` saves choices and descriptions against a snapshot version, and returns `SCHEMA_CHANGED` if a refresh happened since.
+- Multi-schema sample database: `inventory` and `support` are readable by `sample_ro`, and `finance` is not.
 
 ## Partial
 
@@ -40,16 +44,16 @@ Status of Ask Your Database against the production blueprint. Phase 2 (connectio
 - **Shared package.** It holds the error envelope, request id, and health report types. It does not yet hold API DTOs for questions, connections, or history.
 - **Observability.** Logs are structured. There are no traces, metrics, dashboards, or alerts.
 - **API surface.** Health stays unversioned. Auth and the current user live under `/v1`. There is still no Swagger document.
-- **Audit log.** Login, logout, refresh reuse, account deletion, and connection create, update, test, and delete are recorded. Rejected queries are a later phase.
-- **Account deletion.** The user row, refresh tokens, and connections go away. Schema snapshots and query history are not stored yet.
-- **Executor.** It can test a connection. It does not yet pool, cap rows, or run user SQL.
+- **Audit log.** Login, logout, refresh reuse, account deletion, connection create, update, test, and delete, schema refreshes, and allowlist edits are recorded. Rejected queries are a later phase.
+- **Account deletion.** The user row, refresh tokens, connections, snapshots, and allowlists go away. Query history is not stored yet.
+- **Executor.** It can test a connection and read its schema. It does not yet pool, cap rows, or run user SQL.
+- **SQL cache invalidation.** The schema fingerprint is ready to key the SQL proposal cache, which arrives with the LLM phase.
 
 ## Pending
 
 Locked choices that are not implemented:
 
 - Gemini as the platform LLM, behind a provider interface, with a second call for the summary.
-- Schema introspection, allowlists, and sensitive-column defaults.
 - SQL guard package and its attack corpus.
 - Read-only executor, timeouts, row caps, and Redis semaphores.
 - Queue, SSE progress, cancellation, and fair scheduling.

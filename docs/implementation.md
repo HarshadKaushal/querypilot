@@ -91,6 +91,20 @@ The privilege checks use `has_table_privilege`, `has_any_column_privilege`, `pg_
 
 `GET /v1/meta/egress` is public. Compose sets `EGRESS_IP` to the documentation address `192.0.2.10` until a real NAT gateway exists.
 
+## Phase 3: schema introspection and allowlist
+
+A refresh has three steps. `ConnectionService.resolveTarget` checks ownership, decrypts the credentials in memory, and pins the address through the SSRF guard. `UserDatabaseProbe.introspect` re-runs the read-only check and reads `pg_catalog` inside `BEGIN READ ONLY`, with a 15-second statement timeout. `PrismaSchemaRepository.commitSnapshot` locks the connection row, stores version n+1, replaces the allowlist, and deletes all but the newest five versions, in one transaction. The lock keeps two concurrent refreshes from taking the same version.
+
+The snapshot is the full readable structure, not only the allowed part, because the allowlist editor has to show everything. What the model sees is computed on read by `allowedSchema`, which keeps allowed tables, allowed columns, and only the keys whose columns are all allowed. Its fingerprint hashes the version and that output. The LLM phase will key cached SQL proposals on it, so both a refresh and an allowlist edit invalidate them without a separate counter (ADR 0008).
+
+The allowlist is explicit rows: one per allowed table and one per allowed column. A new column on an allowed table is therefore hidden until someone allows it. Defaults are applied only on the first snapshot, using the word-based hint in `sensitive-columns.ts`. The hint never reads cell values.
+
+`PUT /v1/connections/:id/allowlist` replaces the whole list. The body names the snapshot version it was edited against. The repository compares that version again under the same row lock, so a save cannot slip in between a refresh's version change and its allowlist update.
+
+Introspection runs in the API process, like the probe, and a refresh can take seconds on a large schema. It moves to the worker with the executor before the queue phase.
+
+The sample database gained `multi-schema.sql`. It is mounted as a second init script, and a volume created earlier can get it with one `psql` command instead of being recreated.
+
 ## How to extend this
 
 Add a phase only after this phase's checks pass: `npm test`, `npm run lint`, `npm run format:check`, and a ready health response from `npm run up`. New application tables go in a new Prisma migration. New client-visible failures go through `AppException` and an existing or newly documented error code in `@ayd/shared`.
