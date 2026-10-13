@@ -31,7 +31,13 @@ export class JobWorker implements OnApplicationBootstrap, OnApplicationShutdown 
     this.connection = new Redis(this.env.REDIS_URL, { maxRetriesPerRequest: null });
     this.worker = new Worker(
       this.env.JOB_QUEUE_NAME,
-      (job) => this.processor.process(job.name, job.data),
+      (job) =>
+        this.processor.handle(job, (error) =>
+          this.logger.warn(
+            { jobId: job.id, error: safeErrorDetail(error) },
+            'could not drop sealed credentials from a finished job',
+          ),
+        ),
       { connection: this.connection, concurrency: this.env.WORKER_CONCURRENCY },
     );
     this.worker.on(

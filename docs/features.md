@@ -41,17 +41,18 @@ Status of Ask Your Database against the production blueprint. Phase 5 (the execu
 - `POST /v1/connections/:id/sql/check` runs the guard against the connection's latest allowlist and returns the verdict. It never runs the SQL.
 - Changing a connection's host, port, or database name deletes its snapshots and allowlist in the same transaction. The next refresh starts over with the defaults. A refresh that read the old database during the edit stores nothing (`SCHEMA_CHANGED`).
 - A column, table, or schema the database no longer has returns `QUERY_SCHEMA_CHANGED`, which tells the user to refresh the schema.
+- Connection create, update (a new host, port, database, login, or SSL mode), and test, and schema refresh, run as worker jobs too. The API never connects to a user database. A new or changed login is saved only after the worker's read-only check passes, and the job payload carries the credentials only sealed; finished jobs keep none.
 - Queries run as worker jobs (ADR 0011). `POST /v1/connections/:id/queries` checks ownership and the SQL's size, queues a BullMQ job, and answers 202 with the job. The worker runs the guard and the executor. `GET /v1/jobs/:id` shows the owner `queued`, `running`, `succeeded` with the rows, or `failed` with a stable code and a fixed message; anyone else gets 404. Results stay in Redis for 15 minutes.
 
 ## Partial
 
-- **Worker.** It takes query jobs from the queue and runs them, five at a time per process. Connection create, update, and test, and schema refresh still run in the API until Phase 6 step 3b. There is no progress stream, cancellation, retry policy, or fair scheduling yet.
+- **Worker.** It takes every job that opens a user database from the queue (query, connection create, update, and test, schema refresh) and runs them, five at a time per process. There is no progress stream, cancellation, retry policy, or fair scheduling yet.
 - **Shared package.** It holds the error envelope, request id, and health report types. It does not yet hold API DTOs for questions, connections, or history.
 - **Observability.** Logs are structured. There are no traces, metrics, dashboards, or alerts.
 - **API surface.** Health stays unversioned. Auth and the current user live under `/v1`. There is still no Swagger document.
 - **Audit log.** Login, logout, refresh reuse, account deletion, connection create, update, test, and delete, schema refreshes, and allowlist edits are recorded. Rejected queries are a later phase.
 - **Account deletion.** The user row, refresh tokens, connections, snapshots, and allowlists go away. Query history is not stored yet.
-- **Executor.** It tests connections, reads schemas, and runs guarded SQL: a READ ONLY transaction, a statement timeout (15 s), an empty `search_path`, a cursor read up to 1,000 rows and 5 MB, then `ROLLBACK`. One statement only, through the extended protocol. Two queries at once per connection across all processes, through Redis slots. A connection pauses for 60 s after 5 connection failures or timeouts in a row. There is one pool per connection, closed when credentials change or the connection is deleted. Errors map to fixed messages with a `retryable` flag. Query jobs run it in the worker. The API still uses the probe and introspection for connection test and schema refresh until step 3b.
+- **Executor.** It tests connections, reads schemas, and runs guarded SQL: a READ ONLY transaction, a statement timeout (15 s), an empty `search_path`, a cursor read up to 1,000 rows and 5 MB, then `ROLLBACK`. One statement only, through the extended protocol. Two queries at once per connection across all processes, through Redis slots. A connection pauses for 60 s after 5 connection failures or timeouts in a row. There is one pool per connection, closed when credentials change or the connection is deleted. Errors map to fixed messages with a `retryable` flag. It runs only in the worker, from jobs.
 - **SQL cache invalidation.** The schema fingerprint is ready to key the SQL proposal cache, which arrives with the LLM phase.
 
 ## Pending
@@ -61,7 +62,7 @@ Locked choices that are not implemented:
 - When a query returns `QUERY_SCHEMA_CHANGED`, refresh the schema and retry once against the new snapshot (Phase 7). New objects stay hidden until allowed, so this cannot widen access.
 - Show how old the schema snapshot is, or refresh it on a schedule (Phase 8 or 9).
 - Gemini as the platform LLM, behind a provider interface, with a second call for the summary.
-- Connection and schema jobs (step 3b), SSE progress, cancellation, retries, and fair scheduling.
+- SSE progress, cancellation, retries, and fair scheduling.
 - History and quotas. Login rate limits are part of the quota phase.
 - React UI (sign-in, connect, ask, history, usage, settings) and every result state.
 - Evaluation dataset, load tests, and production deployment (NAT gateway, fixed egress IP, secrets manager).

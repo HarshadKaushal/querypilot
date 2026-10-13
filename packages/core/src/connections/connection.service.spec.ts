@@ -1,4 +1,5 @@
 import { parseMasterKeyRing } from '@ayd/crypto';
+import { AppException } from '../errors/app.exception';
 import { coreTestEnv } from '../testing/test-env';
 import type { ConnectionPools } from '../user-database/connection-pools';
 import {
@@ -242,5 +243,117 @@ describe('ConnectionService', () => {
     await connections.update('user-1', created.id, { label: 'Renamed' }, null);
     expect(repo.schemaResets).toEqual([]);
     expect(repo.audits.at(-1)?.metadata).toEqual({ connectionId: created.id });
+  });
+});
+
+describe('ConnectionService halves (API prepares, worker checks)', () => {
+  it('prepares a create without contacting the database or storing anything', () => {
+    const { connections, repo, probe, resolver } = service();
+    const pending = connections.prepareCreate(input);
+    expect(pending.settings).toEqual({
+      label: input.label,
+      host: input.host,
+      port: input.port,
+      databaseName: input.databaseName,
+      sslMode: 'require',
+      sendSampleRowsToLlm: false,
+    });
+    // The payload a job carries holds the credentials only sealed.
+    expect(JSON.stringify(pending)).not.toContain(PASSWORD);
+    expect(JSON.stringify(pending)).not.toContain(input.username);
+    expect(probe.test).not.toHaveBeenCalled();
+    expect(resolver.lookup).not.toHaveBeenCalled();
+    expect(repo.rows).toHaveLength(0);
+  });
+
+  it('rejects bad input while preparing, before any job exists', () => {
+    const { connections } = service();
+    expect(() => connections.prepareCreate({ ...input, sslMode: 'disable' })).toThrow(
+      AppException,
+    );
+  });
+
+  it('stores the prepared connection only after the check passes', async () => {
+    const passing = service();
+    const created = await passing.connections.createChecked(
+      'user-1',
+      passing.connections.prepareCreate(input),
+      null,
+    );
+    expect(passing.repo.rows).toHaveLength(1);
+    expect(created.status).toBe('active');
+
+    const writer = service({
+      probe: { ok: false, code: 'NOT_READ_ONLY', message: 'This role can change data.' },
+    });
+    await expect(
+      writer.connections.createChecked(
+        'user-1',
+        writer.connections.prepareCreate(input),
+        null,
+      ),
+    ).rejects.toMatchObject({ code: 'NOT_READ_ONLY' });
+    expect(writer.repo.rows).toHaveLength(0);
+    expect(writer.repo.audits).toHaveLength(0);
+  });
+
+  it('saves a rename at once and hands a new host to the worker unsaved', async () => {
+    const { connections, repo, probe } = service();
+    const created = await connections.create('user-1', input, null);
+    (probe.test as jest.Mock).mockClear();
+
+    const rename = await connections.prepareUpdate(
+      'user-1',
+      created.id,
+      { label: 'New' },
+      null,
+    );
+    expect(rename).toMatchObject({ check: false, connection: { label: 'New' } });
+
+    const move = await connections.prepareUpdate(
+      'user-1',
+      created.id,
+      { host: 'other.example' },
+      null,
+    );
+    expect(move.check).toBe(true);
+    expect(repo.rows[0]?.host).toBe('db.example');
+    expect(probe.test).not.toHaveBeenCalled();
+    if (move.check) {
+      expect(JSON.stringify(move.pending)).not.toContain(PASSWORD);
+      const moved = await connections.updateChecked(
+        'user-1',
+        created.id,
+        move.pending,
+        null,
+      );
+      expect(moved).toMatchObject({ host: 'other.example', label: 'New' });
+      expect(repo.schemaResets).toEqual([created.id]);
+    }
+  });
+
+  it('keeps the old settings when the changed login fails the check', async () => {
+    const { connections, repo, probe } = service();
+    const created = await connections.create('user-1', input, null);
+    const plan = await connections.prepareUpdate(
+      'user-1',
+      created.id,
+      { password: 'other-password' },
+      null,
+    );
+    (probe.test as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      code: 'CONNECTION_FAILED',
+      message: 'Check the username and password.',
+    });
+    if (!plan.check) {
+      throw new Error('expected a check');
+    }
+    await expect(
+      connections.updateChecked('user-1', created.id, plan.pending, null),
+    ).rejects.toMatchObject({ code: 'CONNECTION_FAILED' });
+    const ring = parseMasterKeyRing(KEYS, 1);
+    const { openCredentials } = await import('@ayd/crypto');
+    expect(openCredentials(repo.rows[0]!, ring).password).toBe(PASSWORD);
   });
 });

@@ -8,6 +8,7 @@ export * from './connections/connections-core.module';
 export * from './connections/prisma-connection.repository';
 export * from './errors/app.exception';
 export * from './errors/error-code';
+export * from './jobs/connection-job.runner';
 export * from './jobs/job-processor';
 export * from './jobs/job-queue.service';
 export * from './jobs/job.types';

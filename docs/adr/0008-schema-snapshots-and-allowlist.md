@@ -8,4 +8,4 @@ Every schema output for the model (`GET /v1/connections/:id/schema` now, prompt 
 
 **When the connection moves.** Changing a connection's host, port, or database name may point it at a different database. Its snapshots and allowlist are deleted in the same transaction as the edit, the schema reports `SCHEMA_NOT_READY`, and the next refresh starts over with the first-snapshot defaults, as for a new connection. A new password, username, or SSL mode reaches the same database and keeps them. A refresh that read the old database while the connection was being edited stores nothing and returns `SCHEMA_CHANGED`: the repository compares host, port, and database name under the same row lock.
 
-Introspection lives in the executor module (`packages/core/src/user-database/`), like the read-only probe. The API still calls both directly; Phase 6 step 3 makes connection test and schema refresh worker jobs, so only the worker connects.
+Introspection lives in the executor module (`packages/core/src/user-database/`), like the read-only probe. Since Phase 6 step 3b, connection test and schema refresh are worker jobs (ADR 0011), so only the worker runs them.

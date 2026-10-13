@@ -4,14 +4,14 @@ import { createHttpApp } from '../testing/http-app';
 import {
   ADDRESS_RESOLVER,
   CONNECTION_REPOSITORY,
-  ConnectionService,
   type IntrospectResult,
   SCHEMA_REPOSITORY,
   type SchemaDocument,
-  SchemaService,
   UserDatabaseProbe,
 } from '@ayd/core';
 import { ConnectionsController } from '../connections/connections.controller';
+import { JobsController } from '../jobs/jobs.controller';
+import { inlineJobProviders } from '../testing/inline-jobs';
 import { MemoryConnectionRepository, MemorySchemaRepository } from '@ayd/core/testing';
 import { SchemaController } from './schema.controller';
 
@@ -46,10 +46,9 @@ describe('schema routes', () => {
     introspection = { ok: true, document: firstDocument };
     lookup = async () => ['1.1.1.1'];
     app = await createHttpApp({
-      controllers: [ConnectionsController, SchemaController],
+      controllers: [ConnectionsController, SchemaController, JobsController],
       providers: [
-        ConnectionService,
-        SchemaService,
+        ...inlineJobProviders(),
         { provide: CONNECTION_REPOSITORY, useValue: connections },
         { provide: SCHEMA_REPOSITORY, useValue: schemas },
         { provide: ADDRESS_RESOLVER, useValue: { lookup: () => lookup() } },
@@ -89,8 +88,18 @@ describe('schema routes', () => {
         password: 'sample_ro_password',
         sslMode: 'require',
       });
-    schemas.owners.set(created.body.id, user.userId);
-    return created.body.id;
+    const job = await call('get', `/v1/jobs/${created.body.id}`, user.token);
+    const id: string = job.body.result.id;
+    schemas.owners.set(id, user.userId);
+    return id;
+  }
+
+  /** Queues a refresh (202), then reads the finished job. */
+  async function refresh(id: string, token: string) {
+    const queued = await call('post', `/v1/connections/${id}/schema/refresh`, token);
+    expect(queued.status).toBe(202);
+    expect(queued.body).toMatchObject({ kind: 'schema.refresh', state: 'queued' });
+    return (await call('get', `/v1/jobs/${queued.body.id}`, token)).body;
   }
 
   function call(method: 'get' | 'post', path: string, token: string) {
@@ -122,13 +131,9 @@ describe('schema routes', () => {
   it('applies the default allowlist on the first refresh and hides sensitive columns', async () => {
     const user = await signIn('dev@localhost');
     const id = await connect(user);
-    const refreshed = await call(
-      'post',
-      `/v1/connections/${id}/schema/refresh`,
-      user.token,
-    );
-    expect(refreshed.status).toBe(201);
-    expect(refreshed.body).toMatchObject({
+    const refreshed = await refresh(id, user.token);
+    expect(refreshed.state).toBe('succeeded');
+    expect(refreshed.result).toMatchObject({
       version: 1,
       tableCount: 1,
       columnCount: 3,
@@ -155,7 +160,7 @@ describe('schema routes', () => {
   it('keeps objects found by a later refresh hidden and reports them', async () => {
     const user = await signIn('dev@localhost');
     const id = await connect(user);
-    await call('post', `/v1/connections/${id}/schema/refresh`, user.token);
+    await refresh(id, user.token);
     const before = await call('get', `/v1/connections/${id}/schema`, user.token);
 
     introspection = {
@@ -181,12 +186,8 @@ describe('schema routes', () => {
         ],
       },
     };
-    const refreshed = await call(
-      'post',
-      `/v1/connections/${id}/schema/refresh`,
-      user.token,
-    );
-    expect(refreshed.body).toMatchObject({
+    const refreshed = await refresh(id, user.token);
+    expect(refreshed.result).toMatchObject({
       version: 2,
       defaultsApplied: false,
       newObjects: { tables: ['sales.targets'], columns: ['public.customers.segment'] },
@@ -222,13 +223,8 @@ describe('schema routes', () => {
       code: 'NOT_READ_ONLY',
       message: 'This role, or a role it belongs to, can change data.',
     };
-    const response = await call(
-      'post',
-      `/v1/connections/${id}/schema/refresh`,
-      user.token,
-    );
-    expect(response.status).toBe(400);
-    expect(response.body.error.code).toBe('NOT_READ_ONLY');
+    const job = await refresh(id, user.token);
+    expect(job).toMatchObject({ state: 'failed', error: { code: 'NOT_READ_ONLY' } });
     expect(connections.rows[0]?.status).toBe('failing');
     expect(schemas.snapshots).toHaveLength(0);
   });
@@ -239,12 +235,8 @@ describe('schema routes', () => {
     lookup = async () => {
       throw new Error('getaddrinfo ENOTFOUND db.example');
     };
-    const response = await call(
-      'post',
-      `/v1/connections/${id}/schema/refresh`,
-      user.token,
-    );
-    expect(response.body.error.code).toBe('CONNECTION_FAILED');
+    const job = await refresh(id, user.token);
+    expect(job).toMatchObject({ state: 'failed', error: { code: 'CONNECTION_FAILED' } });
     expect(connections.rows[0]?.status).toBe('failing');
     expect(schemas.snapshots).toHaveLength(0);
     expect(schemas.audits.at(-1)).toMatchObject({
@@ -262,13 +254,8 @@ describe('schema routes', () => {
       port: 5432,
       databaseName: 'other_db',
     });
-    const response = await call(
-      'post',
-      `/v1/connections/${id}/schema/refresh`,
-      user.token,
-    );
-    expect(response.status).toBe(409);
-    expect(response.body.error.code).toBe('SCHEMA_CHANGED');
+    const job = await refresh(id, user.token);
+    expect(job).toMatchObject({ state: 'failed', error: { code: 'SCHEMA_CHANGED' } });
     expect(schemas.snapshots).toHaveLength(0);
   });
 
@@ -276,13 +263,8 @@ describe('schema routes', () => {
     const user = await signIn('dev@localhost');
     const id = await connect(user);
     introspection = { ok: false, code: 'SCHEMA_TOO_LARGE', message: 'Too many tables.' };
-    const response = await call(
-      'post',
-      `/v1/connections/${id}/schema/refresh`,
-      user.token,
-    );
-    expect(response.status).toBe(422);
-    expect(response.body.error.code).toBe('SCHEMA_TOO_LARGE');
+    const job = await refresh(id, user.token);
+    expect(job).toMatchObject({ state: 'failed', error: { code: 'SCHEMA_TOO_LARGE' } });
     expect(connections.rows[0]?.status).toBe('active');
   });
 
@@ -290,7 +272,7 @@ describe('schema routes', () => {
     async function refreshed() {
       const user = await signIn('dev@localhost');
       const id = await connect(user);
-      await call('post', `/v1/connections/${id}/schema/refresh`, user.token);
+      await refresh(id, user.token);
       return { user, id };
     }
 
@@ -328,7 +310,7 @@ describe('schema routes', () => {
 
     it('refuses a save made against an older snapshot', async () => {
       const { user, id } = await refreshed();
-      await call('post', `/v1/connections/${id}/schema/refresh`, user.token);
+      await refresh(id, user.token);
       const response = await put(`/v1/connections/${id}/allowlist`, user.token, {
         version: 1,
         tables: [],

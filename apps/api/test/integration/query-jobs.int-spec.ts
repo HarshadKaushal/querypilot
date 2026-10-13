@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  type ConnectionJobRunner,
   ConnectionPools,
   ConnectionService,
   JobProcessor,
@@ -59,6 +60,7 @@ describe('query jobs through BullMQ', () => {
       connections,
       new QueryExecutor(env, pools, new RedisCoordination(redis), logger),
     ),
+    {} as ConnectionJobRunner,
   );
   const queue = new JobQueue(env);
   const workerConnection = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
@@ -123,7 +125,7 @@ describe('query jobs through BullMQ', () => {
     await schemas.refresh(userId, connectionId, null);
     worker = new Worker(
       env.JOB_QUEUE_NAME,
-      (job) => processor.process(job.name, job.data),
+      (job) => processor.handle(job, () => undefined),
       {
         connection: workerConnection,
       },

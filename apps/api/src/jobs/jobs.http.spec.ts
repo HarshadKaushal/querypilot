@@ -63,11 +63,11 @@ describe('job routes', () => {
     };
   }
 
-  async function connection(token: string) {
-    const created = await request(app.getHttpServer())
-      .post('/v1/connections')
-      .set('Authorization', `Bearer ${token}`)
-      .send({
+  /** Saves a connection directly; the route that creates one queues a job. */
+  async function connection(userId: string) {
+    const created = await app.get(ConnectionService).create(
+      userId,
+      {
         label: 'Sample',
         host: 'db.example',
         port: 5432,
@@ -75,8 +75,10 @@ describe('job routes', () => {
         username: 'sample_ro',
         password: 'sample_ro_password',
         sslMode: 'require',
-      });
-    return created.body.id as string;
+      },
+      null,
+    );
+    return created.id;
   }
 
   function submit(token: string, connectionId: string, body: unknown) {
@@ -96,7 +98,7 @@ describe('job routes', () => {
 
   it('queues the SQL for the owner and answers 202 with the job at once', async () => {
     const { token, userId } = await signedIn();
-    const id = await connection(token);
+    const id = await connection(userId);
     const response = await submit(token, id, { sql: 'SELECT id FROM orders' });
     expect(response.status).toBe(202);
     expect(response.body).toEqual(queued('query.run'));
@@ -110,8 +112,8 @@ describe('job routes', () => {
   it.each([{}, { sql: 42 }, { sql: '   ' }, { sql: 'x'.repeat(20001) }])(
     'refuses a body without usable SQL (%#) and queues nothing',
     async (body) => {
-      const { token } = await signedIn();
-      const id = await connection(token);
+      const { token, userId } = await signedIn();
+      const id = await connection(userId);
       const response = await submit(token, id, body);
       expect(response.status).toBe(400);
       expect(response.body.error.code).toBe('VALIDATION_ERROR');
@@ -121,7 +123,7 @@ describe('job routes', () => {
 
   it("answers 404 for someone else's connection and queues nothing", async () => {
     const owner = await signedIn('owner@example.test');
-    const id = await connection(owner.token);
+    const id = await connection(owner.userId);
     const other = await signedIn('other@example.test');
     const response = await submit(other.token, id, { sql: 'SELECT 1' });
     expect(response.status).toBe(404);

@@ -2,7 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { HttpStatus, Inject, Injectable, Optional } from '@nestjs/common';
-import { openCredentials, parseMasterKeyRing, sealCredentials } from '@ayd/crypto';
+import {
+  openCredentials,
+  parseMasterKeyRing,
+  sealCredentials,
+  type SealedCredentials,
+} from '@ayd/crypto';
 import { assessResolution } from '@ayd/ssrf-guard';
 import { AppException, invalidRequest, notFound } from '../errors/app.exception';
 import { ConnectionPools } from '../user-database/connection-pools';
@@ -38,6 +43,29 @@ export interface AddressResolver {
 
 export const ADDRESS_RESOLVER = Symbol('ADDRESS_RESOLVER');
 
+/** The settings of a connection that are not secret. */
+export interface ConnectionSettings {
+  label: string;
+  host: string;
+  port: number;
+  databaseName: string;
+  sslMode: SslMode;
+  sendSampleRowsToLlm: boolean;
+}
+
+/**
+ * A new or changed connection waiting for the worker's check. The credentials are sealed,
+ * so a job payload carrying this never holds them in plaintext.
+ */
+export interface PendingConnection {
+  settings: ConnectionSettings;
+  sealed: SealedCredentials;
+}
+
+export type UpdatePlan =
+  | { check: false; connection: PublicConnection }
+  | { check: true; pending: PendingConnection };
+
 export type ConnectionTarget =
   | { ok: true; row: StoredConnection; request: ProbeRequest }
   | { ok: false; row: StoredConnection; error: AppException };
@@ -65,27 +93,44 @@ export class ConnectionService {
     this.keys = parseMasterKeyRing(env.CRYPTO_MASTER_KEYS, env.CRYPTO_MASTER_KEY_VERSION);
   }
 
+  /** Both halves of create in one process, for scripts and tests. The API queues instead. */
   async create(
     userId: string,
     input: ConnectionInput,
     ip: string | null,
   ): Promise<PublicConnection> {
-    const checked = this.parse(input);
-    const pinned = await this.pin(checked.host);
-    await this.assertReadable(checked, pinned);
-    const sealed = sealCredentials(checked.username, checked.password, this.keys);
+    return this.createChecked(userId, this.prepareCreate(input), ip);
+  }
+
+  /**
+   * The API's half of create: validates the input (400 when it is bad) and seals the
+   * credentials. Nothing is stored and no database is contacted.
+   */
+  prepareCreate(input: ConnectionInput): PendingConnection {
+    const { username, password, ...settings } = this.parse(input);
+    return { settings, sealed: sealCredentials(username, password, this.keys) };
+  }
+
+  /**
+   * The worker's half: opens the credentials in memory, pins the host, and runs the
+   * read-only check. The connection is stored only if the check passes, so a login that
+   * can write is never kept.
+   */
+  async createChecked(
+    userId: string,
+    pending: PendingConnection,
+    ip: string | null,
+  ): Promise<PublicConnection> {
+    const secrets = openCredentials(pending.sealed, this.keys);
+    const pinned = await this.pin(pending.settings.host);
+    await this.assertReadable({ ...pending.settings, ...secrets }, pinned);
     const created = await this.repo.insert({
       id: randomUUID(),
       userId,
-      label: checked.label,
-      host: checked.host,
-      port: checked.port,
-      databaseName: checked.databaseName,
-      sslMode: checked.sslMode,
+      ...pending.settings,
       status: 'active',
       lastTestedAt: new Date(),
-      sendSampleRowsToLlm: checked.sendSampleRowsToLlm,
-      ...sealed,
+      ...pending.sealed,
     });
     await this.repo.writeAudit({
       userId,
@@ -128,15 +173,33 @@ export class ConnectionService {
     return updated ?? toPublicConnection(target.row);
   }
 
+  /** Both halves of update in one process, for scripts and tests. The API queues instead. */
   async update(
     userId: string,
     id: string,
     input: Partial<ConnectionInput>,
     ip: string | null,
   ): Promise<PublicConnection> {
+    const plan = await this.prepareUpdate(userId, id, input, ip);
+    return plan.check
+      ? this.updateChecked(userId, id, plan.pending, ip)
+      : plan.connection;
+  }
+
+  /**
+   * The API's half of update. A change that cannot reach a different database or login (the
+   * label, the sample-rows setting) is saved at once. Anything else is validated and sealed
+   * for the worker to check first.
+   */
+  async prepareUpdate(
+    userId: string,
+    id: string,
+    input: Partial<ConnectionInput>,
+    ip: string | null,
+  ): Promise<UpdatePlan> {
     const existing = await this.requireOwned(userId, id);
     const secrets = openCredentials(existing, this.keys);
-    const next = this.parse({
+    const { username, password, ...settings } = this.parse({
       label: input.label ?? existing.label,
       host: input.host ?? existing.host,
       port: input.port ?? existing.port,
@@ -147,48 +210,71 @@ export class ConnectionService {
       sendSampleRowsToLlm: input.sendSampleRowsToLlm ?? existing.sendSampleRowsToLlm,
     });
     const connectionChanged =
-      next.host !== existing.host ||
-      next.port !== existing.port ||
-      next.databaseName !== existing.databaseName ||
-      next.username !== secrets.username ||
-      next.password !== secrets.password ||
-      next.sslMode !== existing.sslMode;
+      settings.host !== existing.host ||
+      settings.port !== existing.port ||
+      settings.databaseName !== existing.databaseName ||
+      username !== secrets.username ||
+      password !== secrets.password ||
+      settings.sslMode !== existing.sslMode;
+    if (connectionChanged) {
+      return {
+        check: true,
+        pending: { settings, sealed: sealCredentials(username, password, this.keys) },
+      };
+    }
+    // Status and test time change only when a check runs. A rename keeps a failing
+    // connection failing.
+    const updated = await this.repo.update(userId, id, {
+      label: settings.label,
+      sendSampleRowsToLlm: settings.sendSampleRowsToLlm,
+    });
+    if (!updated) {
+      throw notFound();
+    }
+    await this.repo.writeAudit({
+      userId,
+      eventType: 'connection.updated',
+      metadata: { connectionId: id },
+      ip,
+    });
+    return { check: false, connection: updated };
+  }
+
+  /** The worker's half: checks the changed login, and saves the change only if it passes. */
+  async updateChecked(
+    userId: string,
+    id: string,
+    pending: PendingConnection,
+    ip: string | null,
+  ): Promise<PublicConnection> {
+    // Compared with the row as it is now, in case it changed since the API read it.
+    const existing = await this.requireOwned(userId, id);
     // A different host, port, or database may be a different database altogether, so its
     // old snapshot and allowlist are deleted and the schema has to be read and reviewed
     // again. New credentials or SSL settings reach the same database and keep them.
     const databaseChanged =
-      next.host !== existing.host ||
-      next.port !== existing.port ||
-      next.databaseName !== existing.databaseName;
-    if (connectionChanged) {
-      const pinned = await this.pin(next.host);
-      await this.assertReadable(next, pinned);
-    }
-    const sealed = sealCredentials(next.username, next.password, this.keys);
-    // Status and test time change only when the probe just ran. A rename keeps a failing
-    // connection failing.
+      pending.settings.host !== existing.host ||
+      pending.settings.port !== existing.port ||
+      pending.settings.databaseName !== existing.databaseName;
+    const secrets = openCredentials(pending.sealed, this.keys);
+    const pinned = await this.pin(pending.settings.host);
+    await this.assertReadable({ ...pending.settings, ...secrets }, pinned);
     const updated = await this.repo.update(
       userId,
       id,
       {
-        label: next.label,
-        host: next.host,
-        port: next.port,
-        databaseName: next.databaseName,
-        sslMode: next.sslMode,
-        sendSampleRowsToLlm: next.sendSampleRowsToLlm,
-        ...(connectionChanged ? { status: 'active', lastTestedAt: new Date() } : {}),
-        ...sealed,
+        ...pending.settings,
+        status: 'active',
+        lastTestedAt: new Date(),
+        ...pending.sealed,
       },
       { resetSchema: databaseChanged },
     );
     if (!updated) {
       throw notFound();
     }
-    if (connectionChanged) {
-      // Open sockets still use the old host or credentials.
-      this.pools?.evict(id);
-    }
+    // Open sockets in this process still use the old host or credentials.
+    this.pools?.evict(id);
     await this.repo.writeAudit({
       userId,
       eventType: 'connection.updated',

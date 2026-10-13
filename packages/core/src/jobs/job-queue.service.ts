@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, type OnModuleDestroy } from '@nestjs/common';
-import { Queue, type Job } from 'bullmq';
+import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import { APP_ENV, type CoreEnv } from '../config/env';
 import { INTERNAL_ERROR_MESSAGE, notFound } from '../errors/app.exception';
@@ -69,14 +69,18 @@ function iso(ms: number | undefined): string | null {
   return ms ? new Date(ms).toISOString() : null;
 }
 
+/** The parts of a BullMQ job that its view needs. */
+export interface JobFields {
+  id?: string;
+  name: string;
+  timestamp: number;
+  processedOn?: number;
+  finishedOn?: number;
+  returnvalue?: unknown;
+}
+
 /** Maps a BullMQ job and its state to what the owner sees. */
-export function jobView(
-  job: Pick<
-    Job,
-    'id' | 'name' | 'timestamp' | 'processedOn' | 'finishedOn' | 'returnvalue'
-  >,
-  state: string,
-): JobView {
+export function jobView(job: JobFields, state: string): JobView {
   if (!(JOB_KINDS as readonly string[]).includes(job.name) || state === 'unknown') {
     throw notFound();
   }

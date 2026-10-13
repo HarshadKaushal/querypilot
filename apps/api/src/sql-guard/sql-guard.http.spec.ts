@@ -5,14 +5,13 @@ import { testEnv } from '../testing/test-env';
 import {
   ADDRESS_RESOLVER,
   CONNECTION_REPOSITORY,
-  ConnectionService,
   SCHEMA_REPOSITORY,
   type SchemaDocument,
-  SchemaService,
-  SqlGuardService,
   UserDatabaseProbe,
 } from '@ayd/core';
 import { ConnectionsController } from '../connections/connections.controller';
+import { JobsController } from '../jobs/jobs.controller';
+import { inlineJobProviders } from '../testing/inline-jobs';
 import { MemoryConnectionRepository, MemorySchemaRepository } from '@ayd/core/testing';
 import { SchemaController } from '../schema/schema.controller';
 import { SqlGuardController } from './sql-guard.controller';
@@ -57,11 +56,14 @@ describe('SQL check route', () => {
     schemas.allowed.clear();
     schemas.owners.clear();
     app = await createHttpApp({
-      controllers: [ConnectionsController, SchemaController, SqlGuardController],
+      controllers: [
+        ConnectionsController,
+        SchemaController,
+        SqlGuardController,
+        JobsController,
+      ],
       providers: [
-        ConnectionService,
-        SchemaService,
-        SqlGuardService,
+        ...inlineJobProviders(),
         { provide: CONNECTION_REPOSITORY, useValue: connections },
         { provide: SCHEMA_REPOSITORY, useValue: schemas },
         { provide: ADDRESS_RESOLVER, useValue: { lookup: async () => ['1.1.1.1'] } },
@@ -99,15 +101,20 @@ describe('SQL check route', () => {
         password: 'sample_ro_password',
         sslMode: 'require',
       });
-    const id: string = created.body.id;
+    const job = await request(app.getHttpServer())
+      .get(`/v1/jobs/${created.body.id}`)
+      .set('Authorization', `Bearer ${token}`);
+    const id: string = job.body.result.id;
     schemas.owners.set(id, login.body.user.id);
     return { token, id };
   }
 
+  /** Queues a refresh; InlineJobQueue runs it before answering. */
   async function refresh(user: { token: string; id: string }) {
-    await request(app.getHttpServer())
+    const queued = await request(app.getHttpServer())
       .post(`/v1/connections/${user.id}/schema/refresh`)
       .set('Authorization', `Bearer ${user.token}`);
+    expect(queued.status).toBe(202);
   }
 
   function check(user: { token: string; id: string }, body: unknown) {

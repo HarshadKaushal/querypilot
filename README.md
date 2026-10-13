@@ -134,25 +134,40 @@ Google sign-in is `GET /v1/auth/google/start`. It redirects to Google after you 
 
 `GET /v1/meta/egress` is public. It returns the egress IP to allowlist and SQL for a SELECT-only role.
 
+Anything that opens a user database runs in the worker: creating a connection, changing its host or login, testing it, reading its schema, and running a query. Those routes answer HTTP 202 with a job at once, and `GET /v1/jobs/{id}` reports the outcome. Start the worker with `npm run up`, or `npm run dev:worker` next to `npm run dev`.
+
 The sample database speaks SSL. From the host, with `SSRF_ALLOW_PRIVATE=true` in `.env`:
 
 ```powershell
 $login = Invoke-RestMethod http://localhost:3000/v1/auth/dev/login -Method Post -ContentType "application/json" -Body '{"email":"dev@localhost","name":"Local developer"}' -SessionVariable session
+$auth = @{ Authorization = "Bearer $($login.accessToken)" }
+function Wait-AydJob($job) {
+  while ($job.state -in 'queued', 'running') {
+    Start-Sleep -Milliseconds 200
+    $job = Invoke-RestMethod "http://localhost:3000/v1/jobs/$($job.id)" -Headers $auth
+  }
+  $job
+}
 $body = '{"label":"Sample","host":"127.0.0.1","port":5433,"databaseName":"sample","username":"sample_ro","password":"sample_ro_password","sslMode":"require"}'
-Invoke-RestMethod http://localhost:3000/v1/connections -Method Post -ContentType "application/json" -Headers @{ Authorization = "Bearer $($login.accessToken)" } -Body $body
+$created = Wait-AydJob (Invoke-RestMethod http://localhost:3000/v1/connections -Method Post -ContentType "application/json" -Headers $auth -Body $body)
+$conn = $created.result
 ```
+
+The worker runs the read-only check first and saves the connection only if it passes. A failed check leaves nothing stored: the job's `error.code` says why (`NOT_READ_ONLY`, `SSL_REQUIRED`, `CONNECTION_FAILED`, `SSRF_BLOCKED`). Bad input, such as a missing host or `sslMode: disable`, is refused at once with HTTP 400.
+
+`PATCH /v1/connections/{id}` saves a new `label` or `sendSampleRowsToLlm` at once (HTTP 200, the connection). A new host, port, database, username, password, or SSL mode is checked by the worker first (HTTP 202, a job), and is saved only if the check passes.
 
 Changing a connection's host, port, or database name deletes its schema snapshot and allowlist, because it may now be a different database. Refresh the schema afterwards and review the allowlist again. A new password or SSL mode keeps them.
 
-Use host `sample-db` and port `5432` when the API itself is the Compose container. `sample_admin` is rejected because it is the owner. `sslMode` must be `require` or `verify-full`. The response does not include the password.
+Use host `sample-db` and port `5432` when the worker is the Compose container. `sample_admin` is rejected because it is the owner, and is not stored. `sslMode` must be `require` or `verify-full`. No response includes the password, and a finished job keeps no credentials.
 
 ## Read the schema and choose what the AI sees
 
 Read a connection's schema. The first refresh allows every table and every column that does not look sensitive:
 
 ```powershell
-$conn = Invoke-RestMethod http://localhost:3000/v1/connections -Method Post -ContentType "application/json" -Headers @{ Authorization = "Bearer $($login.accessToken)" } -Body $body
-Invoke-RestMethod "http://localhost:3000/v1/connections/$($conn.id)/schema/refresh" -Method Post -Headers @{ Authorization = "Bearer $($login.accessToken)" }
+$refreshed = Wait-AydJob (Invoke-RestMethod "http://localhost:3000/v1/connections/$($conn.id)/schema/refresh" -Method Post -Headers $auth)
+$refreshed.result
 ```
 
 `GET /v1/connections/{id}/schema` returns what the model may see: allowed tables and columns only, plus a `fingerprint`. On the sample database, `customers.email` and `support.tickets.contact_phone` start hidden, and the `finance` schema never appears because `sample_ro` cannot read it.
