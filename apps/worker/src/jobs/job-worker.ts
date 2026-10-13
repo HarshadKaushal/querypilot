@@ -3,6 +3,7 @@ import {
   JobProcessor,
   safeErrorDetail,
   startJobWorker,
+  UserJobSlots,
   type RunningJobWorker,
 } from '@ayd/core';
 import {
@@ -25,6 +26,7 @@ export class JobWorker implements OnApplicationBootstrap, OnApplicationShutdown 
   constructor(
     @Inject(APP_ENV) private readonly env: WorkerEnv,
     @Inject(JobProcessor) private readonly processor: JobProcessor,
+    @Inject(UserJobSlots) private readonly slots: UserJobSlots,
     // PinoLogger takes (fields, message), so the text lands in message, not context.
     @Inject(PinoLogger) private readonly logger: PinoLogger,
   ) {}
@@ -33,6 +35,7 @@ export class JobWorker implements OnApplicationBootstrap, OnApplicationShutdown 
     this.running = await startJobWorker({
       env: this.env,
       processor: this.processor,
+      slots: this.slots,
       concurrency: this.env.WORKER_CONCURRENCY,
       hooks: {
         finished: (job, outcome) =>

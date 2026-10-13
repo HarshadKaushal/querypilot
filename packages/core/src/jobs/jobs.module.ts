@@ -6,13 +6,14 @@ import { UserDatabaseModule } from '../user-database/user-database.module';
 import { ConnectionJobRunner } from './connection-job.runner';
 import { JobCancellation } from './job-cancellation';
 import { JobEvents } from './job-events';
+import { UserJobSlots } from './user-job-slots';
 import { JobProcessor } from './job-processor';
 import { JobQueue } from './job-queue.service';
 import { QueryJobRunner } from './query-job.runner';
 
 /** Adding, reading, cancelling, and following jobs. The API imports this. */
 @Module({
-  providers: [JobQueue, JobCancellation, JobEvents],
+  providers: [JobQueue, JobCancellation, JobEvents, UserJobSlots],
   exports: [JobQueue, JobEvents],
 })
 export class JobQueueModule {}
@@ -25,7 +26,13 @@ export class JobQueueModule {}
     SqlGuardCoreModule,
     UserDatabaseModule,
   ],
-  providers: [QueryJobRunner, ConnectionJobRunner, JobCancellation, JobProcessor],
-  exports: [JobProcessor],
+  providers: [
+    QueryJobRunner,
+    ConnectionJobRunner,
+    JobCancellation,
+    JobProcessor,
+    UserJobSlots,
+  ],
+  exports: [JobProcessor, UserJobSlots],
 })
 export class JobRunnersModule {}

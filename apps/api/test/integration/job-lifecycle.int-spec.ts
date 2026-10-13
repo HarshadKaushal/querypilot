@@ -14,6 +14,7 @@ import {
   type JobContext,
   type JobWorkerHooks,
   type RunningJobWorker,
+  UserJobSlots,
 } from '@ayd/core';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
@@ -56,7 +57,8 @@ describe('job lifecycle through BullMQ', () => {
     });
     const redis = new RedisService(env);
     const cancellation = new JobCancellation(redis);
-    const queue = new JobQueue(env, cancellation);
+    const slots = new UserJobSlots(redis);
+    const queue = new JobQueue(env, cancellation, slots);
     const events = new JobEvents(env);
     const queries = { run: behaviour } as unknown as QueryJobRunner;
     const connections = { create } as unknown as ConnectionJobRunner;
@@ -81,6 +83,7 @@ describe('job lifecycle through BullMQ', () => {
         const running = await startJobWorker({
           env,
           processor,
+          slots,
           hooks: quiet,
           concurrency: 1,
           ...options,
@@ -245,6 +248,52 @@ describe('job lifecycle through BullMQ', () => {
       await inspect.close();
       await inspectConnection.quit();
     }
+  });
+
+  it('refuses a fourth unfinished job for one user, and frees the slot when a job ends', async () => {
+    const life = setup(async () => ({ ok: true, result: 1 }));
+    const jobs = [await life.submit(), await life.submit(), await life.submit()];
+    await expect(life.submit()).rejects.toMatchObject({ code: 'TOO_MANY_JOBS' });
+    await life.worker();
+    await life.finished(jobs[0]!);
+    // The worker releases the slot as the job completes.
+    let next: JobView | undefined;
+    for (let tries = 0; !next && tries < 40; tries++) {
+      next = await life.submit().catch(() => undefined);
+      if (!next) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
+    expect(next?.state).toBe('queued');
+  });
+
+  it("runs a user's first job ahead of another user's second and third", async () => {
+    const order: string[] = [];
+    const life = setup(async (data) => {
+      order.push(data.sql);
+      return { ok: true, result: 1 };
+    });
+    const heavy = randomUUID();
+    const add = (owner: string, sql: string) =>
+      life.queue.add('query.run', { userId: owner, connectionId: randomUUID(), sql });
+    const queued = [
+      await add(heavy, 'heavy 1'),
+      await add(heavy, 'heavy 2'),
+      await add(heavy, 'heavy 3'),
+    ];
+    const light = await life.submit('light 1');
+    await life.worker();
+    await life.finished(light);
+    for (const job of queued) {
+      for (;;) {
+        const view = await life.queue.get(job.id, heavy);
+        if (view.state === 'succeeded') {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
+    expect(order).toEqual(['heavy 1', 'light 1', 'heavy 2', 'heavy 3']);
   });
 
   it("runs a job again on another worker when the first one's process dies mid-job", async () => {

@@ -3,8 +3,9 @@ import { Inject, Injectable, type OnModuleDestroy } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import { APP_ENV, type CoreEnv } from '../config/env';
-import { INTERNAL_ERROR_MESSAGE, notFound } from '../errors/app.exception';
+import { AppException, INTERNAL_ERROR_MESSAGE, notFound } from '../errors/app.exception';
 import { JobCancellation } from './job-cancellation';
+import { UserJobSlots } from './user-job-slots';
 import {
   JOB_KINDS,
   type JobDataByKind,
@@ -29,6 +30,7 @@ export class JobQueue implements OnModuleDestroy {
   constructor(
     @Inject(APP_ENV) private readonly env: CoreEnv,
     private readonly cancellation: JobCancellation,
+    private readonly slots: UserJobSlots,
   ) {
     // Fail fast instead of queueing commands while Redis is down, so an HTTP request that
     // adds a job gets an error rather than hanging.
@@ -44,14 +46,36 @@ export class JobQueue implements OnModuleDestroy {
     kind: Kind,
     data: JobDataByKind[Kind],
   ): Promise<JobView> {
-    const job = await this.queue.add(kind, data, {
-      jobId: randomUUID(),
-      // Only a crash is retried: an expected failure completes with an error outcome.
-      attempts: this.env.JOB_ATTEMPTS,
-      backoff: { type: 'exponential', delay: 1000 },
-      removeOnComplete: { age: this.env.JOB_RESULT_TTL_SECONDS },
-      removeOnFail: { age: this.env.JOB_FAILED_RETENTION_SECONDS },
-    });
+    const jobId = randomUUID();
+    // The slot caps the user's unfinished jobs. Its number becomes the priority, so a
+    // user's first job goes ahead of another user's second or third (lower runs first).
+    const position = await this.slots.claim(
+      data.userId,
+      jobId,
+      this.env.JOB_MAX_ACTIVE_PER_USER,
+    );
+    if (position === 0) {
+      throw new AppException(
+        'TOO_MANY_JOBS',
+        `You already have ${this.env.JOB_MAX_ACTIVE_PER_USER} jobs waiting or running. Wait for one to finish, or cancel one.`,
+        429,
+      );
+    }
+    const job = await this.queue
+      .add(kind, data, {
+        jobId,
+        priority: position,
+        // Only a crash is retried: an expected failure completes with an error outcome.
+        attempts: this.env.JOB_ATTEMPTS,
+        backoff: { type: 'exponential', delay: 1000 },
+        removeOnComplete: { age: this.env.JOB_RESULT_TTL_SECONDS },
+        removeOnFail: { age: this.env.JOB_FAILED_RETENTION_SECONDS },
+      })
+      .catch(async (error: unknown) => {
+        // Not queued, so the slot must not wait out its lease.
+        await this.slots.release(data.userId, jobId).catch(() => undefined);
+        throw error;
+      });
     return jobView(job, 'waiting');
   }
 

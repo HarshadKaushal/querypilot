@@ -23,6 +23,7 @@ export const ERROR_CODES = [
   'QUERY_FAILED',
   'SQL_REJECTED',
   'JOB_CANCELLED',
+  'TOO_MANY_JOBS',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

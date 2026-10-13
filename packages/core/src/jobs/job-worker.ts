@@ -4,6 +4,7 @@ import type { CoreEnv } from '../config/env';
 import { CANCEL_CHANNEL } from './job-cancellation';
 import type { JobProcessor } from './job-processor';
 import { withoutCredentials, type JobOutcome } from './job.types';
+import type { UserJobSlots } from './user-job-slots';
 
 /** What the worker reports. The app turns these into log lines. */
 export interface JobWorkerHooks {
@@ -33,6 +34,8 @@ export interface RunningJobWorker {
 export async function startJobWorker(options: {
   env: Pick<CoreEnv, 'REDIS_URL' | 'JOB_QUEUE_NAME'>;
   processor: JobProcessor;
+  /** Each job's user slot is released here when the job ends. */
+  slots: UserJobSlots;
   hooks: JobWorkerHooks;
   concurrency: number;
   /** How long a job's lock lasts without renewal; a dead worker's job stalls after it. */
@@ -40,7 +43,15 @@ export async function startJobWorker(options: {
   /** How often this worker looks for stalled jobs. */
   stalledIntervalMs?: number;
 }): Promise<RunningJobWorker> {
-  const { env, processor, hooks } = options;
+  const { env, processor, slots, hooks } = options;
+  const release = (job: Job): void => {
+    const userId = (job.data as { userId?: unknown }).userId;
+    if (typeof userId === 'string' && job.id) {
+      slots
+        .release(userId, job.id)
+        .catch((error: unknown) => hooks.sideError(job.id, error));
+    }
+  };
   // Blocking commands must retry forever (BullMQ requires this on worker connections).
   const connection = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
   const subscriber = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
@@ -61,12 +72,14 @@ export async function startJobWorker(options: {
         : {}),
     },
   );
-  worker.on('completed', (job, outcome) =>
-    hooks.finished(job, outcome as JobOutcome<unknown>),
-  );
+  worker.on('completed', (job, outcome) => {
+    release(job);
+    hooks.finished(job, outcome as JobOutcome<unknown>);
+  });
   worker.on('failed', (job, error) => {
     const givenUp = !!job && job.attemptsMade >= (job.opts.attempts ?? 1);
     if (job && givenUp) {
+      release(job);
       const kept = withoutCredentials(job.data);
       if (kept) {
         job

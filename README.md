@@ -2,7 +2,7 @@
 
 Middleware that lets a signed-in user connect their own PostgreSQL database and ask questions in plain English. The platform proposes SQL, checks it, runs it read-only, and returns a table, a chart, the SQL, and a short summary.
 
-This repository is in **Phase 6 (queue and worker)**: queries run as worker jobs. The ask pipeline and the web UI are not built yet. See [docs/features.md](docs/features.md).
+This repository has finished **Phase 6 (queue, worker, and progress streaming)**: everything that opens a user database runs as a worker job you can follow live or cancel. The ask pipeline (Phase 7) and the web UI are not built yet. See [docs/features.md](docs/features.md).
 
 ## Prerequisites
 
@@ -208,6 +208,8 @@ Follow a job live instead of polling. The stream sends a `job` event on every ch
 ```powershell
 curl.exe -N "http://localhost:3000/v1/jobs/$($job.id)/events" -H "Authorization: Bearer $($login.accessToken)"
 ```
+
+A user may have 3 jobs waiting or running at once (`JOB_MAX_ACTIVE_PER_USER`); a fourth is refused with HTTP 429 `TOO_MANY_JOBS`. A crashed job is retried up to 3 times.
 
 Cancel a job that has not finished. It ends as `cancelled`:
 

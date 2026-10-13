@@ -1,14 +1,14 @@
 # Feature Documentation
 
-Status of Ask Your Database against the production blueprint. Phase 5 (the executor) is the current milestone.
+Status of Ask Your Database against the production blueprint. Phase 6 (queue, worker, and progress streaming) is complete; Phase 7 (the LLM and the ask pipeline) is next.
 
 ## Completed
 
-- npm workspace with `apps/api`, `apps/worker`, `packages/shared`, `packages/database`, `packages/crypto`, and `packages/ssrf-guard`.
+- npm workspace with `apps/api`, `apps/worker`, `packages/core`, `packages/shared`, `packages/database`, `packages/crypto`, `packages/ssrf-guard`, and `packages/sql-guard`.
 - ESLint, Prettier, and a GitHub Actions workflow that runs lint, format check, unit tests, and build.
 - Docker Compose for the application Postgres, Redis (AOF enabled), and a seeded sample Postgres.
 - Docker images and process entrypoints for the API and the worker.
-- Environment validation for the API (including the master-key ring and `SSRF_ALLOW_PRIVATE`) and the worker (`NODE_ENV`, `LOG_LEVEL`, `REDIS_URL`). `SSRF_ALLOW_PRIVATE` cannot be true in production.
+- Environment validation for the API (including the master-key ring and `SSRF_ALLOW_PRIVATE`) and the worker (the shared core settings, including the database, Redis, the master-key ring, and the job settings). `SSRF_ALLOW_PRIVATE` cannot be true in production.
 - Structured JSON logs with redaction of credential-like fields and database URLs inside error messages.
 - `x-request-id` on responses, reused when the client sends a safe value.
 - Error envelope for 404, application errors, and unexpected failures. Unexpected messages are replaced with a fixed sentence.
@@ -45,11 +45,12 @@ Status of Ask Your Database against the production blueprint. Phase 5 (the execu
 - `GET /v1/jobs/:id/events` streams a job to its owner as Server-Sent Events: the full view on every change, with the current stage (`checking_sql`, `connecting`, `running_query`, `checking_access`, `reading_schema`), ending when the job finishes. Authentication is the `Authorization` header.
 - `POST /v1/jobs/:id/cancel` stops a waiting job before it runs and a running one at its next step or batch of rows; the job ends `cancelled`. A cancelled create or update stores nothing.
 - A crashed job, or one whose worker died, is retried up to 3 times with backoff; one with no attempts left is kept 7 days for inspection, without its credentials. Creating a connection is safe to retry.
+- A user may have 3 unfinished jobs at once; a fourth is refused with `TOO_MANY_JOBS` (429). Each user's first job runs ahead of anyone's second, so one heavy user cannot starve the others.
 - Queries run as worker jobs (ADR 0011). `POST /v1/connections/:id/queries` checks ownership and the SQL's size, queues a BullMQ job, and answers 202 with the job. The worker runs the guard and the executor. `GET /v1/jobs/:id` shows the owner `queued`, `running`, `succeeded` with the rows, or `failed` with a stable code and a fixed message; anyone else gets 404. Results stay in Redis for 15 minutes.
 
 ## Partial
 
-- **Worker.** It takes every job that opens a user database from the queue (query, connection create, update, and test, schema refresh) and runs them, five at a time per process. It reports progress, honours cancellation, and retries crashes. There is no fair scheduling between users yet.
+- **Worker.** It takes every job that opens a user database from the queue (query, connection create, update, and test, schema refresh) and runs them, five at a time per process. It reports progress, honours cancellation, retries crashes, and keeps each user to their share of the queue.
 - **Shared package.** It holds the error envelope, request id, and health report types. It does not yet hold API DTOs for questions, connections, or history.
 - **Observability.** Logs are structured. There are no traces, metrics, dashboards, or alerts.
 - **API surface.** Health stays unversioned. Auth and the current user live under `/v1`. There is still no Swagger document.
@@ -65,7 +66,6 @@ Locked choices that are not implemented:
 - When a query returns `QUERY_SCHEMA_CHANGED`, refresh the schema and retry once against the new snapshot (Phase 7). New objects stay hidden until allowed, so this cannot widen access.
 - Show how old the schema snapshot is, or refresh it on a schedule (Phase 8 or 9).
 - Gemini as the platform LLM, behind a provider interface, with a second call for the summary.
-- Fair scheduling between users and per-user job caps.
 - History and quotas. Login rate limits are part of the quota phase.
 - React UI (sign-in, connect, ask, history, usage, settings) and every result state.
 - Evaluation dataset, load tests, and production deployment (NAT gateway, fixed egress IP, secrets manager).

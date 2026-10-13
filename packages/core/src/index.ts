@@ -17,6 +17,7 @@ export * from './jobs/job-worker';
 export * from './jobs/job.types';
 export * from './jobs/jobs.module';
 export * from './jobs/query-job.runner';
+export * from './jobs/user-job-slots';
 export * from './logging/logger.module';
 export * from './logging/safe-error';
 export * from './prisma/prisma.module';

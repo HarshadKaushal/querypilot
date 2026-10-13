@@ -4,6 +4,9 @@ import {
   ConnectionPools,
   ConnectionService,
   JobCancellation,
+  type RunningJobWorker,
+  startJobWorker,
+  UserJobSlots,
   JobProcessor,
   JobQueue,
   type JobView,
@@ -18,8 +21,6 @@ import {
   SqlGuardService,
   UserDatabaseProbe,
 } from '@ayd/core';
-import { Worker } from 'bullmq';
-import Redis from 'ioredis';
 import type { Logger } from 'nestjs-pino';
 import { loadEnv } from '../../src/config/env';
 import {
@@ -65,9 +66,9 @@ describe('query jobs through BullMQ', () => {
     {} as ConnectionJobRunner,
     cancellation,
   );
-  const queue = new JobQueue(env, cancellation);
-  const workerConnection = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
-  let worker: Worker;
+  const slots = new UserJobSlots(redis);
+  const queue = new JobQueue(env, cancellation, slots);
+  let worker: RunningJobWorker;
   const userId = randomUUID();
   const otherUserId = randomUUID();
   let db: ScratchDatabase;
@@ -126,18 +127,22 @@ describe('query jobs through BullMQ', () => {
     );
     connectionId = created.id;
     await schemas.refresh(userId, connectionId, null);
-    worker = new Worker(
-      env.JOB_QUEUE_NAME,
-      (job) => processor.handle(job, { onSideError: () => undefined }),
-      {
-        connection: workerConnection,
+    worker = await startJobWorker({
+      env,
+      processor,
+      slots,
+      concurrency: 1,
+      hooks: {
+        finished: () => undefined,
+        crashed: () => undefined,
+        sideError: () => undefined,
+        error: () => undefined,
       },
-    );
+    });
   });
 
   afterAll(async () => {
     await worker.close();
-    await workerConnection.quit();
     await queue.onModuleDestroy();
     await pools.onModuleDestroy();
     await redis.onModuleDestroy();

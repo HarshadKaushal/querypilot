@@ -1,5 +1,6 @@
 import {
   ADDRESS_RESOLVER,
+  AppException,
   CONNECTION_REPOSITORY,
   ConnectionService,
   JobEvents,
@@ -162,6 +163,26 @@ describe('job routes', () => {
     expect(theirs.status).toBe(404);
     expect(theirs.body.error).toMatchObject({
       code: 'NOT_FOUND',
+      requestId: 'req-jobs-01',
+    });
+  });
+
+  it('answers 429 with the error envelope when the user already has too many jobs', async () => {
+    const { token, userId } = await signedIn();
+    const id = await connection(userId);
+    jobs.add.mockRejectedValueOnce(
+      new AppException(
+        'TOO_MANY_JOBS',
+        'You already have 3 jobs waiting or running. Wait for one to finish, or cancel one.',
+        429,
+      ),
+    );
+    const response = await submit(token, id, { sql: 'SELECT 1' });
+    expect(response.status).toBe(429);
+    expect(response.body.error).toEqual({
+      code: 'TOO_MANY_JOBS',
+      message:
+        'You already have 3 jobs waiting or running. Wait for one to finish, or cancel one.',
       requestId: 'req-jobs-01',
     });
   });
