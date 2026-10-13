@@ -3,6 +3,7 @@ import {
   type ConnectionJobRunner,
   ConnectionPools,
   ConnectionService,
+  JobCancellation,
   JobProcessor,
   JobQueue,
   type JobView,
@@ -54,6 +55,7 @@ describe('query jobs through BullMQ', () => {
     probe,
   );
   const pools = new ConnectionPools(env, logger, plainPools);
+  const cancellation = new JobCancellation(redis);
   const processor = new JobProcessor(
     new QueryJobRunner(
       new SqlGuardService(schemas, env),
@@ -61,8 +63,9 @@ describe('query jobs through BullMQ', () => {
       new QueryExecutor(env, pools, new RedisCoordination(redis), logger),
     ),
     {} as ConnectionJobRunner,
+    cancellation,
   );
-  const queue = new JobQueue(env);
+  const queue = new JobQueue(env, cancellation);
   const workerConnection = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
   let worker: Worker;
   const userId = randomUUID();
@@ -125,7 +128,7 @@ describe('query jobs through BullMQ', () => {
     await schemas.refresh(userId, connectionId, null);
     worker = new Worker(
       env.JOB_QUEUE_NAME,
-      (job) => processor.handle(job, () => undefined),
+      (job) => processor.handle(job, { onSideError: () => undefined }),
       {
         connection: workerConnection,
       },

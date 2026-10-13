@@ -22,6 +22,7 @@ export const ERROR_CODES = [
   'QUERY_SCHEMA_CHANGED',
   'QUERY_FAILED',
   'SQL_REJECTED',
+  'JOB_CANCELLED',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

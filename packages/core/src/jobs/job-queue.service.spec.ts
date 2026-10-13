@@ -69,4 +69,32 @@ describe('jobView', () => {
       AppException,
     );
   });
+
+  it('shows the stage of a running job once the runner has reported one', () => {
+    expect(
+      jobView({ ...job, progress: { stage: 'running_query' } }, 'active'),
+    ).toMatchObject({
+      state: 'running',
+      stage: 'running_query',
+    });
+    expect(jobView({ ...job, progress: 0 }, 'active').stage).toBeUndefined();
+  });
+
+  it('shows a job its owner cancelled as cancelled, not failed', () => {
+    const error = {
+      code: 'JOB_CANCELLED',
+      message: 'The job was cancelled.',
+      retryable: true,
+    };
+    expect(
+      jobView({ ...job, returnvalue: { ok: false, error } }, 'completed'),
+    ).toMatchObject({
+      state: 'cancelled',
+      error,
+    });
+  });
+
+  it('shows a job waiting to be retried after a crash as queued', () => {
+    expect(jobView(job, 'delayed').state).toBe('queued');
+  });
 });

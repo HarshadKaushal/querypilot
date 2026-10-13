@@ -48,6 +48,15 @@ export const coreEnvFields = {
     .default('ayd-jobs'),
   // How long a finished job and its result stay readable, in seconds.
   JOB_RESULT_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(900),
+  // Runs of a job that crashed (not one that failed with a code) before it is given up.
+  JOB_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(3),
+  // How long a job that was given up stays in the failed set for inspection, in seconds.
+  JOB_FAILED_RETENTION_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(3600)
+    .max(30 * 86400)
+    .default(7 * 86400),
   // Most rows one answer may return. The SQL guard adds or lowers LIMIT to this plus one.
   SQL_ROW_CAP: z.coerce.number().int().min(1).max(10000).default(1000),
   // Executor limits for queries on user databases (ADR 0010).

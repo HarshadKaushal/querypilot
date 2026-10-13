@@ -3,6 +3,7 @@ import { AppException, notFound } from '../errors/app.exception';
 import type { SqlGuardService } from '../sql-guard/sql-guard.service';
 import type { QueryExecutor } from '../user-database/query-executor';
 import type { ConnectionJobRunner } from './connection-job.runner';
+import type { JobCancellation } from './job-cancellation';
 import { JobProcessor } from './job-processor';
 import { QueryJobRunner } from './query-job.runner';
 
@@ -135,7 +136,11 @@ describe('QueryJobRunner', () => {
 describe('JobProcessor', () => {
   it('sends query.run to the query runner and refuses unknown kinds', async () => {
     const { run } = runner({});
-    const processor = new JobProcessor(run, {} as ConnectionJobRunner);
+    const processor = new JobProcessor(
+      run,
+      {} as ConnectionJobRunner,
+      {} as JobCancellation,
+    );
     await expect(processor.process('query.run', data)).resolves.toMatchObject({
       ok: true,
     });

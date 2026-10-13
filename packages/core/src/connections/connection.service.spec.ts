@@ -356,4 +356,38 @@ describe('ConnectionService halves (API prepares, worker checks)', () => {
     const { openCredentials } = await import('@ayd/crypto');
     expect(openCredentials(repo.rows[0]!, ring).password).toBe(PASSWORD);
   });
+
+  it('returns the stored connection when a retried create finds it, without checking again', async () => {
+    const { connections, repo, probe } = service();
+    const pending = connections.prepareCreate(input);
+    const first = await connections.createChecked('user-1', pending, null);
+    (probe.test as jest.Mock).mockClear();
+    const again = await connections.createChecked('user-1', pending, null);
+    expect(again).toEqual(first);
+    expect(repo.rows).toHaveLength(1);
+    expect(probe.test).not.toHaveBeenCalled();
+    expect(
+      repo.audits.filter((row) => row.eventType === 'connection.created'),
+    ).toHaveLength(1);
+  });
+
+  it('stores nothing when cancelled after the check passed', async () => {
+    const { connections, repo } = service();
+    const controller = new AbortController();
+    (
+      connections as unknown as { probe: { test: jest.Mock } }
+    ).probe.test.mockImplementation(async () => {
+      controller.abort('cancelled by its owner');
+      return { ok: true };
+    });
+    await expect(
+      connections.createChecked(
+        'user-1',
+        connections.prepareCreate(input),
+        null,
+        controller.signal,
+      ),
+    ).rejects.toBe('cancelled by its owner');
+    expect(repo.rows).toHaveLength(0);
+  });
 });

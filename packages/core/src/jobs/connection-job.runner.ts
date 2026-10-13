@@ -3,11 +3,13 @@ import type { PublicConnection } from '../connections/connection.repository';
 import { ConnectionService } from '../connections/connection.service';
 import { AppException } from '../errors/app.exception';
 import { SchemaService, type RefreshSummary } from '../schema/schema.service';
-import type {
-  ConnectionCreateJobData,
-  ConnectionJobData,
-  ConnectionUpdateJobData,
-  JobOutcome,
+import {
+  NO_JOB_CONTEXT,
+  type ConnectionCreateJobData,
+  type ConnectionJobData,
+  type ConnectionUpdateJobData,
+  type JobContext,
+  type JobOutcome,
 } from './job.types';
 import { fromException } from './query-job.runner';
 
@@ -22,30 +24,47 @@ export class ConnectionJobRunner {
     private readonly schemas: SchemaService,
   ) {}
 
-  create(data: ConnectionCreateJobData): Promise<JobOutcome<PublicConnection>> {
+  async create(
+    data: ConnectionCreateJobData,
+    context: JobContext = NO_JOB_CONTEXT,
+  ): Promise<JobOutcome<PublicConnection>> {
+    await context.report('checking_access');
     return outcomeOf(() =>
-      this.connections.createChecked(data.userId, data.pending, data.ip),
+      this.connections.createChecked(data.userId, data.pending, data.ip, context.signal),
     );
   }
 
-  update(data: ConnectionUpdateJobData): Promise<JobOutcome<PublicConnection>> {
+  async update(
+    data: ConnectionUpdateJobData,
+    context: JobContext = NO_JOB_CONTEXT,
+  ): Promise<JobOutcome<PublicConnection>> {
+    await context.report('checking_access');
     return outcomeOf(() =>
       this.connections.updateChecked(
         data.userId,
         data.connectionId,
         data.pending,
         data.ip,
+        context.signal,
       ),
     );
   }
 
-  test(data: ConnectionJobData): Promise<JobOutcome<PublicConnection>> {
+  async test(
+    data: ConnectionJobData,
+    context: JobContext = NO_JOB_CONTEXT,
+  ): Promise<JobOutcome<PublicConnection>> {
+    await context.report('checking_access');
     return outcomeOf(() =>
       this.connections.test(data.userId, data.connectionId, data.ip),
     );
   }
 
-  refresh(data: ConnectionJobData): Promise<JobOutcome<RefreshSummary>> {
+  async refresh(
+    data: ConnectionJobData,
+    context: JobContext = NO_JOB_CONTEXT,
+  ): Promise<JobOutcome<RefreshSummary>> {
+    await context.report('reading_schema');
     return outcomeOf(() => this.schemas.refresh(data.userId, data.connectionId, data.ip));
   }
 }

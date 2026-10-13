@@ -1,5 +1,7 @@
 import {
   ConnectionJobRunner,
+  JobCancellation,
+  JobEvents,
   ConnectionService,
   JobProcessor,
   JobQueue,
@@ -25,6 +27,13 @@ export function inlineJobProviders(executor: Partial<QueryExecutor> = {}): Provi
     ConnectionJobRunner,
     JobProcessor,
     { provide: JobQueue, useClass: InlineJobQueue },
+    // Inline jobs finish before add() returns, so nothing is ever waiting to be cancelled
+    // or followed.
+    {
+      provide: JobCancellation,
+      useValue: { requested: async () => false, request: async () => undefined },
+    },
+    { provide: JobEvents, useValue: { subscribe: async () => () => undefined } },
     {
       provide: QueryExecutor,
       useValue: {

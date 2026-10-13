@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
   ConnectionJobRunner,
   ConnectionService,
+  JobCancellation,
   JobProcessor,
   JobQueue,
   type JobView,
@@ -9,6 +10,7 @@ import {
   PrismaSchemaRepository,
   PrismaService,
   type QueryJobRunner,
+  RedisService,
   SchemaService,
   UserDatabaseProbe,
 } from '@ayd/core';
@@ -46,11 +48,14 @@ describe('connection and schema jobs through BullMQ', () => {
     connections,
     probe,
   );
+  const redis = new RedisService(env);
+  const cancellation = new JobCancellation(redis);
   const processor = new JobProcessor(
     {} as QueryJobRunner,
     new ConnectionJobRunner(connections, schemas),
+    cancellation,
   );
-  const queue = new JobQueue(env);
+  const queue = new JobQueue(env, cancellation);
   const inspectConnection = new Redis(env.REDIS_URL);
   const inspect = new Queue(env.JOB_QUEUE_NAME, { connection: inspectConnection });
   const workerConnection = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
@@ -110,7 +115,7 @@ describe('connection and schema jobs through BullMQ', () => {
     });
     worker = new Worker(
       env.JOB_QUEUE_NAME,
-      (job) => processor.handle(job, () => undefined),
+      (job) => processor.handle(job, { onSideError: () => undefined }),
       {
         connection: workerConnection,
       },
@@ -123,6 +128,7 @@ describe('connection and schema jobs through BullMQ', () => {
     await inspect.close();
     await inspectConnection.quit();
     await queue.onModuleDestroy();
+    await redis.onModuleDestroy();
     await prisma.user.deleteMany({ where: { id: userId } });
     await prisma.$disconnect();
     await db.drop();

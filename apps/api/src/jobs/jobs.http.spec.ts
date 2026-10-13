@@ -2,6 +2,7 @@ import {
   ADDRESS_RESOLVER,
   CONNECTION_REPOSITORY,
   ConnectionService,
+  JobEvents,
   JobQueue,
   notFound,
   UserDatabaseProbe,
@@ -30,7 +31,7 @@ function queued(kind: string): JobView {
 describe('job routes', () => {
   let app: INestApplication;
   const connections = new MemoryConnectionRepository();
-  const jobs = { add: jest.fn(), get: jest.fn() };
+  const jobs = { add: jest.fn(), get: jest.fn(), cancel: jest.fn() };
 
   beforeEach(async () => {
     connections.rows.length = 0;
@@ -44,6 +45,7 @@ describe('job routes', () => {
         { provide: ADDRESS_RESOLVER, useValue: { lookup: async () => ['1.1.1.1'] } },
         { provide: UserDatabaseProbe, useValue: { test: async () => ({ ok: true }) } },
         { provide: JobQueue, useValue: jobs },
+        { provide: JobEvents, useValue: { subscribe: async () => () => undefined } },
       ],
       requestId: 'req-jobs-01',
     });

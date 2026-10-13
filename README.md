@@ -201,7 +201,19 @@ $job = Invoke-RestMethod "http://localhost:3000/v1/connections/$($conn.id)/queri
 Invoke-RestMethod "http://localhost:3000/v1/jobs/$($job.id)" -Headers @{ Authorization = "Bearer $($login.accessToken)" }
 ```
 
-`state` goes from `queued` to `running` to `succeeded`, with `result.rows`, or `failed`, with `error.code` and `error.message`. Rejected SQL fails with `SQL_REJECTED` and the guard's reason.
+`state` goes from `queued` to `running` (with a `stage`) to `succeeded`, with `result.rows`, or `failed`, with `error.code` and `error.message`. Rejected SQL fails with `SQL_REJECTED` and the guard's reason.
+
+Follow a job live instead of polling. The stream sends a `job` event on every change and ends when the job does:
+
+```powershell
+curl.exe -N "http://localhost:3000/v1/jobs/$($job.id)/events" -H "Authorization: Bearer $($login.accessToken)"
+```
+
+Cancel a job that has not finished. It ends as `cancelled`:
+
+```powershell
+Invoke-RestMethod "http://localhost:3000/v1/jobs/$($job.id)/cancel" -Method Post -Headers $auth
+```
 
 ## Run a query end to end, without the queue
 

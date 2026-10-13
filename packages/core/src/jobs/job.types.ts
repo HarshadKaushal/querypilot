@@ -1,5 +1,5 @@
 import type { ErrorCode } from '@ayd/shared';
-import type { PendingConnection } from '../connections/connection.service';
+import type { PendingConnection, PendingCreate } from '../connections/connection.service';
 import type { ExecutionSuccess } from '../user-database/query-executor';
 
 export interface QueryJobData {
@@ -21,12 +21,15 @@ export interface ConnectionCreateJobData {
   userId: string;
   ip: string | null;
   /** Credentials stay sealed in the payload; the worker opens them in memory. */
-  pending: PendingConnection;
+  pending: PendingCreate;
 }
 
 /** A change of host, database, login, or SSL mode, saved only if the check passes. */
-export interface ConnectionUpdateJobData extends ConnectionCreateJobData {
+export interface ConnectionUpdateJobData {
+  userId: string;
   connectionId: string;
+  ip: string | null;
+  pending: PendingConnection;
 }
 
 /** Payload per job kind. Every payload names its owner, which reads check. */
@@ -70,13 +73,42 @@ export interface QueryJobResult extends Omit<ExecutionSuccess, 'ok'> {
   schemaVersion: number;
 }
 
-export type JobState = 'queued' | 'running' | 'succeeded' | 'failed';
+export type JobState = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+
+/** Where a running job is, for a progress display. */
+export type JobStage =
+  'checking_sql' | 'connecting' | 'running_query' | 'checking_access' | 'reading_schema';
+
+/** What a runner gets besides its payload. */
+export interface JobContext {
+  /** Records the stage; a failure to record it never fails the job. */
+  report(stage: JobStage): Promise<void>;
+  /** Aborted when the owner cancels the job. */
+  signal?: AbortSignal;
+}
+
+/** A context that reports nowhere and is never cancelled, for scripts and tests. */
+export const NO_JOB_CONTEXT: JobContext = { report: async () => undefined };
+
+export const CANCELLED_MESSAGE = 'The job was cancelled.';
+
+/** The outcome of a job its owner cancelled. Never retried. */
+export function cancelledOutcome(): { ok: false; error: JobError } {
+  return {
+    ok: false,
+    error: { code: 'JOB_CANCELLED', message: CANCELLED_MESSAGE, retryable: true },
+  };
+}
 
 /** A job as its owner sees it. */
 export interface JobView {
   id: string;
   kind: JobKind;
   state: JobState;
+  /** While running: the current stage, once the runner has reported one. */
+  stage?: JobStage;
+  /** True once the owner asked to cancel a job that has not finished. */
+  cancelRequested?: boolean;
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;

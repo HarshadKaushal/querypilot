@@ -1,23 +1,26 @@
-import { APP_ENV, JobProcessor, safeErrorDetail } from '@ayd/core';
+import {
+  APP_ENV,
+  JobProcessor,
+  safeErrorDetail,
+  startJobWorker,
+  type RunningJobWorker,
+} from '@ayd/core';
 import {
   Inject,
   Injectable,
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from '@nestjs/common';
-import { Worker } from 'bullmq';
-import Redis from 'ioredis';
 import { PinoLogger } from 'nestjs-pino';
 import type { WorkerEnv } from '../config/env';
 
 /**
- * Takes jobs from the queue and hands each to the processor. Logs carry the job id, kind,
- * and outcome code, never the SQL or any result rows.
+ * Runs core's job worker in this process and logs what it reports. Logs carry the job id,
+ * kind, and outcome code, never the SQL or any result rows.
  */
 @Injectable()
 export class JobWorker implements OnApplicationBootstrap, OnApplicationShutdown {
-  private connection?: Redis;
-  private worker?: Worker;
+  private running?: RunningJobWorker;
 
   constructor(
     @Inject(APP_ENV) private readonly env: WorkerEnv,
@@ -26,49 +29,48 @@ export class JobWorker implements OnApplicationBootstrap, OnApplicationShutdown 
     @Inject(PinoLogger) private readonly logger: PinoLogger,
   ) {}
 
-  onApplicationBootstrap(): void {
-    // A worker's blocking connection must retry forever (BullMQ requires this setting).
-    this.connection = new Redis(this.env.REDIS_URL, { maxRetriesPerRequest: null });
-    this.worker = new Worker(
-      this.env.JOB_QUEUE_NAME,
-      (job) =>
-        this.processor.handle(job, (error) =>
-          this.logger.warn(
-            { jobId: job.id, error: safeErrorDetail(error) },
-            'could not drop sealed credentials from a finished job',
+  async onApplicationBootstrap(): Promise<void> {
+    this.running = await startJobWorker({
+      env: this.env,
+      processor: this.processor,
+      concurrency: this.env.WORKER_CONCURRENCY,
+      hooks: {
+        finished: (job, outcome) =>
+          this.logger.info(
+            {
+              jobId: job.id,
+              kind: job.name,
+              ok: outcome.ok,
+              code: outcome.ok ? undefined : outcome.error.code,
+              ms: (job.finishedOn ?? Date.now()) - (job.processedOn ?? job.timestamp),
+            },
+            'job finished',
           ),
-        ),
-      { connection: this.connection, concurrency: this.env.WORKER_CONCURRENCY },
-    );
-    this.worker.on(
-      'completed',
-      (job, outcome: { ok: boolean; error?: { code: string } }) => {
-        this.logger.info(
-          {
-            jobId: job.id,
-            kind: job.name,
-            ok: outcome.ok,
-            code: outcome.error?.code,
-            ms: (job.finishedOn ?? Date.now()) - (job.processedOn ?? job.timestamp),
-          },
-          'job finished',
-        );
+        crashed: (job, error, givenUp) =>
+          this.logger.error(
+            {
+              jobId: job?.id,
+              kind: job?.name,
+              attempt: job?.attemptsMade,
+              givenUp,
+              error: safeErrorDetail(error),
+            },
+            givenUp
+              ? 'job given up after its last attempt'
+              : 'job crashed; it will be retried',
+          ),
+        sideError: (jobId, error) =>
+          this.logger.warn(
+            { jobId, error: safeErrorDetail(error) },
+            'could not save job progress or clean its payload',
+          ),
+        error: (error) =>
+          this.logger.error({ error: safeErrorDetail(error) }, 'job worker error'),
       },
-    );
-    this.worker.on('failed', (job, error) => {
-      this.logger.error(
-        { jobId: job?.id, kind: job?.name, error: safeErrorDetail(error) },
-        'job failed unexpectedly',
-      );
-    });
-    this.worker.on('error', (error) => {
-      this.logger.error({ error: safeErrorDetail(error) }, 'job worker error');
     });
   }
 
-  /** Stops taking jobs and waits for the running ones to finish. */
   async onApplicationShutdown(): Promise<void> {
-    await this.worker?.close();
-    await this.connection?.quit().catch(() => this.connection?.disconnect());
+    await this.running?.close();
   }
 }

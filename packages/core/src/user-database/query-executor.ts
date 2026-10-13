@@ -26,6 +26,12 @@ export interface ExecutionRequest {
   /** SQL the guard accepted. The executor's own limits apply whatever it is. */
   sql: string;
   rowCap?: number;
+  /**
+   * Aborted when the job is cancelled. The executor stops before connecting, while it
+   * waits for a slot, and between batches of rows, and then throws the abort reason. A
+   * statement already running finishes or hits the statement timeout first.
+   */
+  signal?: AbortSignal;
 }
 
 export interface ExecutionSuccess {
@@ -61,6 +67,7 @@ export class QueryExecutor {
 
   async run(request: ExecutionRequest): Promise<ExecutionResult> {
     const { connectionId } = request;
+    request.signal?.throwIfAborted();
     const paused = await this.coordination.pausedFor(breakerKey(connectionId));
     if (paused > 0) {
       return failure(
@@ -69,7 +76,7 @@ export class QueryExecutor {
       );
     }
     const token = randomUUID();
-    if (!(await this.acquire(connectionId, token))) {
+    if (!(await this.acquire(connectionId, token, request.signal))) {
       return failure(
         'CONNECTION_BUSY',
         'This database is already running as many questions as allowed. Try again shortly.',
@@ -99,11 +106,16 @@ export class QueryExecutor {
 
   // Waits for a slot, backing off, until EXECUTOR_QUEUE_WAIT_MS. The lease outlives the
   // statement timeout, so a crashed holder frees its slot on its own.
-  private async acquire(connectionId: string, token: string): Promise<boolean> {
+  private async acquire(
+    connectionId: string,
+    token: string,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
     const leaseMs = this.env.EXECUTOR_STATEMENT_TIMEOUT_MS + 10000;
     const deadline = Date.now() + this.env.EXECUTOR_QUEUE_WAIT_MS;
     let delay = 25;
     for (;;) {
+      signal?.throwIfAborted();
       const acquired = await this.coordination.tryAcquire(
         semaphoreKey(connectionId),
         this.env.EXECUTOR_MAX_CONCURRENT_QUERIES,
@@ -142,6 +154,7 @@ export class QueryExecutor {
 
     let healthy = true;
     try {
+      request.signal?.throwIfAborted();
       await client.query('BEGIN READ ONLY');
       await client.query(`SET LOCAL statement_timeout = ${timeoutMs}`);
       // Approved function, type, and operator names then resolve only in pg_catalog.
@@ -158,6 +171,11 @@ export class QueryExecutor {
       let bytes = 0;
       let truncated: ExecutionSuccess['truncated'] = false;
       for (;;) {
+        if (request.signal?.aborted) {
+          // The cursor and transaction are left open, so the socket is discarded.
+          healthy = false;
+          request.signal.throwIfAborted();
+        }
         if (Date.now() - started > timeoutMs) {
           healthy = false;
           return classifyQueryError({ code: '57014' }, timeoutMs);
@@ -203,6 +221,9 @@ export class QueryExecutor {
       };
     } catch (error) {
       healthy = false;
+      if (request.signal?.aborted) {
+        throw error;
+      }
       this.logger.warn(safeErrorDetail(error), 'user database query failed');
       return classifyQueryError(error, timeoutMs);
     } finally {

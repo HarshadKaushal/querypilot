@@ -62,6 +62,11 @@ export interface PendingConnection {
   sealed: SealedCredentials;
 }
 
+/** A new connection waiting for the check. The API picks its id, so a retry can find it. */
+export interface PendingCreate extends PendingConnection {
+  id: string;
+}
+
 export type UpdatePlan =
   | { check: false; connection: PublicConnection }
   | { check: true; pending: PendingConnection };
@@ -106,9 +111,13 @@ export class ConnectionService {
    * The API's half of create: validates the input (400 when it is bad) and seals the
    * credentials. Nothing is stored and no database is contacted.
    */
-  prepareCreate(input: ConnectionInput): PendingConnection {
+  prepareCreate(input: ConnectionInput): PendingCreate {
     const { username, password, ...settings } = this.parse(input);
-    return { settings, sealed: sealCredentials(username, password, this.keys) };
+    return {
+      id: randomUUID(),
+      settings,
+      sealed: sealCredentials(username, password, this.keys),
+    };
   }
 
   /**
@@ -118,14 +127,22 @@ export class ConnectionService {
    */
   async createChecked(
     userId: string,
-    pending: PendingConnection,
+    pending: PendingCreate,
     ip: string | null,
+    signal?: AbortSignal,
   ): Promise<PublicConnection> {
+    // A job retried after a crash may already have stored this connection.
+    const stored = await this.repo.findOwned(userId, pending.id);
+    if (stored) {
+      return toPublicConnection(stored);
+    }
     const secrets = openCredentials(pending.sealed, this.keys);
     const pinned = await this.pin(pending.settings.host);
     await this.assertReadable({ ...pending.settings, ...secrets }, pinned);
+    // Cancelled during the check: store nothing.
+    signal?.throwIfAborted();
     const created = await this.repo.insert({
-      id: randomUUID(),
+      id: pending.id,
       userId,
       ...pending.settings,
       status: 'active',
@@ -246,6 +263,7 @@ export class ConnectionService {
     id: string,
     pending: PendingConnection,
     ip: string | null,
+    signal?: AbortSignal,
   ): Promise<PublicConnection> {
     // Compared with the row as it is now, in case it changed since the API read it.
     const existing = await this.requireOwned(userId, id);
@@ -259,6 +277,7 @@ export class ConnectionService {
     const secrets = openCredentials(pending.sealed, this.keys);
     const pinned = await this.pin(pending.settings.host);
     await this.assertReadable({ ...pending.settings, ...secrets }, pinned);
+    signal?.throwIfAborted();
     const updated = await this.repo.update(
       userId,
       id,

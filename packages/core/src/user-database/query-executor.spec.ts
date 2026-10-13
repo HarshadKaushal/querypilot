@@ -275,4 +275,66 @@ describe('ConnectionPools', () => {
     // Other types keep pg's parsers: int4 becomes a number.
     expect(RESULT_TYPES.getTypeParser(23, 'text')('42')).toBe(42);
   });
+
+  it('does not connect when the job was cancelled before it started', async () => {
+    const database = fakeDatabase({ rows: rows(3) });
+    const { executor: run, coordination } = executor(database);
+    const controller = new AbortController();
+    controller.abort('cancelled by its owner');
+    await expect(
+      run.run({
+        connectionId: 'c1',
+        target,
+        sql: 'SELECT n FROM public.t',
+        signal: controller.signal,
+      }),
+    ).rejects.toBe('cancelled by its owner');
+    expect(database.statements).toEqual([]);
+    expect(coordination.held(semaphoreKey('c1'))).toBe(0);
+  });
+
+  it('stops between row batches when cancelled, discards the socket, and frees the slot', async () => {
+    const database = fakeDatabase({ rows: rows(250) });
+    const coordination = new MemoryCoordination();
+    const controller = new AbortController();
+    const query = database.factory;
+    // Abort as soon as the first batch has been read.
+    let fetched = 0;
+    database.factory = (config) => {
+      const pool = query(config);
+      return {
+        ...pool,
+        connect: async () => {
+          const client = await pool.connect();
+          return {
+            ...client,
+            query: async (statement) => {
+              const result = await client.query(statement);
+              const text = typeof statement === 'string' ? statement : statement.text;
+              if (text.startsWith('FETCH') && ++fetched === 1) {
+                controller.abort('cancelled by its owner');
+              }
+              return result;
+            },
+          };
+        },
+      };
+    };
+    const pools = new ConnectionPools(env(), logger, database.factory);
+    const cancelling = new QueryExecutor(env(), pools, coordination, logger);
+    await expect(
+      cancelling.run({
+        connectionId: 'c1',
+        target,
+        sql: 'SELECT n FROM public.t',
+        signal: controller.signal,
+      }),
+    ).rejects.toBe('cancelled by its owner');
+    expect(fetched).toBe(1);
+    expect(database.statements.some((statement) => statement.text === 'ROLLBACK')).toBe(
+      false,
+    );
+    expect(database.releases).toEqual([true]);
+    expect(coordination.held(semaphoreKey('c1'))).toBe(0);
+  });
 });

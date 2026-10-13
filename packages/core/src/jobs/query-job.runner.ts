@@ -3,7 +3,14 @@ import { ConnectionService } from '../connections/connection.service';
 import { AppException } from '../errors/app.exception';
 import { SqlGuardService } from '../sql-guard/sql-guard.service';
 import { QueryExecutor } from '../user-database/query-executor';
-import type { JobError, JobOutcome, QueryJobData, QueryJobResult } from './job.types';
+import {
+  NO_JOB_CONTEXT,
+  type JobContext,
+  type JobError,
+  type JobOutcome,
+  type QueryJobData,
+  type QueryJobResult,
+} from './job.types';
 
 /**
  * Runs SQL for its owner: the guard checks it against the latest snapshot and allowlist,
@@ -17,8 +24,12 @@ export class QueryJobRunner {
     private readonly executor: QueryExecutor,
   ) {}
 
-  async run(data: QueryJobData): Promise<JobOutcome<QueryJobResult>> {
+  async run(
+    data: QueryJobData,
+    context: JobContext = NO_JOB_CONTEXT,
+  ): Promise<JobOutcome<QueryJobResult>> {
     try {
+      await context.report('checking_sql');
       // Checks ownership, and that a snapshot exists, before the guard runs.
       const check = await this.guard.check(data.userId, data.connectionId, data.sql);
       if (!check.allowed) {
@@ -32,14 +43,19 @@ export class QueryJobRunner {
           },
         };
       }
+      context.signal?.throwIfAborted();
+      await context.report('connecting');
       const target = await this.connections.resolveTarget(data.userId, data.connectionId);
       if (!target.ok) {
         return { ok: false, error: fromException(target.error) };
       }
+      context.signal?.throwIfAborted();
+      await context.report('running_query');
       const result = await this.executor.run({
         connectionId: data.connectionId,
         target: target.request,
         sql: check.sql,
+        signal: context.signal,
       });
       if (!result.ok) {
         return {

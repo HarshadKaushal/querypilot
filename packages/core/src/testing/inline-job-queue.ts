@@ -68,4 +68,9 @@ export class InlineJobQueue {
       job.state,
     );
   }
+
+  /** Inline jobs have always finished, so there is nothing to cancel. */
+  async cancel(jobId: string, userId: string): Promise<JobView> {
+    return this.get(jobId, userId);
+  }
 }

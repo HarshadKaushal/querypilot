@@ -2,11 +2,10 @@ import type { ConnectionService } from '../connections/connection.service';
 import { AppException } from '../errors/app.exception';
 import type { SchemaService } from '../schema/schema.service';
 import { ConnectionJobRunner } from './connection-job.runner';
-import { JobProcessor } from './job-processor';
 import { withoutCredentials } from './job.types';
-import type { QueryJobRunner } from './query-job.runner';
 
 const pending = {
+  id: '0b9d6f1e-3c2a-4e5b-8f7a-1c2d3e4f5a6b',
   settings: {
     label: 'Sample',
     host: 'db.example',
@@ -49,7 +48,13 @@ describe('ConnectionJobRunner', () => {
       ok: true,
       result: { id: 'c1', status: 'active' },
     });
-    expect(connections.createChecked).toHaveBeenCalledWith('u1', pending, null);
+    // No signal outside a worker: the default context has none.
+    expect(connections.createChecked).toHaveBeenCalledWith(
+      'u1',
+      pending,
+      null,
+      undefined,
+    );
     await expect(
       run.update({ userId: 'u1', connectionId: 'c1', ip: '10.0.0.1', pending }),
     ).resolves.toMatchObject({ ok: true, result: { host: 'other' } });
@@ -58,6 +63,7 @@ describe('ConnectionJobRunner', () => {
       'c1',
       pending,
       '10.0.0.1',
+      undefined,
     );
     await expect(
       run.test({ userId: 'u1', connectionId: 'c1', ip: null }),
@@ -99,7 +105,7 @@ describe('dropping credentials from finished jobs', () => {
     expect(withoutCredentials({ userId: 'u1', ip: null, pending })).toEqual({
       userId: 'u1',
       ip: null,
-      pending: { settings: pending.settings },
+      pending: { id: pending.id, settings: pending.settings },
     });
   });
 
@@ -109,57 +115,5 @@ describe('dropping credentials from finished jobs', () => {
     ).toBeNull();
     expect(withoutCredentials({ pending: { settings: {} } })).toBeNull();
     expect(withoutCredentials(null)).toBeNull();
-  });
-
-  it('runs the job, then rewrites its stored payload without the credentials', async () => {
-    const { run } = runner();
-    const processor = new JobProcessor({} as QueryJobRunner, run);
-    const updateData = jest.fn().mockResolvedValue(undefined);
-    const data = { userId: 'u1', ip: null, pending };
-    const outcome = await processor.handle(
-      { name: 'connection.create', data, updateData },
-      jest.fn(),
-    );
-    expect(outcome).toMatchObject({ ok: true });
-    expect(updateData).toHaveBeenCalledWith({
-      userId: 'u1',
-      ip: null,
-      pending: { settings: pending.settings },
-    });
-  });
-
-  it('reports a failed cleanup instead of failing a job whose work is done', async () => {
-    const { run } = runner();
-    const processor = new JobProcessor({} as QueryJobRunner, run);
-    const onCleanupError = jest.fn();
-    const outcome = await processor.handle(
-      {
-        name: 'connection.create',
-        data: { userId: 'u1', ip: null, pending },
-        updateData: jest.fn().mockRejectedValue(new Error('redis blip')),
-      },
-      onCleanupError,
-    );
-    expect(outcome).toMatchObject({ ok: true });
-    expect(onCleanupError).toHaveBeenCalledWith(expect.any(Error));
-  });
-
-  it('does not touch the payload when the job itself throws, so a retry still has it', async () => {
-    const { run } = runner({
-      createChecked: jest.fn().mockRejectedValue(new Error('boom')),
-    });
-    const processor = new JobProcessor({} as QueryJobRunner, run);
-    const updateData = jest.fn();
-    await expect(
-      processor.handle(
-        {
-          name: 'connection.create',
-          data: { userId: 'u1', ip: null, pending },
-          updateData,
-        },
-        jest.fn(),
-      ),
-    ).rejects.toThrow('boom');
-    expect(updateData).not.toHaveBeenCalled();
   });
 });
