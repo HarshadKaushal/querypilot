@@ -852,7 +852,11 @@ export class Analyzer {
   }
 }
 
-/** Caps the top-level LIMIT. Returns true when it added a LIMIT or lowered one. */
+/**
+ * Caps the top-level LIMIT at rowCap + 1. The extra row only tells the executor that the
+ * result was cut; it is never returned. A LIMIT at or under rowCap is kept. Returns true
+ * when it added a LIMIT or lowered one.
+ */
 export function applyRowCap(select: Node, rowCap: number): boolean {
   const current =
     select.limitCount === undefined ? undefined : unwrap(select.limitCount)[1];
@@ -860,7 +864,7 @@ export function applyRowCap(select: Node, rowCap: number): boolean {
   if (value !== undefined && value <= rowCap) {
     return false;
   }
-  select.limitCount = { A_Const: { ival: { ival: rowCap } } };
+  select.limitCount = { A_Const: { ival: { ival: rowCap + 1 } } };
   select.limitOption = 'LIMIT_OPTION_COUNT';
   return true;
 }

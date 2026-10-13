@@ -67,12 +67,20 @@ export class PrismaAuthRepository implements AuthRepository {
     };
   }
 
-  async claimRefresh(id: string, replacedById: string, now: Date): Promise<boolean> {
-    const result = await this.prisma.refreshToken.updateMany({
-      where: { id, revokedAt: null, replacedById: null, expiresAt: { gt: now } },
-      data: { revokedAt: now, replacedById },
+  async rotateRefresh(oldId: string, next: NewRefreshToken, now: Date): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      // The claim matches only an unused row, so of two concurrent refreshes with the same
+      // token, one wins.
+      const claimed = await tx.refreshToken.updateMany({
+        where: { id: oldId, revokedAt: null, replacedById: null, expiresAt: { gt: now } },
+        data: { revokedAt: now, replacedById: next.id },
+      });
+      if (claimed.count !== 1) {
+        return false;
+      }
+      await tx.refreshToken.create({ data: next });
+      return true;
     });
-    return result.count === 1;
   }
 
   async revokeFamily(familyId: string, now: Date): Promise<void> {
@@ -89,8 +97,12 @@ export class PrismaAuthRepository implements AuthRepository {
     });
   }
 
-  async deleteUser(userId: string): Promise<void> {
-    await this.prisma.user.delete({ where: { id: userId } });
+  async deleteUser(userId: string, audit: AuditEntry): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await writeAuditLog(tx, audit);
+      // Refresh tokens cascade. The audit row stays, with user_id set to null.
+      await tx.user.delete({ where: { id: userId } });
+    });
   }
 
   async writeAudit(entry: AuditEntry): Promise<void> {

@@ -11,7 +11,13 @@ export function readCookie(header: string | undefined, name: string): string | u
   for (const part of header.split(';')) {
     const [rawName, ...rest] = part.trim().split('=');
     if (rawName === name) {
-      return decodeURIComponent(rest.join('='));
+      try {
+        return decodeURIComponent(rest.join('='));
+      } catch {
+        // Bad percent-encoding (a URIError) is treated as no cookie, so the caller answers
+        // 401 like any other missing session, not 500.
+        return undefined;
+      }
     }
   }
   return undefined;

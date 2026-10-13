@@ -36,7 +36,7 @@ The company does not become a second system of record. **Assumed:** business row
 
 **Assumed:** a successful answer shows the rows (up to a cap), a chart chosen from column types and cardinality, the SQL, the assumptions, and a summary that only uses numbers present in the supplied data. Truncation is visible. History stores status, latency, model, and token counts, and can run the question again. It does not store the rows.
 
-**Enforced:** SQL that is not a single read over allowed tables and columns is rejected by the SQL guard, with a code and a reason. That covers writes, DDL, hidden columns, system catalogs, and functions off the approved list. The guard never runs anything, and no result can exceed the row cap (1,000 by default).
+**Enforced:** SQL that is not a single read over allowed tables and columns is rejected by the SQL guard, with a code and a reason. That covers writes, DDL, hidden columns, system catalogs, and functions off the approved list. The guard never runs anything, and no result can exceed the row cap (1,000 by default). A result with exactly the cap is reported complete; only one with more is marked cut.
 
 **Enforced:** a write is also impossible at the database. The login is checked to be read-only when it connects and on every schema refresh. Every query runs in a READ ONLY transaction that is rolled back, as a single statement, with a statement timeout. A result never exceeds the row cap or 5 MB, and a cut result is marked as truncated.
 

@@ -10,19 +10,45 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 // single-use refresh tokens, family revocation, and account deletion.
 
 const prisma = new PrismaService(loadEnv());
+// Deletion audit rows outlive their user, so they are removed by id at the end.
+const deletedUserIds: string[] = [];
 
 afterAll(async () => {
   await prisma.user.deleteMany({ where: { googleSubject: { startsWith: 'contract:' } } });
+  for (const id of deletedUserIds) {
+    await prisma.auditLog.deleteMany({
+      where: { metadata: { path: ['deletedUserId'], equals: id } },
+    });
+  }
   await prisma.$disconnect();
 });
 
-function contract(name: string, make: () => AuthRepository) {
+// auditEvents reads back the audit rows a deletion left, which the interface does not expose.
+function contract(
+  name: string,
+  make: () => AuthRepository,
+  auditEvents: (
+    repo: AuthRepository,
+    deletedUserId: string,
+  ) => Promise<Array<{ userId: string | null; eventType: string }>>,
+) {
   describe(`${name} auth repository`, () => {
     let repo: AuthRepository;
 
     beforeEach(() => {
       repo = make();
     });
+
+    function replacement(userId: string, familyId: string) {
+      return {
+        id: randomUUID(),
+        userId,
+        familyId,
+        tokenHash: randomBytes(16).toString('hex'),
+        expiresAt: new Date(Date.now() + 60000),
+        deviceInfo: null,
+      };
+    }
 
     async function user() {
       return repo.upsertGoogleUser({
@@ -95,25 +121,38 @@ function contract(name: string, make: () => AuthRepository) {
       expect(await repo.findRefreshByHash('no-such-hash')).toBeNull();
     });
 
-    it('lets a refresh token be claimed exactly once', async () => {
+    it('rotates a refresh token exactly once and stores the replacement with it', async () => {
       const owner = await user();
       const stored = await token(owner.id);
       const now = new Date();
-      expect(await repo.claimRefresh(stored.id, randomUUID(), now)).toBe(true);
-      expect(await repo.claimRefresh(stored.id, randomUUID(), now)).toBe(false);
+      const first = replacement(owner.id, stored.familyId);
+      const second = replacement(owner.id, stored.familyId);
+      expect(await repo.rotateRefresh(stored.id, first, now)).toBe(true);
+      expect(await repo.rotateRefresh(stored.id, second, now)).toBe(false);
       expect(await repo.findRefreshByHash(stored.tokenHash)).toMatchObject({
         revokedAt: expect.any(Date),
-        replacedById: expect.any(String),
+        replacedById: first.id,
       });
+      expect(await repo.findRefreshByHash(first.tokenHash)).toMatchObject({
+        id: first.id,
+        familyId: stored.familyId,
+        revokedAt: null,
+      });
+      // The losing rotation wrote nothing.
+      expect(await repo.findRefreshByHash(second.tokenHash)).toBeNull();
     });
 
-    it('refuses to claim an expired or revoked token', async () => {
+    it('refuses to rotate an expired or revoked token, and stores no replacement', async () => {
       const owner = await user();
       const expired = await token(owner.id, randomUUID(), -1000);
-      expect(await repo.claimRefresh(expired.id, randomUUID(), new Date())).toBe(false);
+      const forExpired = replacement(owner.id, expired.familyId);
+      expect(await repo.rotateRefresh(expired.id, forExpired, new Date())).toBe(false);
+      expect(await repo.findRefreshByHash(forExpired.tokenHash)).toBeNull();
       const revoked = await token(owner.id);
       await repo.revokeToken(revoked.id, new Date());
-      expect(await repo.claimRefresh(revoked.id, randomUUID(), new Date())).toBe(false);
+      const forRevoked = replacement(owner.id, revoked.familyId);
+      expect(await repo.rotateRefresh(revoked.id, forRevoked, new Date())).toBe(false);
+      expect(await repo.findRefreshByHash(forRevoked.tokenHash)).toBeNull();
     });
 
     it('revokes a whole family and nothing outside it', async () => {
@@ -139,21 +178,40 @@ function contract(name: string, make: () => AuthRepository) {
       expect((await repo.findRefreshByHash(otherDevice.tokenHash))?.revokedAt).toBeNull();
     });
 
-    it('deletes the user together with their refresh tokens', async () => {
+    it('deletes the user with their refresh tokens and keeps the deletion audit row', async () => {
       const owner = await user();
       const stored = await token(owner.id);
-      await repo.writeAudit({
+      await repo.deleteUser(owner.id, {
         userId: owner.id,
         eventType: 'account.deleted',
         metadata: { deletedUserId: owner.id },
         ip: null,
       });
-      await repo.deleteUser(owner.id);
       expect(await repo.findUserById(owner.id)).toBeNull();
       expect(await repo.findRefreshByHash(stored.tokenHash)).toBeNull();
+      expect(await auditEvents(repo, owner.id)).toEqual([
+        { userId: null, eventType: 'account.deleted' },
+      ]);
     });
   });
 }
 
-contract('in-memory', () => new MemoryAuthRepository());
-contract('Prisma', () => new PrismaAuthRepository(prisma));
+contract(
+  'in-memory',
+  () => new MemoryAuthRepository(),
+  async (repo, deletedUserId) =>
+    (repo as MemoryAuthRepository).audits
+      .filter((audit) => audit.metadata.deletedUserId === deletedUserId)
+      .map(({ userId, eventType }) => ({ userId, eventType })),
+);
+contract(
+  'Prisma',
+  () => new PrismaAuthRepository(prisma),
+  async (_repo, deletedUserId) => {
+    deletedUserIds.push(deletedUserId);
+    return prisma.auditLog.findMany({
+      where: { metadata: { path: ['deletedUserId'], equals: deletedUserId } },
+      select: { userId: true, eventType: true },
+    });
+  },
+);

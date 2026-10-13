@@ -41,31 +41,31 @@ describe('rewriting', () => {
   it.each([
     [
       'SELECT name FROM customers',
-      'SELECT customers.name FROM public.customers LIMIT 1000',
+      'SELECT customers.name FROM public.customers LIMIT 1001',
     ],
     [
       'SELECT * FROM customers',
-      'SELECT customers.id, customers.name, customers.region, customers.created_at FROM public.customers LIMIT 1000',
+      'SELECT customers.id, customers.name, customers.region, customers.created_at FROM public.customers LIMIT 1001',
     ],
     [
       'SELECT t.* FROM support.tickets t',
-      'SELECT t.id, t.customer_id, t.opened_on, t.status FROM support.tickets AS t LIMIT 1000',
+      'SELECT t.id, t.customer_id, t.opened_on, t.status FROM support.tickets AS t LIMIT 1001',
     ],
     [
       "SELECT name FROM customers WHERE id IN (SELECT customer_id FROM orders WHERE region = 'North')",
-      "SELECT customers.name FROM public.customers WHERE customers.id IN (SELECT orders.customer_id FROM public.orders WHERE customers.region = 'North') LIMIT 1000",
+      "SELECT customers.name FROM public.customers WHERE customers.id IN (SELECT orders.customer_id FROM public.orders WHERE customers.region = 'North') LIMIT 1001",
     ],
     [
       'SELECT sum(amount) AS total FROM payments ORDER BY total',
-      'SELECT sum(payments.amount) AS total FROM public.payments ORDER BY total LIMIT 1000',
+      'SELECT sum(payments.amount) AS total FROM public.payments ORDER BY total LIMIT 1001',
     ],
     [
       'WITH paid AS (SELECT order_id FROM payments) SELECT order_id FROM paid',
-      'WITH paid AS (SELECT payments.order_id FROM public.payments) SELECT paid.order_id FROM paid LIMIT 1000',
+      'WITH paid AS (SELECT payments.order_id FROM public.payments) SELECT paid.order_id FROM paid LIMIT 1001',
     ],
     [
       'SELECT id FROM orders -- ; DROP TABLE orders',
-      'SELECT orders.id FROM public.orders LIMIT 1000',
+      'SELECT orders.id FROM public.orders LIMIT 1001',
     ],
   ])('%s', async (sql, expected) => {
     expect((await accepted(sql)).sql).toBe(expected);
@@ -80,12 +80,13 @@ describe('rewriting', () => {
 
 describe('row cap', () => {
   it.each([
-    ['SELECT id FROM orders', 'LIMIT 1000', true],
+    ['SELECT id FROM orders', 'LIMIT 1001', true],
     ['SELECT id FROM orders LIMIT 5', 'LIMIT 5', false],
     ['SELECT id FROM orders LIMIT 0', 'LIMIT 0', false],
     ['SELECT id FROM orders LIMIT 1000', 'LIMIT 1000', false],
-    ['SELECT id FROM orders LIMIT 5000', 'LIMIT 1000', true],
-    ['SELECT id FROM orders LIMIT ALL', 'LIMIT 1000', true],
+    ['SELECT id FROM orders LIMIT 1001', 'LIMIT 1001', true],
+    ['SELECT id FROM orders LIMIT 5000', 'LIMIT 1001', true],
+    ['SELECT id FROM orders LIMIT ALL', 'LIMIT 1001', true],
     ['SELECT id FROM orders FETCH FIRST 3 ROWS ONLY', 'LIMIT 3', false],
   ] as const)('%s ends with %s', async (sql, limit, applied) => {
     const verdict = await accepted(sql);
@@ -98,7 +99,7 @@ describe('row cap', () => {
       'SELECT id FROM orders UNION SELECT order_id FROM payments',
     );
     expect(sql.match(/LIMIT/g)).toHaveLength(1);
-    expect(sql.endsWith('LIMIT 1000')).toBe(true);
+    expect(sql.endsWith('LIMIT 1001')).toBe(true);
   });
 
   it('leaves limits inside subqueries alone', async () => {
@@ -106,11 +107,11 @@ describe('row cap', () => {
       'SELECT s.id FROM (SELECT id FROM orders LIMIT 5000) AS s',
     );
     expect(sql).toContain('LIMIT 5000');
-    expect(sql.endsWith('LIMIT 1000')).toBe(true);
+    expect(sql.endsWith('LIMIT 1001')).toBe(true);
   });
 
   it('uses the cap it is given', async () => {
-    expect((await accepted('SELECT id FROM orders', 25)).sql.endsWith('LIMIT 25')).toBe(
+    expect((await accepted('SELECT id FROM orders', 25)).sql.endsWith('LIMIT 26')).toBe(
       true,
     );
   });

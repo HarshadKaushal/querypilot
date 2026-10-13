@@ -27,8 +27,6 @@ export interface ExecutionRequest {
   /** SQL the guard accepted. The executor's own limits apply whatever it is. */
   sql: string;
   rowCap?: number;
-  /** The guard's limitApplied: a full page of rows then means the result was cut. */
-  guardLimitApplied?: boolean;
 }
 
 export interface ExecutionSuccess {
@@ -196,9 +194,6 @@ export class QueryExecutor {
       }
       // Nothing is ever committed, even though nothing could have been written.
       await client.query('ROLLBACK');
-      if (!truncated && request.guardLimitApplied && rows.length === rowCap) {
-        truncated = 'rows';
-      }
       return {
         ok: true,
         columns,

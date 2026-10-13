@@ -63,6 +63,14 @@ describe('auth routes', () => {
     });
   });
 
+  it('answers 401, not 500, for a refresh cookie with bad percent-encoding', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/v1/auth/refresh')
+      .set('Cookie', 'ayd_refresh=%E0%A4%A');
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe('UNAUTHENTICATED');
+  });
+
   it('signs in with the dev login, refreshes, and logs out', async () => {
     const server = app.getHttpServer();
     const login = await request(server)

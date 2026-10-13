@@ -39,10 +39,15 @@ export interface AuthRepository {
   findUserById(id: string): Promise<PublicUser | null>;
   insertRefresh(input: NewRefreshToken): Promise<void>;
   findRefreshByHash(tokenHash: string): Promise<StoredRefresh | null>;
-  claimRefresh(id: string, replacedById: string, now: Date): Promise<boolean>;
+  /**
+   * Marks the old token used and stores its replacement, together. False, with nothing
+   * written, when the old token is already used, revoked, or expired.
+   */
+  rotateRefresh(oldId: string, next: NewRefreshToken, now: Date): Promise<boolean>;
   revokeFamily(familyId: string, now: Date): Promise<void>;
   revokeToken(id: string, now: Date): Promise<void>;
-  deleteUser(userId: string): Promise<void>;
+  /** Writes the audit entry and deletes the user in one step, so neither happens alone. */
+  deleteUser(userId: string, audit: AuditEntry): Promise<void>;
   writeAudit(entry: AuditEntry): Promise<void>;
 }
 

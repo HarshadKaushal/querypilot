@@ -144,13 +144,23 @@ describe('QueryExecutor', () => {
     expect(result.ok && result.rowCount).toBeLessThan(10);
   });
 
-  it('treats a full page under a guard-applied LIMIT as cut', async () => {
+  it('returns exactly the cap as complete when no extra row comes back', async () => {
+    // The guard writes LIMIT rowCap + 1, so a table with exactly rowCap matches is not cut.
     const result = await executor(fakeDatabase({ rows: rows(5) })).executor.run({
       connectionId: 'c1',
       target,
-      sql: 'SELECT n FROM public.t LIMIT 5',
+      sql: 'SELECT n FROM public.t LIMIT 6',
       rowCap: 5,
-      guardLimitApplied: true,
+    });
+    expect(result).toMatchObject({ ok: true, rowCount: 5, truncated: false });
+  });
+
+  it('marks the result cut when the extra row comes back, and does not return it', async () => {
+    const result = await executor(fakeDatabase({ rows: rows(6) })).executor.run({
+      connectionId: 'c1',
+      target,
+      sql: 'SELECT n FROM public.t LIMIT 6',
+      rowCap: 5,
     });
     expect(result).toMatchObject({ ok: true, rowCount: 5, truncated: 'rows' });
   });

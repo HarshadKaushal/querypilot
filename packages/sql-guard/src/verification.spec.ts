@@ -15,7 +15,7 @@ const options = { tables: TABLES, rowCap: ROW_CAP };
 describe('verification of the rewritten SQL', () => {
   it('rejects output that would read a hidden column', async () => {
     deparse.mockReturnValueOnce(
-      'SELECT customers.email FROM public.customers LIMIT 1000',
+      'SELECT customers.email FROM public.customers LIMIT 1001',
     );
     await expect(checkSql('SELECT name FROM customers', options)).resolves.toMatchObject({
       ok: false,
@@ -26,7 +26,7 @@ describe('verification of the rewritten SQL', () => {
 
   it('rejects output that does not come back unchanged', async () => {
     deparse
-      .mockReturnValueOnce('SELECT customers.name FROM public.customers LIMIT 1000')
+      .mockReturnValueOnce('SELECT customers.name FROM public.customers LIMIT 1001')
       .mockReturnValueOnce('SELECT customers.name FROM public.customers LIMIT 999');
     await expect(checkSql('SELECT name FROM customers', options)).resolves.toMatchObject({
       ok: false,

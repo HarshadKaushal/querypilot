@@ -142,21 +142,26 @@ export class AuthService {
       throw this.unauthenticated();
     }
     const next = this.tokens.issueRefresh(row.familyId, now);
-    // The claim succeeds only while the row is still unused, so of two concurrent refreshes
-    // with the same token, one wins and the other is treated as reuse.
-    const claimed = await this.repo.claimRefresh(row.id, next.id, now);
-    if (!claimed) {
+    // The rotation succeeds only while the row is still unused, so of two concurrent
+    // refreshes with the same token, one wins and the other is treated as reuse. The new
+    // token is stored in the same transaction, so a failure cannot leave the old token used
+    // with no replacement.
+    const rotated = await this.repo.rotateRefresh(
+      row.id,
+      {
+        id: next.id,
+        userId: row.userId,
+        familyId: next.familyId,
+        tokenHash: next.tokenHash,
+        expiresAt: next.expiresAt,
+        deviceInfo: meta.deviceInfo,
+      },
+      now,
+    );
+    if (!rotated) {
       await this.reuse(row.familyId, row.userId, meta.ip, now);
       throw this.unauthenticated();
     }
-    await this.repo.insertRefresh({
-      id: next.id,
-      userId: row.userId,
-      familyId: next.familyId,
-      tokenHash: next.tokenHash,
-      expiresAt: next.expiresAt,
-      deviceInfo: meta.deviceInfo,
-    });
     const user = await this.repo.findUserById(row.userId);
     if (!user) {
       throw this.unauthenticated();
@@ -191,13 +196,12 @@ export class AuthService {
     if (!user) {
       throw this.unauthenticated();
     }
-    await this.repo.writeAudit({
+    await this.repo.deleteUser(userId, {
       userId,
       eventType: 'account.deleted',
       metadata: { deletedUserId: userId },
       ip: meta.ip,
     });
-    await this.repo.deleteUser(userId);
   }
 
   async currentUser(userId: string): Promise<PublicUser> {

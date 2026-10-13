@@ -71,13 +71,14 @@ export class MemoryAuthRepository implements AuthRepository {
     return row ? stored(row) : null;
   }
 
-  async claimRefresh(id: string, replacedById: string, now: Date): Promise<boolean> {
-    const row = this.tokens.find((token) => token.id === id);
+  async rotateRefresh(oldId: string, next: NewRefreshToken, now: Date): Promise<boolean> {
+    const row = this.tokens.find((token) => token.id === oldId);
     if (!row || row.revokedAt || row.replacedById || row.expiresAt <= now) {
       return false;
     }
     row.revokedAt = now;
-    row.replacedById = replacedById;
+    row.replacedById = next.id;
+    await this.insertRefresh(next);
     return true;
   }
 
@@ -96,7 +97,8 @@ export class MemoryAuthRepository implements AuthRepository {
     }
   }
 
-  async deleteUser(userId: string): Promise<void> {
+  async deleteUser(userId: string, audit: AuditEntry): Promise<void> {
+    await this.writeAudit(audit);
     const index = this.users.findIndex((user) => user.id === userId);
     if (index >= 0) {
       this.users.splice(index, 1);

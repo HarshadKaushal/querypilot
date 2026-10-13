@@ -136,7 +136,7 @@ describe('SQL check route', () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
       allowed: true,
-      sql: 'SELECT customers.id, customers.name FROM public.customers LIMIT 50',
+      sql: 'SELECT customers.id, customers.name FROM public.customers LIMIT 51',
       limitApplied: true,
       rowCap: 50,
       schemaVersion: 1,

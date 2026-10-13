@@ -90,7 +90,6 @@ async function main() {
       connectionId: connection.id,
       target: target.request,
       sql: verdict.sql,
-      guardLimitApplied: verdict.limitApplied,
     });
     if (!result.ok) {
       console.log(`Executor refused or failed (${result.code}): ${result.message}`);
