@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { ConnectionsModule } from './connections/connections.module';
 import { EgressModule } from './egress/egress.module';
 import { HealthModule } from './health/health.module';
+import { JobsModule } from './jobs/jobs.module';
 import { AppLoggerModule } from './logger/logger.module';
 import { SchemaModule } from './schema/schema.module';
 import { SqlGuardModule } from './sql-guard/sql-guard.module';
@@ -22,6 +23,7 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     ConnectionsModule,
     EgressModule,
+    JobsModule,
     SchemaModule,
     SqlGuardModule,
   ],

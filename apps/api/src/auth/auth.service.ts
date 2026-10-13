@@ -5,7 +5,7 @@ import {
   invalidRequest,
   notFound,
   UNAUTHENTICATED_MESSAGE,
-} from '../common/errors/app.exception';
+} from '@ayd/core';
 import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env';
 import { AUTH_REPOSITORY, type AuthRepository, type PublicUser } from './auth.repository';

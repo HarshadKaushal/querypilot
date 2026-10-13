@@ -43,11 +43,9 @@ async function main() {
   );
   const core = require('@ayd/core');
   const prisma = context.get(core.PrismaService);
-  const connections = context.get(
-    dist('connections/connection.service').ConnectionService,
-  );
-  const schemas = context.get(dist('schema/schema.service').SchemaService);
-  const guard = context.get(dist('sql-guard/sql-guard.service').SqlGuardService);
+  const connections = context.get(core.ConnectionService);
+  const schemas = context.get(core.SchemaService);
+  const guard = context.get(core.SqlGuardService);
   const executor = context.get(core.QueryExecutor);
 
   const userId = randomUUID();

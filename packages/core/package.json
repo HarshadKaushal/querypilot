@@ -10,17 +10,22 @@
     "test:unit": "node ../../scripts/jest.cjs --config jest.config.cjs"
   },
   "dependencies": {
+    "@ayd/crypto": "*",
     "@ayd/database": "*",
+    "@ayd/shared": "*",
+    "@ayd/sql-guard": "*",
+    "@ayd/ssrf-guard": "*",
     "@nestjs/common": "^12.1.3",
+    "bullmq": "^6.3.14",
     "dotenv": "^18.0.7",
     "ioredis": "^6.0.0",
     "nestjs-pino": "^5.3.1",
     "pg": "^8.23.1",
     "pino": "^10.4.0",
+    "pino-http": "^11.0.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
-    "zod": "^4.6.6",
-    "pino-http": "^11.0.0"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",

@@ -4,16 +4,15 @@ import { isIP } from 'node:net';
 import { HttpStatus, Inject, Injectable, Optional } from '@nestjs/common';
 import { openCredentials, parseMasterKeyRing, sealCredentials } from '@ayd/crypto';
 import { assessResolution } from '@ayd/ssrf-guard';
-import { AppException, invalidRequest, notFound } from '../common/errors/app.exception';
+import { AppException, invalidRequest, notFound } from '../errors/app.exception';
+import { ConnectionPools } from '../user-database/connection-pools';
 import {
-  ConnectionPools,
   type ProbeRequest,
   type ProbeResult,
   type SslMode,
   UserDatabaseProbe,
-} from '@ayd/core';
-import { APP_ENV } from '../config/app-config.module';
-import type { AppEnv } from '../config/env';
+} from '../user-database/user-database.probe';
+import { APP_ENV, type CoreEnv } from '../config/env';
 import {
   CONNECTION_REPOSITORY,
   toPublicConnection,
@@ -59,7 +58,7 @@ export class ConnectionService {
     @Inject(CONNECTION_REPOSITORY) private readonly repo: ConnectionRepository,
     @Inject(ADDRESS_RESOLVER) private readonly resolver: AddressResolver,
     private readonly probe: UserDatabaseProbe,
-    @Inject(APP_ENV) private readonly env: AppEnv,
+    @Inject(APP_ENV) private readonly env: CoreEnv,
     // Optional so unit tests can build the service without the executor.
     @Optional() private readonly pools?: ConnectionPools,
   ) {

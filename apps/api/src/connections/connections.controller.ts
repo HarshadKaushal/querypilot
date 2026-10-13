@@ -15,7 +15,7 @@ import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { PublicUser } from '../auth/auth.repository';
 import { requestMeta } from '../auth/cookies';
-import { ConnectionService, type ConnectionInput } from './connection.service';
+import { type ConnectionInput, ConnectionService } from '@ayd/core';
 
 interface ConnectionBody {
   label?: unknown;

@@ -1,7 +1,7 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { AppException, invalidRequest, notFound } from '../common/errors/app.exception';
+import { AppException, invalidRequest, notFound } from '../errors/app.exception';
 import { ConnectionService, probeError } from '../connections/connection.service';
-import { UserDatabaseProbe } from '@ayd/core';
+import { UserDatabaseProbe } from '../user-database/user-database.probe';
 import {
   allowedSchema,
   allowlistView,

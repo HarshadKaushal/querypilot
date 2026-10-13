@@ -138,6 +138,12 @@ Two gaps were closed after Phase 5. First, editing a connection to point at anot
 
 Second, a column dropped from the customer's database after the last refresh produced a generic "could not run this query" message. `42703`, `42P01`, and `3F000` now map to `QUERY_SCHEMA_CHANGED`, which says to refresh the schema. The automatic refresh-and-retry on that code is planned for Phase 7.
 
+## Phase 6: queue and worker
+
+**Step 2** moved the shared infrastructure into `@ayd/core` (ADR 0006). **Step 3a** added the queue (ADR 0011). The connection, schema, and SQL-check services moved to core with their repositories, because a query job needs them in the worker; the API keeps their controllers. The API adds `query.run` jobs and reads them back; the worker's `JobWorker` hands each job to core's `JobProcessor`.
+
+The Docker build caught what the local build could not: the worker image built only `database`, `core`, and `worker`, but core now imports `shared`, `crypto`, `ssrf-guard`, and `sql-guard`, which had to be built first. The live run caught a logging defect: nestjs-pino's Nest-style `Logger` takes its last argument as a context name, so `logger.log(fields, 'job finished')` stored the text as `context` and logged no message. The worker uses `PinoLogger`, which takes fields then a message.
+
 ## How to extend this
 
-Add a phase only after this phase's checks pass: `npm test`, `npm run lint`, `npm run format:check`, and a ready health response from `npm run up`. New application tables go in a new Prisma migration. New client-visible failures go through `AppException` and an existing or newly documented error code in `@ayd/shared`. Use `notFound()` for a missing or foreign id (the two must look the same) and `invalidRequest()` for bad input; both live in `common/errors/app.exception.ts`. Audit rows go through `writeAuditLog` in `audit/audit-log.ts`, with ids and outcomes in the metadata and never secrets. Log errors with `safeErrorDetail`, which strips connection URLs.
+Add a phase only after this phase's checks pass: `npm test`, `npm run lint`, `npm run format:check`, and a ready health response from `npm run up`. New application tables go in a new Prisma migration. New client-visible failures go through `AppException` and an existing or newly documented error code in `@ayd/shared`. Use `notFound()` for a missing or foreign id (the two must look the same) and `invalidRequest()` for bad input; both live in `packages/core/src/errors/app.exception.ts`. Audit rows go through `writeAuditLog` in `packages/core/src/audit/audit-log.ts`, with ids and outcomes in the metadata and never secrets. Log errors with `safeErrorDetail`, which strips connection URLs.

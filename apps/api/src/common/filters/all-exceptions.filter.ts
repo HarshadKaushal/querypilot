@@ -1,4 +1,11 @@
-import { safeErrorDetail } from '@ayd/core';
+import {
+  AppException,
+  INTERNAL_ERROR_MESSAGE,
+  INVALID_REQUEST_MESSAGE,
+  NOT_FOUND_MESSAGE,
+  safeErrorDetail,
+  UNAUTHENTICATED_MESSAGE,
+} from '@ayd/core';
 import {
   ArgumentsHost,
   Catch,
@@ -10,13 +17,6 @@ import {
 import { errorEnvelope, type ErrorCode } from '@ayd/shared';
 import { Logger } from 'nestjs-pino';
 import type { Request, Response } from 'express';
-import {
-  AppException,
-  INTERNAL_ERROR_MESSAGE,
-  INVALID_REQUEST_MESSAGE,
-  NOT_FOUND_MESSAGE,
-  UNAUTHENTICATED_MESSAGE,
-} from '../errors/app.exception';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {

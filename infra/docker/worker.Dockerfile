@@ -12,7 +12,7 @@ COPY packages/core/package.json packages/core/package.json
 RUN npm ci
 COPY . .
 ENV DATABASE_URL=postgresql://ayd:ayd@localhost:5432/ayd
-RUN npm run build --workspace=@ayd/database && npm run build --workspace=@ayd/core && npm run build --workspace=@ayd/worker
+RUN npm run build --workspace=@ayd/shared && npm run build --workspace=@ayd/ssrf-guard && npm run build --workspace=@ayd/crypto && npm run build --workspace=@ayd/sql-guard && npm run build --workspace=@ayd/database && npm run build --workspace=@ayd/core && npm run build --workspace=@ayd/worker
 
 FROM node:24-alpine
 WORKDIR /repo

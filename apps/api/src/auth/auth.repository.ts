@@ -1,4 +1,4 @@
-import type { AuditEntry } from '../audit/audit-log';
+import type { AuditEntry } from '@ayd/core';
 
 export interface PublicUser {
   id: string;

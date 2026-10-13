@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { AuditEntry } from '../audit/audit-log';
+import type { AuditEntry } from '@ayd/core';
 import {
   toPublicUser,
   type AuthRepository,

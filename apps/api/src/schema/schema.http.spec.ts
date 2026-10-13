@@ -1,15 +1,19 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { createHttpApp } from '../testing/http-app';
-import { CONNECTION_REPOSITORY } from '../connections/connection.repository';
-import { ADDRESS_RESOLVER, ConnectionService } from '../connections/connection.service';
+import {
+  ADDRESS_RESOLVER,
+  CONNECTION_REPOSITORY,
+  ConnectionService,
+  type IntrospectResult,
+  SCHEMA_REPOSITORY,
+  type SchemaDocument,
+  SchemaService,
+  UserDatabaseProbe,
+} from '@ayd/core';
 import { ConnectionsController } from '../connections/connections.controller';
-import { MemoryConnectionRepository } from '../testing/memory-connection.repository';
-import { type IntrospectResult, type SchemaDocument, UserDatabaseProbe } from '@ayd/core';
-import { MemorySchemaRepository } from '../testing/memory-schema.repository';
+import { MemoryConnectionRepository, MemorySchemaRepository } from '@ayd/core/testing';
 import { SchemaController } from './schema.controller';
-import { SCHEMA_REPOSITORY } from './schema.repository';
-import { SchemaService } from './schema.service';
 
 const customers = {
   schema: 'public',

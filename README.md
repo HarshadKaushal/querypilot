@@ -2,7 +2,7 @@
 
 Middleware that lets a signed-in user connect their own PostgreSQL database and ask questions in plain English. The platform proposes SQL, checks it, runs it read-only, and returns a table, a chart, the SQL, and a short summary.
 
-This repository is at **Phase 5 (executor)**. The ask pipeline and the web UI are not built yet. See [docs/features.md](docs/features.md).
+This repository is in **Phase 6 (queue and worker)**: queries run as worker jobs. The ask pipeline and the web UI are not built yet. See [docs/features.md](docs/features.md).
 
 ## Prerequisites
 
@@ -177,9 +177,20 @@ Invoke-RestMethod "http://localhost:3000/v1/connections/$($conn.id)/sql/check" -
 
 An allowed query comes back with `allowed: true` and the SQL that would run, rewritten with schema names, with `*` replaced by the allowed columns, and with `LIMIT` capped at `SQL_ROW_CAP` (1,000 by default). A rejected one comes back with `allowed: false`, a `code` such as `column_not_allowed` or `not_select`, and a `reason`. Both are HTTP 200. On the sample, `SELECT email FROM customers` and `DELETE FROM customers` are rejected.
 
-## Run a query end to end
+## Run a query as a job
 
-The executor runs guarded SQL on a user database. It has no HTTP route until the worker phase. This script runs the whole pipeline against the sample database: connect with `sample_ro` over SSL, read the schema, check the SQL with the guard, run it read-only, and print the rows.
+The API queues the SQL and answers at once with a job (HTTP 202). The worker checks it with the guard, runs it read-only, and stores the outcome for 15 minutes. It needs the worker: `npm run up` starts it, or run `npm run dev:worker` next to `npm run dev`.
+
+```powershell
+$job = Invoke-RestMethod "http://localhost:3000/v1/connections/$($conn.id)/queries" -Method Post -ContentType "application/json" -Headers @{ Authorization = "Bearer $($login.accessToken)" } -Body '{"sql":"SELECT region, count(*) FROM customers GROUP BY region"}'
+Invoke-RestMethod "http://localhost:3000/v1/jobs/$($job.id)" -Headers @{ Authorization = "Bearer $($login.accessToken)" }
+```
+
+`state` goes from `queued` to `running` to `succeeded`, with `result.rows`, or `failed`, with `error.code` and `error.message`. Rejected SQL fails with `SQL_REJECTED` and the guard's reason.
+
+## Run a query end to end, without the queue
+
+This script runs the whole pipeline in one process against the sample database: connect with `sample_ro` over SSL, read the schema, check the SQL with the guard, run it read-only, and print the rows.
 
 ```powershell
 npm run try-query --workspace=@ayd/api -- "SELECT region, count(*) FROM customers GROUP BY region"
@@ -229,8 +240,9 @@ CI runs lint, format, unit tests, and build on every push. A second job runs int
 
 ```text
 apps/api              NestJS HTTP API
-apps/worker           NestJS worker process (boots on @ayd/core and checks Redis; no jobs yet)
-packages/core         Nest modules both processes share: config, logging, Prisma, Redis, executor
+apps/worker           NestJS worker process: takes jobs from the queue and runs them
+packages/core         Nest modules both processes share: config, logging, Prisma, Redis,
+                      connections, schema, SQL check, executor, and the job queue
 packages/crypto       Envelope encryption for connection secrets
 packages/database     Prisma schema, migrations, and client
 packages/shared       Error envelope, request id, health report types

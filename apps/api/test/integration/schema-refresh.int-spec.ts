@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { Logger } from 'nestjs-pino';
 import { loadEnv } from '../../src/config/env';
-import { ConnectionService } from '../../src/connections/connection.service';
-import { PrismaConnectionRepository } from '../../src/connections/prisma-connection.repository';
-import { PrismaService, UserDatabaseProbe } from '@ayd/core';
-import { PrismaSchemaRepository } from '../../src/schema/prisma-schema.repository';
-import { SchemaService } from '../../src/schema/schema.service';
+import {
+  ConnectionService,
+  PrismaConnectionRepository,
+  PrismaSchemaRepository,
+  PrismaService,
+  SchemaService,
+  UserDatabaseProbe,
+} from '@ayd/core';
 import {
   createScratchDatabase,
   plainClients,

@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@ayd/database';
 import { writeAuditLog, type AuditEntry } from '../audit/audit-log';
-import { PrismaService, type SchemaDocument } from '@ayd/core';
+import { PrismaService } from '../prisma/prisma.service';
+import type { SchemaDocument } from './schema-document';
 import type { AllowlistEntry } from './allowed-schema';
 import {
   SNAPSHOTS_KEPT,

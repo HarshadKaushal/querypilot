@@ -1,6 +1,10 @@
 import { parseMasterKeyRing } from '@ayd/crypto';
-import { testEnv } from '../testing/test-env';
-import { type ConnectionPools, type ProbeResult, UserDatabaseProbe } from '@ayd/core';
+import { coreTestEnv } from '../testing/test-env';
+import type { ConnectionPools } from '../user-database/connection-pools';
+import {
+  type ProbeResult,
+  UserDatabaseProbe,
+} from '../user-database/user-database.probe';
 import { MemoryConnectionRepository } from '../testing/memory-connection.repository';
 import { ConnectionService, type AddressResolver } from './connection.service';
 
@@ -29,7 +33,7 @@ function service(options?: {
   const probe = {
     test: jest.fn(async () => options?.probe ?? { ok: true }),
   } as unknown as UserDatabaseProbe;
-  const env = testEnv({
+  const env = coreTestEnv({
     CRYPTO_MASTER_KEYS: KEYS,
     SSRF_ALLOW_PRIVATE: options?.allowPrivate ? 'true' : 'false',
   });

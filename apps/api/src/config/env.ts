@@ -1,4 +1,4 @@
-import { coreEnvFields, loadRootEnvFile, parseEnv } from '@ayd/core';
+import { checkCoreEnv, coreEnvFields, loadRootEnvFile, parseEnv } from '@ayd/core';
 import { z } from 'zod';
 
 export { ROOT_ENV_FILE } from '@ayd/core';
@@ -22,24 +22,15 @@ const EnvSchema = z
     GOOGLE_CLIENT_ID: z.string().default(''),
     GOOGLE_CLIENT_SECRET: z.string().default(''),
     GOOGLE_REDIRECT_URI: z.string().default(''),
-    CRYPTO_MASTER_KEY_VERSION: z.coerce.number().int().min(1),
-    CRYPTO_MASTER_KEYS: z.string().min(1),
-    SSRF_ALLOW_PRIVATE: z.enum(['true', 'false']).default('false'),
     EGRESS_IP: z.string().default(''),
   })
   .superRefine((env, ctx) => {
+    checkCoreEnv(env, ctx);
     if (env.NODE_ENV === 'production' && env.DEV_LOGIN_ENABLED === 'true') {
       ctx.addIssue({
         code: 'custom',
         path: ['DEV_LOGIN_ENABLED'],
         message: 'DEV_LOGIN_ENABLED cannot be true when NODE_ENV is production',
-      });
-    }
-    if (env.NODE_ENV === 'production' && env.SSRF_ALLOW_PRIVATE === 'true') {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['SSRF_ALLOW_PRIVATE'],
-        message: 'SSRF_ALLOW_PRIVATE cannot be true when NODE_ENV is production',
       });
     }
     const hasClient =
@@ -73,7 +64,6 @@ const EnvSchema = z
   .transform((env) => ({
     ...env,
     DEV_LOGIN_ENABLED: env.DEV_LOGIN_ENABLED === 'true',
-    SSRF_ALLOW_PRIVATE: env.SSRF_ALLOW_PRIVATE === 'true',
     googleConfigured:
       env.GOOGLE_CLIENT_ID.length > 0 &&
       env.GOOGLE_CLIENT_SECRET.length > 0 &&

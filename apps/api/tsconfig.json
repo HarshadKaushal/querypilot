@@ -2,7 +2,10 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    "paths": {
+      "@ayd/core/testing": ["../../packages/core/src/testing/index.ts"]
+    }
   },
   "include": ["src/**/*.ts"]
 }

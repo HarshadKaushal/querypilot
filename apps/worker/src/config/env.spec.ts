@@ -6,6 +6,8 @@ const VALID = {
   NODE_ENV: 'test',
   DATABASE_URL: 'postgresql://ayd:ayd@localhost:5434/ayd',
   REDIS_URL: 'redis://localhost:6379',
+  CRYPTO_MASTER_KEY_VERSION: '1',
+  CRYPTO_MASTER_KEYS: '1:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
 };
 
 describe('loadEnv', () => {
@@ -26,7 +28,15 @@ describe('loadEnv', () => {
       REDIS_URL: 'redis://localhost:6379',
       SQL_ROW_CAP: 1000,
       EXECUTOR_STATEMENT_TIMEOUT_MS: 15000,
+      WORKER_CONCURRENCY: 5,
+      SSRF_ALLOW_PRIVATE: false,
     });
+  });
+
+  it('refuses private addresses in production, as the API does', () => {
+    expect(() =>
+      loadEnv({ ...VALID, NODE_ENV: 'production', SSRF_ALLOW_PRIVATE: 'true' }),
+    ).toThrow('Invalid environment: SSRF_ALLOW_PRIVATE');
   });
 
   it('reads .env from the repository root', () => {

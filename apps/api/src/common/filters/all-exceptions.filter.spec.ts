@@ -2,7 +2,7 @@ import { Controller, Get, HttpException, INestApplication } from '@nestjs/common
 import { Test } from '@nestjs/testing';
 import { Logger } from 'nestjs-pino';
 import request from 'supertest';
-import { AppException } from '../errors/app.exception';
+import { AppException } from '@ayd/core';
 import { AllExceptionsFilter } from './all-exceptions.filter';
 
 @Controller('probe')

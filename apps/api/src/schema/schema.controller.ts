@@ -4,7 +4,7 @@ import { AuthGuard } from '../auth/auth.guard';
 import type { PublicUser } from '../auth/auth.repository';
 import { requestMeta } from '../auth/cookies';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { SchemaService } from './schema.service';
+import { SchemaService } from '@ayd/core';
 
 @Controller('v1/connections/:id')
 @UseGuards(AuthGuard)

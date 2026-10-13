@@ -90,10 +90,13 @@ services:
       context: .
       dockerfile: infra/docker/worker.Dockerfile
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       LOG_LEVEL: info
       DATABASE_URL: postgresql://ayd:ayd@app-db:5432/ayd
       REDIS_URL: redis://redis:6379
+      CRYPTO_MASTER_KEY_VERSION: '1'
+      CRYPTO_MASTER_KEYS: '1:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY='
+      SSRF_ALLOW_PRIVATE: 'true'
     depends_on:
       app-db:
         condition: service_healthy

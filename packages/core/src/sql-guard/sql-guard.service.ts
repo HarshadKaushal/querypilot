@@ -1,8 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { checkSql, type RejectionCode } from '@ayd/sql-guard';
-import { invalidRequest } from '../common/errors/app.exception';
-import { APP_ENV } from '../config/app-config.module';
-import type { AppEnv } from '../config/env';
+import { invalidRequest } from '../errors/app.exception';
+import { APP_ENV, type CoreEnv } from '../config/env';
 import { SchemaService } from '../schema/schema.service';
 
 export type SqlCheckResult =
@@ -22,7 +21,7 @@ export type SqlCheckResult =
 export class SqlGuardService {
   constructor(
     private readonly schemas: SchemaService,
-    @Inject(APP_ENV) private readonly env: AppEnv,
+    @Inject(APP_ENV) private readonly env: CoreEnv,
   ) {}
 
   async check(

@@ -33,6 +33,21 @@ export const coreEnvFields = {
     .refine((value) => value.startsWith('redis://') || value.startsWith('rediss://'), {
       error: 'REDIS_URL must be a redis URL',
     }),
+  // Envelope encryption keys for connection credentials (ADR 0007).
+  CRYPTO_MASTER_KEY_VERSION: z.coerce.number().int().min(1),
+  CRYPTO_MASTER_KEYS: z.string().min(1),
+  // Lets a laptop reach databases on private addresses. Refused in production.
+  SSRF_ALLOW_PRIVATE: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+  // The BullMQ queue the API adds jobs to and the worker takes them from.
+  JOB_QUEUE_NAME: z
+    .string()
+    .regex(/^[a-z0-9-]{1,64}$/)
+    .default('ayd-jobs'),
+  // How long a finished job and its result stay readable, in seconds.
+  JOB_RESULT_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(900),
   // Most rows one answer may return. The SQL guard adds or lowers LIMIT to this plus one.
   SQL_ROW_CAP: z.coerce.number().int().min(1).max(10000).default(1000),
   // Executor limits for queries on user databases (ADR 0010).
@@ -59,7 +74,21 @@ export const coreEnvFields = {
     .default(60000),
 };
 
-const CoreEnvSchema = z.object(coreEnvFields);
+/** Cross-field rules for the core settings. Apps call this from their own superRefine. */
+export function checkCoreEnv(
+  env: { NODE_ENV: string; SSRF_ALLOW_PRIVATE: boolean },
+  ctx: z.RefinementCtx,
+): void {
+  if (env.NODE_ENV === 'production' && env.SSRF_ALLOW_PRIVATE) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['SSRF_ALLOW_PRIVATE'],
+      message: 'SSRF_ALLOW_PRIVATE cannot be true when NODE_ENV is production',
+    });
+  }
+}
+
+const CoreEnvSchema = z.object(coreEnvFields).superRefine(checkCoreEnv);
 
 export type CoreEnv = z.infer<typeof CoreEnvSchema>;
 

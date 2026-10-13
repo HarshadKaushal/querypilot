@@ -2,17 +2,20 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { createHttpApp } from '../testing/http-app';
 import { testEnv } from '../testing/test-env';
-import { CONNECTION_REPOSITORY } from '../connections/connection.repository';
-import { ADDRESS_RESOLVER, ConnectionService } from '../connections/connection.service';
+import {
+  ADDRESS_RESOLVER,
+  CONNECTION_REPOSITORY,
+  ConnectionService,
+  SCHEMA_REPOSITORY,
+  type SchemaDocument,
+  SchemaService,
+  SqlGuardService,
+  UserDatabaseProbe,
+} from '@ayd/core';
 import { ConnectionsController } from '../connections/connections.controller';
-import { MemoryConnectionRepository } from '../testing/memory-connection.repository';
-import { type SchemaDocument, UserDatabaseProbe } from '@ayd/core';
-import { MemorySchemaRepository } from '../testing/memory-schema.repository';
+import { MemoryConnectionRepository, MemorySchemaRepository } from '@ayd/core/testing';
 import { SchemaController } from '../schema/schema.controller';
-import { SCHEMA_REPOSITORY } from '../schema/schema.repository';
-import { SchemaService } from '../schema/schema.service';
 import { SqlGuardController } from './sql-guard.controller';
-import { SqlGuardService } from './sql-guard.service';
 
 const document: SchemaDocument = {
   formatVersion: 1,

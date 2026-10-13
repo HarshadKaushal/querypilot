@@ -1,6 +1,13 @@
-import { APP_ENV, createLoggerModule, RedisModule } from '@ayd/core';
+import {
+  APP_ENV,
+  createLoggerModule,
+  JobRunnersModule,
+  PrismaModule,
+  RedisModule,
+} from '@ayd/core';
 import { Global, Module, type DynamicModule } from '@nestjs/common';
 import type { WorkerEnv } from './config/env';
+import { JobWorker } from './jobs/job-worker';
 
 /** Provides the parsed environment to every module, as the API's AppConfigModule does. */
 @Global()
@@ -23,8 +30,11 @@ export class WorkerModule {
       imports: [
         WorkerConfigModule.register(env),
         createLoggerModule({ service: 'worker' }),
+        PrismaModule,
         RedisModule,
+        JobRunnersModule,
       ],
+      providers: [JobWorker],
     };
   }
 }
