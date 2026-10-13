@@ -1,32 +1,14 @@
-import { config as loadDotenv } from 'dotenv';
-import { resolve } from 'node:path';
+import { coreEnvFields, loadRootEnvFile, parseEnv } from '@ayd/core';
 import { z } from 'zod';
 
-// src/config and dist/config are both four levels below the repository root.
-export const ROOT_ENV_FILE = resolve(__dirname, '../../../../.env');
+export { ROOT_ENV_FILE } from '@ayd/core';
 
-loadDotenv({ path: ROOT_ENV_FILE, quiet: true });
+loadRootEnvFile();
 
 const EnvSchema = z
   .object({
-    NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+    ...coreEnvFields,
     API_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
-    LOG_LEVEL: z
-      .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace'])
-      .default('info'),
-    DATABASE_URL: z
-      .string()
-      .min(1)
-      .refine(
-        (value) => value.startsWith('postgres://') || value.startsWith('postgresql://'),
-        { error: 'DATABASE_URL must be a postgres URL' },
-      ),
-    REDIS_URL: z
-      .string()
-      .min(1)
-      .refine((value) => value.startsWith('redis://') || value.startsWith('rediss://'), {
-        error: 'REDIS_URL must be a redis URL',
-      }),
     AUTH_JWT_SECRET: z.string().min(32),
     AUTH_ACCESS_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
     AUTH_REFRESH_TTL_SECONDS: z.coerce
@@ -44,30 +26,6 @@ const EnvSchema = z
     CRYPTO_MASTER_KEYS: z.string().min(1),
     SSRF_ALLOW_PRIVATE: z.enum(['true', 'false']).default('false'),
     EGRESS_IP: z.string().default(''),
-    // Most rows one answer may return. The SQL guard adds or lowers LIMIT to this.
-    SQL_ROW_CAP: z.coerce.number().int().min(1).max(10000).default(1000),
-    // Executor limits for queries on user databases (ADR 0010).
-    EXECUTOR_STATEMENT_TIMEOUT_MS: z.coerce
-      .number()
-      .int()
-      .min(100)
-      .max(300000)
-      .default(15000),
-    EXECUTOR_MAX_RESULT_BYTES: z.coerce
-      .number()
-      .int()
-      .min(1024)
-      .max(100_000_000)
-      .default(5_000_000),
-    EXECUTOR_MAX_CONCURRENT_QUERIES: z.coerce.number().int().min(1).max(50).default(2),
-    EXECUTOR_QUEUE_WAIT_MS: z.coerce.number().int().min(0).max(120000).default(10000),
-    EXECUTOR_BREAKER_FAILURES: z.coerce.number().int().min(1).max(100).default(5),
-    EXECUTOR_BREAKER_COOLDOWN_MS: z.coerce
-      .number()
-      .int()
-      .min(1000)
-      .max(3_600_000)
-      .default(60000),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && env.DEV_LOGIN_ENABLED === 'true') {
@@ -125,12 +83,5 @@ const EnvSchema = z
 export type AppEnv = z.infer<typeof EnvSchema>;
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
-  const parsed = EnvSchema.safeParse(source);
-  if (!parsed.success) {
-    const fields = parsed.error.issues
-      .map((issue) => issue.path.join('.') || 'environment')
-      .join(', ');
-    throw new Error(`Invalid environment: ${fields}`);
-  }
-  return parsed.data;
+  return parseEnv(EnvSchema, source);
 }

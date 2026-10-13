@@ -7,12 +7,13 @@
     "build": "npm run generate --workspace=@ayd/database && tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "test": "npm run test:unit",
-    "test:unit": "npm run build --workspace=@ayd/ssrf-guard && npm run build --workspace=@ayd/crypto && npm run build --workspace=@ayd/sql-guard && npm run generate --workspace=@ayd/database && node ../../scripts/jest.cjs --config jest.unit.config.cjs",
+    "test:unit": "npm run build --workspace=@ayd/ssrf-guard && npm run build --workspace=@ayd/crypto && npm run build --workspace=@ayd/sql-guard && npm run build --workspace=@ayd/database && npm run build --workspace=@ayd/core && node ../../scripts/jest.cjs --config jest.unit.config.cjs",
     "test:int": "npm run generate --workspace=@ayd/database && node ../../scripts/jest.cjs --config jest.int.config.cjs --runInBand",
     "test:e2e": "npm run generate --workspace=@ayd/database && node ../../scripts/jest.cjs --config jest.e2e.config.cjs --runInBand",
     "try-query": "node scripts/try-query.cjs"
   },
   "dependencies": {
+    "@ayd/core": "*",
     "@ayd/crypto": "*",
     "@ayd/database": "*",
     "@ayd/shared": "*",
@@ -21,12 +22,9 @@
     "@nestjs/common": "^12.1.3",
     "@nestjs/core": "^12.1.3",
     "@nestjs/platform-express": "^12.1.3",
-    "dotenv": "^18.0.7",
-    "ioredis": "^6.0.0",
     "jose": "^6.2.12",
     "nestjs-pino": "^5.3.1",
     "pg": "^8.23.1",
-    "pino": "^10.4.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "zod": "^4.6.6"

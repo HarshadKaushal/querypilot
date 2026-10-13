@@ -2,9 +2,8 @@ import { createHash } from 'node:crypto';
 import { Inject, Injectable, OnModuleDestroy, Optional } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import { Pool, types, type PoolConfig } from 'pg';
-import { safeErrorDetail } from '../common/logging/safe-error';
-import { APP_ENV } from '../config/app-config.module';
-import type { AppEnv } from '../config/env';
+import { safeErrorDetail } from '../logging/safe-error';
+import { APP_ENV, type CoreEnv } from '../config/env';
 import { userDatabaseConfig } from './connection-config';
 import type { ProbeRequest } from './user-database.probe';
 
@@ -62,7 +61,7 @@ export class ConnectionPools implements OnModuleDestroy {
   private readonly pools = new Map<string, Entry>();
 
   constructor(
-    @Inject(APP_ENV) private readonly env: AppEnv,
+    @Inject(APP_ENV) private readonly env: CoreEnv,
     private readonly logger: Logger,
     @Optional() @Inject(PG_POOL_FACTORY) private readonly factory?: PoolFactory,
   ) {}

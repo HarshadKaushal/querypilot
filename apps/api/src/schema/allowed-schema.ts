@@ -5,7 +5,7 @@ import type {
   SchemaDocument,
   SchemaForeignKey,
   SchemaTable,
-} from './schema-document';
+} from '@ayd/core';
 import { isSensitiveColumn } from './sensitive-columns';
 
 // Pure functions over a snapshot and its allowlist. Every schema the model will see is built

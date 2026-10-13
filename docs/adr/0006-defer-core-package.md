@@ -1,3 +1,5 @@
 # ADR 0006: Shared Nest modules wait until the worker needs them
 
 `config`, logging, and Redis are duplicated in small form between the API and the worker. Framework-agnostic libraries (`sql-guard`, `ssrf-guard`) will be their own packages when those phases start. Nest modules both processes need (config, logger, Redis, and later crypto, the executor, and the model layer) move to `packages/core` before Phase 6, when the worker starts running jobs. Moving them earlier creates a package with one caller.
+
+**Done (2026-10-13, Phase 6 step 2).** `packages/core` holds the shared settings (`coreEnvFields`, `parseEnv`, the `APP_ENV` token), the pino logger factory with one redaction list, `PrismaModule`, `RedisModule`, `safeErrorDetail` and `errorCode`, the schema document type, and the executor module. Each app builds its environment schema by spreading `coreEnvFields`, and provides `APP_ENV` itself. The worker uses the config, logger, and Redis from core, so the package has two callers from the start. Crypto key handling, connection target resolution, and the schema allowlist reads stay in the API until step 3 gives the worker jobs that need them.

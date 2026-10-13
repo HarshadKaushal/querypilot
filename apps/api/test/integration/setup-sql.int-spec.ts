@@ -1,5 +1,5 @@
 import type { Logger } from 'nestjs-pino';
-import { UserDatabaseProbe } from '../../src/user-database/user-database.probe';
+import { UserDatabaseProbe } from '@ayd/core';
 import { SETUP_SQL } from '../../src/egress/egress.controller';
 import {
   createScratchDatabase,

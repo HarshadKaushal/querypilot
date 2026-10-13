@@ -92,8 +92,11 @@ services:
     environment:
       NODE_ENV: production
       LOG_LEVEL: info
+      DATABASE_URL: postgresql://ayd:ayd@app-db:5432/ayd
       REDIS_URL: redis://redis:6379
     depends_on:
+      app-db:
+        condition: service_healthy
       redis:
         condition: service_healthy
 

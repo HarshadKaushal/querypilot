@@ -229,7 +229,8 @@ CI runs lint, format, unit tests, and build on every push. A second job runs int
 
 ```text
 apps/api              NestJS HTTP API
-apps/worker           NestJS worker process (boots and checks Redis; no jobs yet)
+apps/worker           NestJS worker process (boots on @ayd/core and checks Redis; no jobs yet)
+packages/core         Nest modules both processes share: config, logging, Prisma, Redis, executor
 packages/crypto       Envelope encryption for connection secrets
 packages/database     Prisma schema, migrations, and client
 packages/shared       Error envelope, request id, health report types
@@ -240,7 +241,7 @@ infra/sample-db       Seed and TLS entrypoint for the sample user database
 docs                  Index, blueprint, decisions, and reviews
 ```
 
-Start with [docs/README.md](docs/README.md). Later phases add `apps/web`, `packages/core`, and `eval`.
+Start with [docs/README.md](docs/README.md). Later phases add `apps/web` and `eval`.
 
 ## Decisions already locked for later phases
 

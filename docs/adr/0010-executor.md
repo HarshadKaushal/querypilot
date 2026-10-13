@@ -1,6 +1,6 @@
 # ADR 0010: Executor
 
-`QueryExecutor` is the only code that runs SQL on a user database (blueprint rule 7). It lives with the read-only probe, schema introspection, and the connection pools in `apps/api/src/user-database/`, the blueprint's Executor module. It takes SQL the guard accepted and treats the guard as one layer among several, not the only one.
+`QueryExecutor` is the only code that runs SQL on a user database (blueprint rule 7). It lives with the read-only probe, schema introspection, and the connection pools in `packages/core/src/user-database/`, the blueprint's Executor module. It takes SQL the guard accepted and treats the guard as one layer among several, not the only one.
 
 **One query, step by step.**
 
@@ -23,4 +23,4 @@
 
 **Errors.** Failures are decided from the SQLSTATE and Node's codes, never from database text, and come back as fixed messages. A column, table, or schema the database no longer has (SQLSTATE `42703`, `42P01`, `3F000`) returns `QUERY_SCHEMA_CHANGED`. The guard checked those names against the saved snapshot, so the database changed after the last refresh, and the message says to refresh. It is not retryable, because the same snapshot would fail the same way. `retryable` is true only for other mistakes in the query itself (SQLSTATE classes 42, 22, 21, 0A), which the model may try once more to fix. Timeouts and permission errors are not retryable, as the blueprint asks.
 
-**Where it runs.** In the API process for now, like the probe and introspection, with no HTTP route. Phase 6 moves the executor, with config, logging, Redis, and crypto, into `packages/core` for the worker (ADR 0006). Until then `apps/api/scripts/try-query.cjs` runs the whole pipeline by hand against the sample database.
+**Where it runs.** The module is in `packages/core` (ADR 0006), so the API and the worker can both load it. It has no HTTP route. Phase 6 step 3 runs it from worker jobs. Until then `apps/api/scripts/try-query.cjs` runs the whole pipeline by hand against the sample database.

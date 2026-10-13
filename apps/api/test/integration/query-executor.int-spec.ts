@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { Logger } from 'nestjs-pino';
 import { loadEnv } from '../../src/config/env';
-import { ConnectionPools } from '../../src/user-database/connection-pools';
-import { RedisCoordination, semaphoreKey } from '../../src/user-database/coordination';
-import { QueryExecutor } from '../../src/user-database/query-executor';
-import type { ProbeRequest } from '../../src/user-database/user-database.probe';
-import { RedisService } from '../../src/redis/redis.service';
+import {
+  ConnectionPools,
+  type ProbeRequest,
+  QueryExecutor,
+  RedisCoordination,
+  RedisService,
+  semaphoreKey,
+} from '@ayd/core';
 import {
   createScratchDatabase,
   plainPools,

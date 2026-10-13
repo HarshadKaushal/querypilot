@@ -5,13 +5,9 @@ import { CONNECTION_REPOSITORY } from '../connections/connection.repository';
 import { ADDRESS_RESOLVER, ConnectionService } from '../connections/connection.service';
 import { ConnectionsController } from '../connections/connections.controller';
 import { MemoryConnectionRepository } from '../testing/memory-connection.repository';
-import {
-  UserDatabaseProbe,
-  type IntrospectResult,
-} from '../user-database/user-database.probe';
+import { type IntrospectResult, type SchemaDocument, UserDatabaseProbe } from '@ayd/core';
 import { MemorySchemaRepository } from '../testing/memory-schema.repository';
 import { SchemaController } from './schema.controller';
-import type { SchemaDocument } from './schema-document';
 import { SCHEMA_REPOSITORY } from './schema.repository';
 import { SchemaService } from './schema.service';
 

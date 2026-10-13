@@ -3,7 +3,7 @@ import {
   DESCRIPTION_MAX,
   parseAllowlistInput,
 } from './allowlist-input';
-import type { SchemaDocument } from './schema-document';
+import type { SchemaDocument } from '@ayd/core';
 
 const document: SchemaDocument = {
   formatVersion: 1,

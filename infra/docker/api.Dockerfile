@@ -9,9 +9,10 @@ COPY packages/database/package.json packages/database/package.json
 COPY packages/ssrf-guard/package.json packages/ssrf-guard/package.json
 COPY packages/crypto/package.json packages/crypto/package.json
 COPY packages/sql-guard/package.json packages/sql-guard/package.json
+COPY packages/core/package.json packages/core/package.json
 RUN npm ci
 COPY . .
-RUN npm run build --workspace=@ayd/shared && npm run build --workspace=@ayd/ssrf-guard && npm run build --workspace=@ayd/crypto && npm run build --workspace=@ayd/sql-guard && npm run build --workspace=@ayd/database && npm run build --workspace=@ayd/api
+RUN npm run build --workspace=@ayd/shared && npm run build --workspace=@ayd/ssrf-guard && npm run build --workspace=@ayd/crypto && npm run build --workspace=@ayd/sql-guard && npm run build --workspace=@ayd/database && npm run build --workspace=@ayd/core && npm run build --workspace=@ayd/api
 
 FROM node:24-alpine
 WORKDIR /repo

@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { ConnectionsModule } from '../connections/connections.module';
-import { UserDatabaseModule } from '../user-database/user-database.module';
+import { UserDatabaseModule } from '@ayd/core';
 import { PrismaSchemaRepository } from './prisma-schema.repository';
 import { SchemaController } from './schema.controller';
 import { SCHEMA_REPOSITORY } from './schema.repository';

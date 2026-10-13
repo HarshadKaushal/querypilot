@@ -1,6 +1,6 @@
 import type { AuditEntry } from '../audit/audit-log';
 import type { AllowlistEntry } from './allowed-schema';
-import type { SchemaDocument } from './schema-document';
+import type { SchemaDocument } from '@ayd/core';
 
 export interface StoredSnapshot {
   id: string;

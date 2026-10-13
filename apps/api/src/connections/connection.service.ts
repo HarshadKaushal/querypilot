@@ -5,15 +5,15 @@ import { HttpStatus, Inject, Injectable, Optional } from '@nestjs/common';
 import { openCredentials, parseMasterKeyRing, sealCredentials } from '@ayd/crypto';
 import { assessResolution } from '@ayd/ssrf-guard';
 import { AppException, invalidRequest, notFound } from '../common/errors/app.exception';
-import { ConnectionPools } from '../user-database/connection-pools';
-import { APP_ENV } from '../config/app-config.module';
-import type { AppEnv } from '../config/env';
 import {
-  UserDatabaseProbe,
+  ConnectionPools,
   type ProbeRequest,
   type ProbeResult,
   type SslMode,
-} from '../user-database/user-database.probe';
+  UserDatabaseProbe,
+} from '@ayd/core';
+import { APP_ENV } from '../config/app-config.module';
+import type { AppEnv } from '../config/env';
 import {
   CONNECTION_REPOSITORY,
   toPublicConnection,

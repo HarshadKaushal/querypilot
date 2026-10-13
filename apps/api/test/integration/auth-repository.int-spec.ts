@@ -3,7 +3,7 @@ import type { AuthRepository } from '../../src/auth/auth.repository';
 import { MemoryAuthRepository } from '../../src/testing/memory-auth.repository';
 import { PrismaAuthRepository } from '../../src/auth/prisma-auth.repository';
 import { loadEnv } from '../../src/config/env';
-import { PrismaService } from '../../src/prisma/prisma.service';
+import { PrismaService } from '@ayd/core';
 
 // One contract, run against both implementations. The unit tests use the in-memory fake,
 // so this proves the fake behaves like the real repository on the security-relevant rules:

@@ -1,55 +1,30 @@
-import {
-  Injectable,
-  Module,
-  type DynamicModule,
-  type OnApplicationShutdown,
-} from '@nestjs/common';
-import Redis from 'ioredis';
+import { APP_ENV, createLoggerModule, RedisModule } from '@ayd/core';
+import { Global, Module, type DynamicModule } from '@nestjs/common';
 import type { WorkerEnv } from './config/env';
 
-export const WORKER_REDIS = 'WORKER_REDIS';
-
-@Injectable()
-export class WorkerRedis implements OnApplicationShutdown {
-  constructor(private readonly client: Redis) {}
-
-  async ping(): Promise<void> {
-    if (this.client.status === 'wait') {
-      await this.client.connect();
-    }
-    const reply = await this.client.ping();
-    if (reply !== 'PONG') {
-      throw new Error('Redis ping failed');
-    }
-  }
-
-  async onApplicationShutdown(): Promise<void> {
-    if (this.client.status !== 'end') {
-      await this.client.quit().catch(() => this.client.disconnect());
-    }
+/** Provides the parsed environment to every module, as the API's AppConfigModule does. */
+@Global()
+@Module({})
+class WorkerConfigModule {
+  static register(env: WorkerEnv): DynamicModule {
+    return {
+      module: WorkerConfigModule,
+      providers: [{ provide: APP_ENV, useValue: env }],
+      exports: [APP_ENV],
+    };
   }
 }
 
 @Module({})
 export class WorkerModule {
   static register(env: WorkerEnv): DynamicModule {
-    const client = new Redis(env.REDIS_URL, {
-      maxRetriesPerRequest: 1,
-      connectTimeout: 2000,
-      enableOfflineQueue: false,
-      lazyConnect: true,
-    });
-
     return {
       module: WorkerModule,
-      providers: [
-        { provide: Redis, useValue: client },
-        {
-          provide: WORKER_REDIS,
-          useFactory: () => new WorkerRedis(client),
-        },
+      imports: [
+        WorkerConfigModule.register(env),
+        createLoggerModule({ service: 'worker' }),
+        RedisModule,
       ],
-      exports: [WORKER_REDIS],
     };
   }
 }

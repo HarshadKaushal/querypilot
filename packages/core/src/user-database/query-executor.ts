@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
-import { safeErrorDetail } from '../common/logging/safe-error';
-import { APP_ENV } from '../config/app-config.module';
-import type { AppEnv } from '../config/env';
+import { safeErrorDetail } from '../logging/safe-error';
+import { APP_ENV, type CoreEnv } from '../config/env';
 import { classifyConnectError } from './connect-error';
 import { ConnectionPools, type PoolClientLike } from './connection-pools';
 import {
@@ -54,7 +53,7 @@ const CURSOR = 'ayd_result';
 @Injectable()
 export class QueryExecutor {
   constructor(
-    @Inject(APP_ENV) private readonly env: AppEnv,
+    @Inject(APP_ENV) private readonly env: CoreEnv,
     private readonly pools: ConnectionPools,
     @Inject(COORDINATION) private readonly coordination: Coordination,
     private readonly logger: Logger,

@@ -1,11 +1,7 @@
 import { parseMasterKeyRing } from '@ayd/crypto';
 import { testEnv } from '../testing/test-env';
-import {
-  UserDatabaseProbe,
-  type ProbeResult,
-} from '../user-database/user-database.probe';
+import { type ConnectionPools, type ProbeResult, UserDatabaseProbe } from '@ayd/core';
 import { MemoryConnectionRepository } from '../testing/memory-connection.repository';
-import type { ConnectionPools } from '../user-database/connection-pools';
 import { ConnectionService, type AddressResolver } from './connection.service';
 
 const PASSWORD = 'sample_ro_password';

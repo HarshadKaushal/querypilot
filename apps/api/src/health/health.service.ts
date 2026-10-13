@@ -1,9 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import type { DependencyCheck, HealthReport } from '@ayd/shared';
-import { safeErrorDetail } from '../common/logging/safe-error';
-import { PrismaService } from '../prisma/prisma.service';
-import { RedisService } from '../redis/redis.service';
+import { PrismaService, RedisService, safeErrorDetail } from '@ayd/core';
 
 @Injectable()
 export class HealthService {

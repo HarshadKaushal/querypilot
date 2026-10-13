@@ -1,7 +1,7 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { Client, type ClientConfig } from 'pg';
 import { Logger } from 'nestjs-pino';
-import { safeErrorDetail } from '../common/logging/safe-error';
+import { safeErrorDetail } from '../logging/safe-error';
 import type { SchemaDocument } from '../schema/schema-document';
 import { classifyConnectError } from './connect-error';
 import { userDatabaseConfig } from './connection-config';

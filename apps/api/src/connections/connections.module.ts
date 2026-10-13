@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
-import { UserDatabaseModule } from '../user-database/user-database.module';
+import { UserDatabaseModule } from '@ayd/core';
 import {
   ADDRESS_RESOLVER,
   ConnectionService,

@@ -1,6 +1,7 @@
 import 'reflect-metadata';
+import { RedisService } from '@ayd/core';
 import { NestFactory } from '@nestjs/core';
-import pino from 'pino';
+import { Logger } from 'nestjs-pino';
 import { loadEnv } from './config/env';
 import { WorkerModule } from './worker.module';
 
@@ -13,19 +14,15 @@ function startupError(error: unknown): string {
 
 async function bootstrap(): Promise<void> {
   const env = loadEnv();
-  const logger = pino({
-    level: env.LOG_LEVEL,
-    messageKey: 'message',
-    base: { service: 'worker' },
-  });
   const app = await NestFactory.createApplicationContext(WorkerModule.register(env), {
-    logger: false,
+    bufferLogs: true,
   });
+  const logger = app.get(Logger);
+  app.useLogger(logger);
   app.enableShutdownHooks();
 
-  const redis = app.get<{ ping: () => Promise<void> }>('WORKER_REDIS');
-  await redis.ping();
-  logger.info('worker ready');
+  await app.get(RedisService).ping();
+  logger.log('worker ready');
 }
 
 bootstrap().catch((error: unknown) => {

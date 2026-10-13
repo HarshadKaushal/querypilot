@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { writeAuditLog, type AuditEntry } from '../audit/audit-log';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '@ayd/core';
 import {
   toPublicUser,
   type AuthRepository,

@@ -1,4 +1,4 @@
-import { errorCode } from '../common/errors/error-code';
+import { errorCode } from '../errors/error-code';
 import type { ProbeFailure } from './user-database.probe';
 
 // Decisions use the SQLSTATE the server sends, Node's socket and TLS codes, and the fixed

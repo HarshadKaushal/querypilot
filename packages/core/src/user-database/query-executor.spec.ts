@@ -1,5 +1,5 @@
 import { Logger } from 'nestjs-pino';
-import { testEnv } from '../testing/test-env';
+import { coreTestEnv } from '../testing/test-env';
 import {
   ConnectionPools,
   MAX_POOLS,
@@ -24,7 +24,7 @@ const target: ProbeRequest = {
 };
 
 function env(overrides: Record<string, string> = {}) {
-  return testEnv({
+  return coreTestEnv({
     EXECUTOR_QUEUE_WAIT_MS: '0',
     ...overrides,
   });

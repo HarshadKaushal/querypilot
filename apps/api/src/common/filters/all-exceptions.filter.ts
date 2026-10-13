@@ -1,3 +1,4 @@
+import { safeErrorDetail } from '@ayd/core';
 import {
   ArgumentsHost,
   Catch,
@@ -16,7 +17,6 @@ import {
   NOT_FOUND_MESSAGE,
   UNAUTHENTICATED_MESSAGE,
 } from '../errors/app.exception';
-import { safeErrorDetail } from '../logging/safe-error';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {

@@ -7,7 +7,7 @@ import {
   schemaFingerprint,
   type AllowlistEntry,
 } from './allowed-schema';
-import type { SchemaDocument } from './schema-document';
+import type { SchemaDocument } from '@ayd/core';
 
 const document: SchemaDocument = {
   formatVersion: 1,

@@ -1,6 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { UserDatabaseProbe } from '../user-database/user-database.probe';
+import { UserDatabaseProbe } from '@ayd/core';
 import { createHttpApp } from '../testing/http-app';
 import { ADDRESS_RESOLVER, ConnectionService } from './connection.service';
 import { CONNECTION_REPOSITORY } from './connection.repository';

@@ -1,9 +1,10 @@
 import type { Logger } from 'nestjs-pino';
 import {
-  UserDatabaseProbe,
   type ProbeRequest,
-} from '../../src/user-database/user-database.probe';
-import type { SchemaDocument, SchemaTable } from '../../src/schema/schema-document';
+  type SchemaDocument,
+  type SchemaTable,
+  UserDatabaseProbe,
+} from '@ayd/core';
 import {
   createScratchDatabase,
   plainClients,

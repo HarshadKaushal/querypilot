@@ -1,14 +1,13 @@
 import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
 import Redis from 'ioredis';
-import { APP_ENV } from '../config/app-config.module';
-import type { AppEnv } from '../config/env';
+import { APP_ENV, type CoreEnv } from '../config/env';
 
 @Injectable()
 export class RedisService implements OnModuleDestroy {
   private readonly client: Redis;
   private connecting?: Promise<void>;
 
-  constructor(@Inject(APP_ENV) env: AppEnv) {
+  constructor(@Inject(APP_ENV) env: CoreEnv) {
     this.client = new Redis(env.REDIS_URL, {
       maxRetriesPerRequest: 1,
       connectTimeout: 2000,

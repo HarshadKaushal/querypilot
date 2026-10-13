@@ -1,11 +1,10 @@
 import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
 import { postgresAdapter, PrismaClient } from '@ayd/database';
-import { APP_ENV } from '../config/app-config.module';
-import type { AppEnv } from '../config/env';
+import { APP_ENV, type CoreEnv } from '../config/env';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleDestroy {
-  constructor(@Inject(APP_ENV) env: AppEnv) {
+  constructor(@Inject(APP_ENV) env: CoreEnv) {
     super({ adapter: postgresAdapter(env.DATABASE_URL) });
   }
 

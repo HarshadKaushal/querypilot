@@ -1,5 +1,5 @@
 import type { AllowlistEntry } from './allowed-schema';
-import type { SchemaDocument } from './schema-document';
+import type { SchemaDocument } from '@ayd/core';
 
 // Turns the body of PUT /v1/connections/:id/allowlist into allowlist rows. Columns are nested
 // under their table, so a column can never be allowed without its table. Every name has to
