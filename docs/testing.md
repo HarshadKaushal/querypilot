@@ -4,7 +4,7 @@ Unit tests sit next to the code. Everything that needs infrastructure lives in i
 
 | Type               | Needs                                     | Location                                          | Naming                       |
 | ------------------ | ----------------------------------------- | ------------------------------------------------- | ---------------------------- |
-| Unit               | No database, Redis, or network            | Next to the source file                           | `*.spec.ts`                  |
+| Unit               | No database, Redis, or network            | Next to the source file                           | `*.spec.ts`, `*.spec.tsx`    |
 | Integration        | Real Postgres and Redis                   | `apps/<app>/test/integration/`                    | `*.int-spec.ts`              |
 | API end-to-end     | The Nest app plus real Postgres and Redis | `apps/api/test/e2e/`                              | `*.e2e-spec.ts`              |
 | Browser end-to-end | Web, API, worker, and databases           | `e2e/` at the repo root, when the web app exists  | `*.spec.ts`                  |
@@ -19,7 +19,7 @@ npm run test:e2e
 npm run test:all
 ```
 
-`npm test` is `test:unit`. It has to finish without Docker. The API, the worker, and `@ayd/core` run Jest through `scripts/jest.cjs`, which turns on Node's VM modules so Jest can load NestJS 12, an ES-module-only package. Integration and API end-to-end tests expect `npm run up:deps` and `npm run migrate --workspace=@ayd/database` first. They use port 5434 and Redis on 6379 on a laptop. CI points them at its own Postgres and Redis.
+`npm test` is `test:unit`. It has to finish without Docker. The web app runs Vitest with Testing Library in jsdom (`vitest run`), on the same Vite config as the app; its page tests use `renderWithApp()` and `fakeApi()` from `apps/web/src/test/render.tsx`, which give a page the app's providers and a mocked API client instead of a server. The API, the worker, and `@ayd/core` run Jest through `scripts/jest.cjs`, which turns on Node's VM modules so Jest can load NestJS 12, an ES-module-only package. Integration and API end-to-end tests expect `npm run up:deps` and `npm run migrate --workspace=@ayd/database` first. They use port 5434 and Redis on 6379 on a laptop. CI points them at its own Postgres and Redis.
 
 Playwright and the evaluation runner are not created yet. They get their own commands when those folders exist. Evaluation reports accuracy. It is not a pass/fail suite, and it is the only place a real model is called.
 
@@ -37,7 +37,7 @@ Playwright and the evaluation runner are not created yet. They get their own com
 
 ## CI
 
-On every push: lint, format check, unit tests, and build.
+On every push: lint, format check, unit tests (including the web app's), and build (including the web app).
 
 On every push, in a second job: migrate a Postgres service, then integration and API end-to-end tests.
 

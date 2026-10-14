@@ -4,6 +4,8 @@ ENV DATABASE_URL=postgresql://ayd:ayd@localhost:5432/ayd
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/worker/package.json apps/worker/package.json
+# npm ci needs every workspace manifest, including the web app it does not build here.
+COPY apps/web/package.json apps/web/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/database/package.json packages/database/package.json
 COPY packages/ssrf-guard/package.json packages/ssrf-guard/package.json

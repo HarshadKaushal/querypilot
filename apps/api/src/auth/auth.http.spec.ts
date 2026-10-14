@@ -53,6 +53,41 @@ describe('auth routes', () => {
     expect(cookieHeader(response.headers['set-cookie'])).toContain('ayd_oauth=');
   });
 
+  it('finishes Google sign-in by setting the refresh cookie and returning to the web app', async () => {
+    const server = app.getHttpServer();
+    const start = await request(server).get('/v1/auth/google/start');
+    const state = new URL(start.headers.location).searchParams.get('state') ?? '';
+    const callback = await request(server)
+      .get(`/v1/auth/google/callback?code=abc&state=${state}`)
+      .set('Cookie', cookieHeader(start.headers['set-cookie']));
+    expect(callback.status).toBe(302);
+    expect(callback.headers.location).toBe('http://localhost:5173/');
+    const cookies = cookieHeader(callback.headers['set-cookie']);
+    expect(cookies).toContain('ayd_refresh=');
+    // The web app then gets its access token with that cookie.
+    const refresh = await request(server)
+      .post('/v1/auth/refresh')
+      .set(
+        'Cookie',
+        cookies.split('; ').filter((c) => c.startsWith('ayd_refresh=')),
+      );
+    expect(refresh.status).toBe(200);
+    expect(refresh.body.user.email).toBe('a@example.com');
+  });
+
+  it('sends a failed Google sign-in to the sign-in page with its code, and no session', async () => {
+    const server = app.getHttpServer();
+    const start = await request(server).get('/v1/auth/google/start');
+    const callback = await request(server)
+      .get('/v1/auth/google/callback?code=abc&state=not-the-state')
+      .set('Cookie', cookieHeader(start.headers['set-cookie']));
+    expect(callback.status).toBe(302);
+    expect(callback.headers.location).toBe(
+      'http://localhost:5173/sign-in?error=AUTH_FAILED',
+    );
+    expect(cookieHeader(callback.headers['set-cookie'])).not.toContain('ayd_refresh=');
+  });
+
   it('rejects an unauthenticated profile request', async () => {
     const response = await request(app.getHttpServer()).get('/v1/users/me');
     expect(response.status).toBe(401);
@@ -111,12 +146,15 @@ describe('auth routes', () => {
     expect(loggedOut.status).toBe(204);
   });
 
-  it('returns 503 when Google sign-in is not configured', async () => {
+  it('sends the browser to the sign-in page when Google sign-in is not configured', async () => {
     // The default test environment has no Google client configured.
     const bare = await createHttpApp({ google, requestId: 'req-auth-02' });
     const response = await request(bare.getHttpServer()).get('/v1/auth/google/start');
-    expect(response.status).toBe(503);
-    expect(response.body.error.code).toBe('AUTH_NOT_CONFIGURED');
+    expect(response.status).toBe(302);
+    expect(response.headers.location).toBe(
+      'http://localhost:5173/sign-in?error=AUTH_NOT_CONFIGURED',
+    );
+    expect(cookieHeader(response.headers['set-cookie'])).not.toContain('ayd_oauth=');
     await bare.close();
   });
 });

@@ -18,7 +18,7 @@ Status of Ask Your Database against the production blueprint. Phase 6 (queue, wo
 - Sample retail schema (customers, products, orders, order items, payments) and a read-only login, `sample_ro`.
 - Root `README.md` with setup and run instructions.
 - `.env.example` with local URLs and no third-party secrets.
-- Google OIDC start and callback with PKCE. The ID token is verified against Google's certificates. Unverified emails are rejected.
+- Google OIDC start and callback with PKCE, answering the browser with redirects (to the web app, or to its sign-in page with an error code). The ID token is verified against Google's certificates. Unverified emails are rejected.
 - Local development login at `POST /v1/auth/dev/login`, enabled only when `DEV_LOGIN_ENABLED=true` and `NODE_ENV` is not `production`.
 - Short-lived HS256 access tokens and rotating refresh tokens. The refresh token is stored as a hash and returned only in an httpOnly cookie.
 - Refresh reuse revokes the token family. Logout revokes the presented token. `GET /v1/users/me` rejects missing or invalid access tokens.
@@ -52,6 +52,8 @@ Status of Ask Your Database against the production blueprint. Phase 6 (queue, wo
 
 ## Partial
 
+- **Web app (Phase 9 step 9a).** `apps/web`: sign in with Google or, in development, the dev login; the session survives a reload and refreshes itself; the connections list with status and delete. Pages for connecting a database, asking, history, usage, and settings follow in steps 9b to 9d.
+
 - **Ask pipeline (Phase 7 step 2).** `POST /v1/connections/:id/questions` answers a question in English as a job: the model proposes SQL over the allowlisted schema, the guard checks it (a rejection is sent back to the model, at most twice), and the executor runs it. Ambiguous and unanswerable questions stop before anything runs, with a clarifying question or an explanation. A repeated question is answered from a cache of validated SQL (per schema fingerprint, never rows), and a query that fails because the database changed refreshes the schema and tries once more. Each answer also carries a chart choice (stat, line, bar, pie, or table, by fixed rules), server-computed facts, a two- or three-sentence summary from a lighter, faster model (`gemini-3.5-flash-lite`, then the primary) whose numbers are checked against the data (a template replaces it otherwise), and token and timing totals. Result rows go to the model for the summary only when the connection allows it; otherwise the summary sees only column names, the row count, and numeric totals, with no labels.
 - **Model layer (Phase 7 step 1).** `LlmClient` asks Gemini (`gemini-3.8-flash`, falling back to `gemini-3.5-flash-lite`) for JSON in a Zod-defined shape, through the official SDK and the Interactions API, and falls back on rate limits, outages, and malformed answers (ADR 0012). The ask pipeline uses it. `npm run try-llm --workspace=@ayd/worker` checks a key.
 
@@ -69,7 +71,7 @@ Status of Ask Your Database against the production blueprint. Phase 6 (queue, wo
 Locked choices that are not implemented:
 
 - Show how old the schema snapshot is, or refresh it on a schedule (Phase 8 or 9).
-- React UI (sign-in, connect, ask, history, usage, settings) and every result state.
+- Web app pages for connecting a database and choosing the allowlist (9b), asking with live progress, the table, chart, and summary, and every result state (9c), and history, usage, and settings (9d).
 - Evaluation dataset, load tests, and production deployment (NAT gateway, fixed egress IP, secrets manager).
 
 Out of scope for v1, from the blueprint: databases other than PostgreSQL, SSH tunnels, per-tenant egress IPs, team workspaces, scheduled reports, write access, stored result rows, and custom model fine-tuning.

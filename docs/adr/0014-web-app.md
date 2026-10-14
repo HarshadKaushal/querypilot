@@ -1,0 +1,15 @@
+# ADR 0014: The web app
+
+Phase 9 adds the React frontend in `apps/web`, an npm workspace like the others (ADR 0001).
+
+**Stack.** React 19 and TypeScript, bundled by Vite, as the blueprint fixes (section 4). Mantine is the component library, the user's choice: complete, accessible components as packages, with no CSS framework to learn alongside, and a chart package built on Recharts, which the blueprint names. TanStack Query holds server data (loading, errors, caching, refetching after a change); React Router handles pages. Unit tests use Vitest and Testing Library in jsdom, beside the source as `*.spec.ts(x)` (ADR 0005). Vitest runs on Vite's own config, so the app and its tests transform code the same way; Jest would need a second set of transforms for TSX and CSS imports. Browser end-to-end tests (Playwright) stay planned for `e2e/` at the repo root.
+
+**One origin.** The browser talks only to the web server, which passes `/v1` to the API: Vite's dev proxy locally, and one domain in front of both in production (Phase 12). The httpOnly refresh cookie, scoped to `/v1/auth`, then works without CORS, and no credentials cross origins. The API still has no CORS or CSRF configuration; both belong to Phase 10, before the app and API are ever served from different origins.
+
+**Tokens.** The access token (15 minutes) lives only in memory, in the `AuthProvider`, so a script injected into the page cannot read it from storage, and a reload restores it from the refresh cookie through `POST /v1/auth/refresh`. The API client adds it to each request and, on a 401, refreshes once and repeats the request; auth routes are never repeated. The API treats a refresh token presented twice as stolen and revokes the whole sign-in, so the client never runs two refreshes at once: callers in a tab share one pending refresh, and tabs take turns through the browser's Web Locks API.
+
+**Google sign-in from a browser.** `GET /v1/auth/google/start` and `GET /v1/auth/google/callback` are visited by the browser itself, not called with fetch, so they answer with redirects instead of JSON: the callback sets the refresh cookie and sends the browser to `APP_WEB_ORIGIN`, and a known failure on either route goes to `/sign-in?error=<code>`. Unexpected errors still reach the error filter and are logged. Dev login stays a JSON route; the sign-in page shows it only in development builds.
+
+**Types.** The response types in `apps/web/src/api/types.ts` are copied from the server code rather than imported, because the server types live in Node-only packages (`@ayd/core`) the browser bundle must not include. The error codes come from `@ayd/shared` as a type-only import. Moving the response types into `@ayd/shared` is a later clean-up; until then a route change must update both.
+
+**Module format.** The web app is the one ES-module workspace. It does not extend `tsconfig.base.json`, which targets Node with CommonJS output; `tsc` only type-checks it and Vite builds it.

@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "npm run dev --workspace=@ayd/api",
     "dev:worker": "npm run dev --workspace=@ayd/worker",
-    "build": "npm run build --workspace=@ayd/shared && npm run build --workspace=@ayd/ssrf-guard && npm run build --workspace=@ayd/crypto && npm run build --workspace=@ayd/sql-guard && npm run build --workspace=@ayd/database && npm run build --workspace=@ayd/core && npm run build --workspace=@ayd/api && npm run build --workspace=@ayd/worker",
+    "dev:web": "npm run dev --workspace=@ayd/web",
+    "build": "npm run build --workspace=@ayd/shared && npm run build --workspace=@ayd/ssrf-guard && npm run build --workspace=@ayd/crypto && npm run build --workspace=@ayd/sql-guard && npm run build --workspace=@ayd/database && npm run build --workspace=@ayd/core && npm run build --workspace=@ayd/api && npm run build --workspace=@ayd/worker && npm run build --workspace=@ayd/web",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -28,6 +29,7 @@
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.19.2",
     "eslint": "^10.12.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "prettier": "^3.9.10",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.1"

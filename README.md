@@ -2,7 +2,7 @@
 
 Middleware that lets a signed-in user connect their own PostgreSQL database and ask questions in plain English. The platform proposes SQL, checks it, runs it read-only, and returns a table, a chart, the SQL, and a short summary.
 
-This repository has finished **Phase 6 (queue, worker, and progress streaming)**: everything that opens a user database runs as a worker job you can follow live or cancel. The ask pipeline (Phase 7) and the web UI are not built yet. See [docs/features.md](docs/features.md).
+This repository has finished **Phase 8 (history, quotas, and audit)**: the API answers questions in English through worker jobs, keeps history, and enforces limits. **Phase 9 (the web app)** is under way: sign-in and the connections list work so far. See [docs/features.md](docs/features.md).
 
 ## Prerequisites
 
@@ -20,6 +20,16 @@ npm ci
 ```
 
 `.env` is for processes you run on the host. It is gitignored. The Compose stack passes its own environment into the `api` and `worker` containers and does not read `.env`.
+
+## Run the web app
+
+The web app runs on the host with Vite. Start the API first (either way above), then:
+
+```powershell
+npm run dev:web
+```
+
+Open http://localhost:5173. The dev server passes `/v1` requests to the API on port 3000, so the page and the API share one address and the sign-in cookie works. In development the sign-in page also offers the dev login. `npm run build --workspace=@ayd/web` type-checks and writes the production files to `apps/web/dist`.
 
 ## Run the full local stack
 
@@ -128,7 +138,7 @@ Invoke-RestMethod http://localhost:3000/v1/auth/logout -Method Post -WebSession 
 
 `POST /v1/auth/refresh` rotates the cookie. Presenting the previous refresh token again revokes that whole login family. A request without a bearer token gets `401` and `UNAUTHENTICATED`.
 
-Google sign-in is `GET /v1/auth/google/start`. It redirects to Google after you set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI`. Until those are set, that route returns `AUTH_NOT_CONFIGURED`.
+Google sign-in is `GET /v1/auth/google/start`, opened by the browser. It redirects to Google after you set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI`. Google sends the browser back to the callback, which sets the refresh cookie and redirects to the web app (`APP_WEB_ORIGIN`). Until Google is configured, and whenever sign-in fails, the browser lands on the web app's sign-in page with the error code, such as `/sign-in?error=AUTH_NOT_CONFIGURED`.
 
 ## Connect a database
 
@@ -302,6 +312,7 @@ CI runs lint, format, unit tests, and build on every push. A second job runs int
 
 ```text
 apps/api              NestJS HTTP API
+apps/web              React web app (Vite, Mantine, TanStack Query)
 apps/worker           NestJS worker process: takes jobs from the queue and runs them
 packages/core         Nest modules both processes share: config, logging, Prisma, Redis,
                       connections, schema, SQL check, executor, and the job queue
@@ -315,7 +326,7 @@ infra/sample-db       Seed and TLS entrypoint for the sample user database
 docs                  Index, blueprint, decisions, and reviews
 ```
 
-Start with [docs/README.md](docs/README.md). Later phases add `apps/web` and `eval`.
+Start with [docs/README.md](docs/README.md). A later phase adds `eval`.
 
 ## Decisions already locked for later phases
 
