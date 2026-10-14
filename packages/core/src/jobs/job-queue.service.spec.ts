@@ -97,4 +97,8 @@ describe('jobView', () => {
   it('shows a job waiting to be retried after a crash as queued', () => {
     expect(jobView(job, 'delayed').state).toBe('queued');
   });
+
+  it('reports a completed state read before its result as still running', () => {
+    expect(jobView({ ...job, returnvalue: null }, 'completed').state).toBe('running');
+  });
 });

@@ -2,6 +2,7 @@ import type { ConnectionService } from '../connections/connection.service';
 import { AppException, notFound } from '../errors/app.exception';
 import type { SqlGuardService } from '../sql-guard/sql-guard.service';
 import type { QueryExecutor } from '../user-database/query-executor';
+import type { AskJobRunner } from '../ask/ask-job.runner';
 import type { ConnectionJobRunner } from './connection-job.runner';
 import type { JobCancellation } from './job-cancellation';
 import { JobProcessor } from './job-processor';
@@ -140,6 +141,7 @@ describe('JobProcessor', () => {
       run,
       {} as ConnectionJobRunner,
       {} as JobCancellation,
+      {} as AskJobRunner,
     );
     await expect(processor.process('query.run', data)).resolves.toMatchObject({
       ok: true,

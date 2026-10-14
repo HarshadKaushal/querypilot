@@ -1,3 +1,4 @@
+import type { AskJobRunner } from '../ask/ask-job.runner';
 import type { ConnectionJobRunner } from './connection-job.runner';
 import type { JobCancellation } from './job-cancellation';
 import { JobProcessor, type RunnableJob } from './job-processor';
@@ -27,7 +28,10 @@ function processor(
   const queries = { run: jest.fn(run) } as unknown as QueryJobRunner;
   const connections = { create: jest.fn(run) } as unknown as ConnectionJobRunner;
   const cancellation = { requested: jest.fn(requested) } as unknown as JobCancellation;
-  return { processor: new JobProcessor(queries, connections, cancellation), queries };
+  return {
+    processor: new JobProcessor(queries, connections, cancellation, {} as AskJobRunner),
+    queries,
+  };
 }
 
 const cancelled = {

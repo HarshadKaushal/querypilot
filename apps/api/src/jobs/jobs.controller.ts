@@ -19,6 +19,9 @@ import type { PublicUser } from '../auth/auth.repository';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JOB_STREAM_TIMING, streamJob, type JobStreamTiming } from './job-stream';
 
+/** A question is a sentence or two; this leaves room without inviting pasted documents. */
+export const MAX_QUESTION_LENGTH = 2000;
+
 /** Lets tests shorten the stream's intervals. */
 export const JOB_STREAM_TIMING_TOKEN = Symbol('JOB_STREAM_TIMING');
 
@@ -55,6 +58,31 @@ export class JobsController {
     // NOT_FOUND now, rather than a queued job that fails, for a connection that is not yours.
     await this.connections.get(user.id, connectionId);
     return this.jobs.add('query.run', { userId: user.id, connectionId, sql });
+  }
+
+  /**
+   * Queues a question in English and answers at once with the job. The worker asks the
+   * model for SQL over the allowlisted schema, checks it with the guard, and runs it; an
+   * ambiguous or unanswerable question stops before anything runs.
+   */
+  @Post('connections/:id/questions')
+  @HttpCode(202)
+  async ask(
+    @CurrentUser() user: PublicUser,
+    @Param('id') connectionId: string,
+    @Body() body: { question?: unknown } | undefined,
+  ) {
+    const question = typeof body?.question === 'string' ? body.question.trim() : '';
+    if (question.length === 0) {
+      throw invalidRequest('Send the question as a non-empty "question" string.');
+    }
+    if (question.length > MAX_QUESTION_LENGTH) {
+      throw invalidRequest(
+        `The question is longer than ${MAX_QUESTION_LENGTH} characters.`,
+      );
+    }
+    await this.connections.get(user.id, connectionId);
+    return this.jobs.add('question.ask', { userId: user.id, connectionId, question });
   }
 
   /** A job's state, and its result or error once finished. Only the owner can read it. */

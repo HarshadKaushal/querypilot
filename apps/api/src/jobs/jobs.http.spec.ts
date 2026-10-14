@@ -186,4 +186,45 @@ describe('job routes', () => {
       requestId: 'req-jobs-01',
     });
   });
+
+  function ask(token: string, connectionId: string, body: unknown) {
+    return request(app.getHttpServer())
+      .post(`/v1/connections/${connectionId}/questions`)
+      .set('Authorization', `Bearer ${token}`)
+      .send(body as object);
+  }
+
+  it('queues a question for the owner, trimmed, and answers 202 with the job', async () => {
+    const { token, userId } = await signedIn();
+    const id = await connection(userId);
+    const response = await ask(token, id, { question: '  How many orders are open?  ' });
+    expect(response.status).toBe(202);
+    expect(response.body).toEqual(queued('question.ask'));
+    expect(jobs.add).toHaveBeenCalledWith('question.ask', {
+      userId,
+      connectionId: id,
+      question: 'How many orders are open?',
+    });
+  });
+
+  it.each([{}, { question: 7 }, { question: '   ' }, { question: 'x'.repeat(2001) }])(
+    'refuses a body without a usable question (%#) and queues nothing',
+    async (body) => {
+      const { token, userId } = await signedIn();
+      const id = await connection(userId);
+      const response = await ask(token, id, body);
+      expect(response.status).toBe(400);
+      expect(response.body.error.code).toBe('VALIDATION_ERROR');
+      expect(jobs.add).not.toHaveBeenCalled();
+    },
+  );
+
+  it("answers 404 for a question about someone else's connection", async () => {
+    const owner = await signedIn('owner@example.test');
+    const id = await connection(owner.userId);
+    const other = await signedIn('other@example.test');
+    const response = await ask(other.token, id, { question: 'How many?' });
+    expect(response.status).toBe(404);
+    expect(jobs.add).not.toHaveBeenCalled();
+  });
 });

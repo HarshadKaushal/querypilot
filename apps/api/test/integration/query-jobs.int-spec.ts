@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  type AskJobRunner,
   type ConnectionJobRunner,
   ConnectionPools,
   ConnectionService,
@@ -65,6 +66,7 @@ describe('query jobs through BullMQ', () => {
     ),
     {} as ConnectionJobRunner,
     cancellation,
+    {} as AskJobRunner,
   );
   const slots = new UserJobSlots(redis);
   const queue = new JobQueue(env, cancellation, slots);

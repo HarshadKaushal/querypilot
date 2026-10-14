@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { AskJobRunner } from '../ask/ask-job.runner';
 import { ConnectionJobRunner } from './connection-job.runner';
 import { JobCancellation } from './job-cancellation';
 import {
@@ -32,6 +33,7 @@ export class JobProcessor {
     private readonly queries: QueryJobRunner,
     private readonly connections: ConnectionJobRunner,
     private readonly cancellation: JobCancellation,
+    private readonly asks: AskJobRunner,
   ) {}
 
   /**
@@ -80,6 +82,8 @@ export class JobProcessor {
     switch (kind as JobKind) {
       case 'query.run':
         return this.queries.run(data as JobDataByKind['query.run'], context);
+      case 'question.ask':
+        return this.asks.run(data as JobDataByKind['question.ask'], context);
       case 'connection.create':
         return this.connections.create(
           data as JobDataByKind['connection.create'],

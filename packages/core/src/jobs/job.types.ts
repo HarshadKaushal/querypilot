@@ -1,5 +1,6 @@
 import type { ErrorCode } from '@ayd/shared';
 import type { PendingConnection, PendingCreate } from '../connections/connection.service';
+import type { LlmAttempt } from '../llm/llm.types';
 import type { ExecutionSuccess } from '../user-database/query-executor';
 
 export interface QueryJobData {
@@ -7,6 +8,13 @@ export interface QueryJobData {
   connectionId: string;
   /** Checked by the SQL guard in the worker, against the latest snapshot and allowlist. */
   sql: string;
+}
+
+/** A question in English, answered by the model, the guard, and the executor. */
+export interface AskJobData {
+  userId: string;
+  connectionId: string;
+  question: string;
 }
 
 /** Test a saved connection, or read its schema again. ip is the requester's, for audit rows. */
@@ -35,6 +43,7 @@ export interface ConnectionUpdateJobData {
 /** Payload per job kind. Every payload names its owner, which reads check. */
 export interface JobDataByKind {
   'query.run': QueryJobData;
+  'question.ask': AskJobData;
   'connection.create': ConnectionCreateJobData;
   'connection.update': ConnectionUpdateJobData;
   'connection.test': ConnectionJobData;
@@ -45,6 +54,7 @@ export type JobKind = keyof JobDataByKind;
 
 export const JOB_KINDS: readonly JobKind[] = [
   'query.run',
+  'question.ask',
   'connection.create',
   'connection.update',
   'connection.test',
@@ -73,11 +83,49 @@ export interface QueryJobResult extends Omit<ExecutionSuccess, 'ok'> {
   schemaVersion: number;
 }
 
+/** What answering a question produced. Nothing runs unless the status is answered. */
+export type AskResult =
+  | ({
+      status: 'answered';
+      question: string;
+      /** The SQL that ran, as the guard rewrote it. */
+      sql: string;
+      assumptions: string[];
+      explanation: string;
+      schemaVersion: number;
+      model: string;
+      llmAttempts: LlmAttempt[];
+    } & Omit<ExecutionSuccess, 'ok'>)
+  | {
+      status: 'ambiguous';
+      question: string;
+      clarifyingQuestion: string;
+      assumptions: string[];
+      explanation: string;
+      schemaVersion: number;
+      model: string;
+      llmAttempts: LlmAttempt[];
+    }
+  | {
+      status: 'unanswerable';
+      question: string;
+      explanation: string;
+      schemaVersion: number;
+      model: string;
+      llmAttempts: LlmAttempt[];
+    };
+
 export type JobState = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 
 /** Where a running job is, for a progress display. */
 export type JobStage =
-  'checking_sql' | 'connecting' | 'running_query' | 'checking_access' | 'reading_schema';
+  | 'loading_schema'
+  | 'generating_sql'
+  | 'checking_sql'
+  | 'connecting'
+  | 'running_query'
+  | 'checking_access'
+  | 'reading_schema';
 
 /** What a runner gets besides its payload. */
 export interface JobContext {

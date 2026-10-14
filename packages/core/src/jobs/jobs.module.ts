@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { AskJobRunner } from '../ask/ask-job.runner';
+import { LlmModule } from '../llm/llm.module';
 import { ConnectionsCoreModule } from '../connections/connections-core.module';
 import { SchemaCoreModule } from '../schema/schema-core.module';
 import { SqlGuardCoreModule } from '../sql-guard/sql-guard-core.module';
@@ -25,9 +27,11 @@ export class JobQueueModule {}
     SchemaCoreModule,
     SqlGuardCoreModule,
     UserDatabaseModule,
+    LlmModule,
   ],
   providers: [
     QueryJobRunner,
+    AskJobRunner,
     ConnectionJobRunner,
     JobCancellation,
     JobProcessor,

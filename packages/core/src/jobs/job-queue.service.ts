@@ -88,7 +88,14 @@ export class JobQueue implements OnModuleDestroy {
     if (!job || (job.data as { userId?: unknown }).userId !== userId) {
       throw notFound();
     }
-    const view = jobView(job, await job.getState());
+    const state = await job.getState();
+    // The job may have finished between loading it and reading its state; the loaded copy
+    // then has no result yet, so load it again.
+    const current =
+      (state === 'completed' || state === 'failed') && job.finishedOn === undefined
+        ? ((await this.queue.getJob(jobId)) ?? job)
+        : job;
+    const view = jobView(current, state);
     if (view.state === 'queued' || view.state === 'running') {
       return (await this.cancellation.requested(jobId))
         ? { ...view, cancelRequested: true }
@@ -144,7 +151,11 @@ export function jobView(job: JobFields, state: string): JobView {
     finishedAt: iso(job.finishedOn),
   };
   if (state === 'completed') {
-    const outcome = job.returnvalue as JobOutcome<unknown>;
+    const outcome = job.returnvalue as JobOutcome<unknown> | null | undefined;
+    if (!outcome || typeof outcome !== 'object') {
+      // A completed state read just before the result was: report it as still running.
+      return { ...base, state: 'running' };
+    }
     if (outcome.ok) {
       return { ...base, state: 'succeeded', result: outcome.result };
     }

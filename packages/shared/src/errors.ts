@@ -24,6 +24,8 @@ export const ERROR_CODES = [
   'SQL_REJECTED',
   'JOB_CANCELLED',
   'TOO_MANY_JOBS',
+  'LLM_NOT_CONFIGURED',
+  'LLM_UNAVAILABLE',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

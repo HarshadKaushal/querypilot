@@ -1,5 +1,8 @@
 // Nest modules and helpers shared by the API and the worker (ADR 0006). Nothing here speaks
 // HTTP. Test helpers live in src/testing and are not part of the build.
+export * from './ask/ask-job.runner';
+export * from './ask/prompt';
+export * from './ask/sql-proposal';
 export * from './audit/audit-log';
 export * from './config/env';
 export * from './connections/connection.repository';

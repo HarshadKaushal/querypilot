@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  type AskJobRunner,
   type ConnectionJobRunner,
   JobCancellation,
   JobEvents,
@@ -62,7 +63,12 @@ describe('job lifecycle through BullMQ', () => {
     const events = new JobEvents(env);
     const queries = { run: behaviour } as unknown as QueryJobRunner;
     const connections = { create } as unknown as ConnectionJobRunner;
-    const processor = new JobProcessor(queries, connections, cancellation);
+    const processor = new JobProcessor(
+      queries,
+      connections,
+      cancellation,
+      {} as AskJobRunner,
+    );
     const workers: RunningJobWorker[] = [];
     cleanups.push(async () => {
       for (const running of workers) {

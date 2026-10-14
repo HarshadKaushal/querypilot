@@ -192,6 +192,17 @@ Invoke-RestMethod "http://localhost:3000/v1/connections/$($conn.id)/sql/check" -
 
 An allowed query comes back with `allowed: true` and the SQL that would run, rewritten with schema names, with `*` replaced by the allowed columns, and with `LIMIT` capped at `SQL_ROW_CAP` (1,000 by default). A rejected one comes back with `allowed: false`, a `code` such as `column_not_allowed` or `not_select`, and a `reason`. Both are HTTP 200. On the sample, `SELECT email FROM customers` and `DELETE FROM customers` are rejected.
 
+## Ask a question
+
+With `GEMINI_API_KEY` in `.env` and the worker running, ask in English. The worker asks the model for SQL over the tables you allowed, checks it with the guard, and runs it:
+
+```powershell
+$asked = Wait-AydJob (Invoke-RestMethod "http://localhost:3000/v1/connections/$($conn.id)/questions" -Method Post -ContentType "application/json" -Headers $auth -Body '{"question":"How many orders does each region have?"}')
+$asked.result
+```
+
+`result.status` is `answered` (with `sql`, `rows`, and `assumptions`), `ambiguous` (with a `clarifyingQuestion`; nothing ran), or `unanswerable` (with an `explanation`; nothing ran). Without a key the job fails with `LLM_NOT_CONFIGURED`.
+
 ## Run a query as a job
 
 The API queues the SQL and answers at once with a job (HTTP 202). The worker checks it with the guard, runs it read-only, and stores the outcome for 15 minutes. It needs the worker: `npm run up` starts it, or run `npm run dev:worker` next to `npm run dev`.
