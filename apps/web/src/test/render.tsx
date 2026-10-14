@@ -6,7 +6,7 @@ import type { ReactElement } from 'react';
 import { MemoryRouter } from 'react-router';
 import { vi } from 'vitest';
 import type { ApiClient } from '../api/client';
-import type { PublicUser } from '../api/types';
+import type { JobView, PublicUser } from '../api/types';
 import { AuthContext, type AuthContextValue, type AuthState } from '../auth/auth-context';
 
 export const USER: PublicUser = {
@@ -17,8 +17,13 @@ export const USER: PublicUser = {
   planTier: 'free',
 };
 
-/** An API client whose methods are mocks, for pages that call the API. */
-export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
+/**
+ * An API client whose methods are mocks, for pages that call the API. A mock may return a
+ * fixed type where the real method is generic (get<T>), so overrides are loosely typed.
+ */
+export function fakeApi(
+  overrides: { [K in keyof ApiClient]?: (...args: never[]) => unknown } = {},
+): ApiClient {
   return {
     send: vi.fn(),
     get: vi.fn(),
@@ -27,7 +32,7 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
     delete: vi.fn(),
     stream: vi.fn(),
     ...overrides,
-  };
+  } as ApiClient;
 }
 
 /**
@@ -66,4 +71,25 @@ export function renderWithApp(
       </MantineProvider>,
     ),
   };
+}
+
+/** A job view for tests. */
+export function job<Result>(fields: Partial<JobView<Result>> = {}): JobView<Result> {
+  return {
+    id: 'j1',
+    kind: 'connection.create',
+    state: 'queued',
+    createdAt: '2026-10-14T10:00:00.000Z',
+    startedAt: null,
+    finishedAt: null,
+    ...fields,
+  };
+}
+
+/** A response streaming these views as the API's Server-Sent Events. */
+export function eventStream(...views: JobView[]): Response {
+  const text = views
+    .map((view) => `: keep-alive\n\nevent: job\ndata: ${JSON.stringify(view)}\n\n`)
+    .join('');
+  return new Response(text, { headers: { 'Content-Type': 'text/event-stream' } });
 }

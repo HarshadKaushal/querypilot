@@ -6,7 +6,9 @@ import { ApiError } from './api/client';
 import { AuthProvider } from './auth/AuthProvider';
 import { RequireAuth } from './auth/RequireAuth';
 import { AppLayout } from './layout/AppLayout';
+import { ConnectionPage } from './pages/ConnectionPage';
 import { ConnectionsPage } from './pages/ConnectionsPage';
+import { ConnectWizardPage } from './pages/ConnectWizardPage';
 import { SignInPage } from './pages/SignInPage';
 
 export function createQueryClient(): QueryClient {
@@ -48,6 +50,8 @@ export function AppRoutes() {
       <Route element={<RequireAuth />}>
         <Route element={<AppLayout />}>
           <Route path="/connections" element={<ConnectionsPage />} />
+          <Route path="/connections/new" element={<ConnectWizardPage />} />
+          <Route path="/connections/:id" element={<ConnectionPage />} />
           <Route path="*" element={<Navigate to="/connections" replace />} />
         </Route>
       </Route>

@@ -2,7 +2,7 @@
 
 Middleware that lets a signed-in user connect their own PostgreSQL database and ask questions in plain English. The platform proposes SQL, checks it, runs it read-only, and returns a table, a chart, the SQL, and a short summary.
 
-This repository has finished **Phase 8 (history, quotas, and audit)**: the API answers questions in English through worker jobs, keeps history, and enforces limits. **Phase 9 (the web app)** is under way: sign-in and the connections list work so far. See [docs/features.md](docs/features.md).
+This repository has finished **Phase 8 (history, quotas, and audit)**: the API answers questions in English through worker jobs, keeps history, and enforces limits. **Phase 9 (the web app)** is under way: sign-in, connecting a database, and choosing what the AI sees work so far. See [docs/features.md](docs/features.md).
 
 ## Prerequisites
 
@@ -29,7 +29,7 @@ The web app runs on the host with Vite. Start the API first (either way above), 
 npm run dev:web
 ```
 
-Open http://localhost:5173. The dev server passes `/v1` requests to the API on port 3000, so the page and the API share one address and the sign-in cookie works. In development the sign-in page also offers the dev login. `npm run build --workspace=@ayd/web` type-checks and writes the production files to `apps/web/dist`.
+Open http://localhost:5173. The dev server passes `/v1` requests to the API on port 3000, so the page and the API share one address and the sign-in cookie works. In development the sign-in page also offers the dev login. Start the worker too (`npm run dev:worker`): connecting a database, testing it, and reading its schema run as worker jobs, and the app shows their progress live. To try the sample database from the host, connect to host `127.0.0.1`, port `5433`, database `sample`, user `sample_ro`, password `sample_ro_password`, SSL `require`. `npm run build --workspace=@ayd/web` type-checks and writes the production files to `apps/web/dist`.
 
 ## Run the full local stack
 

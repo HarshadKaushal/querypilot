@@ -49,7 +49,7 @@ describe('ConnectionsPage', () => {
     renderWithApp(<ConnectionsPage />, {
       api: fakeApi({ get: vi.fn().mockResolvedValue([]) }),
     });
-    expect(await screen.findByText('No databases connected yet.')).toBeInTheDocument();
+    expect(await screen.findByText(/No databases connected yet/)).toBeInTheDocument();
   });
 
   it('shows the API error when the list cannot load', async () => {
@@ -82,7 +82,7 @@ describe('ConnectionsPage', () => {
     expect(dialog).toHaveTextContent('Delete Sales?');
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
     expect(api.delete).toHaveBeenCalledWith('/v1/connections/c1');
-    expect(await screen.findByText('No databases connected yet.')).toBeInTheDocument();
+    expect(await screen.findByText(/No databases connected yet/)).toBeInTheDocument();
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
   });
 });

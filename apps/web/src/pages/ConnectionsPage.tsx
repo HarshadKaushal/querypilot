@@ -13,6 +13,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { Link } from 'react-router';
 import { ApiError } from '../api/client';
 import type { PublicConnection } from '../api/types';
 import { useAuth } from '../auth/auth-context';
@@ -49,13 +50,20 @@ export function ConnectionsPage() {
 
   return (
     <Stack>
-      <Title order={2}>Connections</Title>
+      <Group justify="space-between">
+        <Title order={2}>Connections</Title>
+        <Button component={Link} to="/connections/new">
+          Connect a database
+        </Button>
+      </Group>
       {connections.isPending && <Loader aria-label="Loading connections" />}
       {connections.isError && (
         <ErrorAlert error={connections.error} title="Could not load connections" />
       )}
       {connections.data?.length === 0 && (
-        <Text c="dimmed">No databases connected yet.</Text>
+        <Text c="dimmed">
+          No databases connected yet. Connect one to start asking questions.
+        </Text>
       )}
       {connections.data && connections.data.length > 0 && (
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
@@ -123,7 +131,15 @@ function ConnectionCard({
             ? `Last checked ${new Date(connection.lastTestedAt).toLocaleString()}`
             : 'Not checked yet'}
         </Text>
-        <Group justify="flex-end">
+        <Group justify="flex-end" gap="xs">
+          <Button
+            component={Link}
+            to={`/connections/${connection.id}`}
+            variant="light"
+            size="xs"
+          >
+            Open
+          </Button>
           <Button variant="subtle" color="red" size="xs" onClick={onDelete}>
             Delete
           </Button>
