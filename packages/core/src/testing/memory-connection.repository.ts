@@ -44,12 +44,19 @@ export class MemoryConnectionRepository implements ConnectionRepository {
     return toPublicConnection(row);
   }
 
-  async delete(userId: string, id: string): Promise<boolean> {
+  async delete(userId: string, id: string, ip: string | null): Promise<boolean> {
     const index = this.rows.findIndex((row) => row.userId === userId && row.id === id);
     if (index < 0) {
       return false;
     }
     this.rows.splice(index, 1);
+    // Audited with the delete, as the Prisma repository does in one transaction.
+    await this.writeAudit({
+      userId,
+      eventType: 'connection.deleted',
+      metadata: { connectionId: id },
+      ip,
+    });
     return true;
   }
 

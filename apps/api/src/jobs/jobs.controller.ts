@@ -17,6 +17,7 @@ import type { Request, Response } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
 import type { PublicUser } from '../auth/auth.repository';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { SubmissionLimits } from '../limits/submission-limits';
 import { JOB_STREAM_TIMING, streamJob, type JobStreamTiming } from './job-stream';
 
 /** A question is a sentence or two; this leaves room without inviting pasted documents. */
@@ -32,6 +33,7 @@ export class JobsController {
     private readonly jobs: JobQueue,
     private readonly events: JobEvents,
     private readonly connections: ConnectionService,
+    private readonly limits: SubmissionLimits,
     @Optional()
     @Inject(JOB_STREAM_TIMING_TOKEN)
     private readonly timing: JobStreamTiming = JOB_STREAM_TIMING,
@@ -57,6 +59,7 @@ export class JobsController {
     }
     // NOT_FOUND now, rather than a queued job that fails, for a connection that is not yours.
     await this.connections.get(user.id, connectionId);
+    await this.limits.checkRate(user.id);
     return this.jobs.add('query.run', { userId: user.id, connectionId, sql });
   }
 
@@ -82,7 +85,19 @@ export class JobsController {
       );
     }
     await this.connections.get(user.id, connectionId);
-    return this.jobs.add('question.ask', { userId: user.id, connectionId, question });
+    await this.limits.checkRate(user.id);
+    await this.limits.takeQuestion(user.id);
+    try {
+      return await this.jobs.add('question.ask', {
+        userId: user.id,
+        connectionId,
+        question,
+      });
+    } catch (error) {
+      // Not queued (too many jobs, or Redis failed): the question does not count.
+      await this.limits.giveBackQuestion(user.id).catch(() => undefined);
+      throw error;
+    }
   }
 
   /** A job's state, and its result or error once finished. Only the owner can read it. */

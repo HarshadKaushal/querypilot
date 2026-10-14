@@ -9,10 +9,12 @@ import {
   Query,
   Req,
   Res,
+  UseGuards,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env';
+import { AuthRateLimitGuard } from '../limits/auth-rate-limit.guard';
 import { AuthService } from './auth.service';
 import {
   OAUTH_COOKIE,
@@ -48,6 +50,7 @@ export class AuthController {
   }
 
   @Get('google/callback')
+  @UseGuards(AuthRateLimitGuard)
   async callback(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
@@ -66,6 +69,7 @@ export class AuthController {
   }
 
   @Post('dev/login')
+  @UseGuards(AuthRateLimitGuard)
   @HttpCode(200)
   async devLogin(
     @Req() request: Request,
@@ -82,6 +86,7 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @UseGuards(AuthRateLimitGuard)
   @HttpCode(200)
   async refresh(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
     const session = await this.auth.refresh(

@@ -53,9 +53,20 @@ export class PrismaConnectionRepository implements ConnectionRepository {
     });
   }
 
-  async delete(userId: string, id: string): Promise<boolean> {
-    const result = await this.prisma.connection.deleteMany({ where: { id, userId } });
-    return result.count === 1;
+  async delete(userId: string, id: string, ip: string | null): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const result = await tx.connection.deleteMany({ where: { id, userId } });
+      if (result.count !== 1) {
+        return false;
+      }
+      await writeAuditLog(tx, {
+        userId,
+        eventType: 'connection.deleted',
+        metadata: { connectionId: id },
+        ip,
+      });
+      return true;
+    });
   }
 
   async writeAudit(entry: AuditEntry): Promise<void> {

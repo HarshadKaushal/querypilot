@@ -44,7 +44,11 @@ export interface ConnectionRepository {
       resetSchema?: boolean;
     },
   ): Promise<PublicConnection | null>;
-  delete(userId: string, id: string): Promise<boolean>;
+  /**
+   * Deletes the connection and writes its `connection.deleted` audit row in one
+   * transaction. False, and no audit row, when there was nothing of this user's to delete.
+   */
+  delete(userId: string, id: string, ip: string | null): Promise<boolean>;
   writeAudit(entry: AuditEntry): Promise<void>;
 }
 

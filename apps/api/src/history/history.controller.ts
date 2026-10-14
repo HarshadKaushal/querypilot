@@ -14,11 +14,15 @@ import {
   Param,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
 import type { PublicUser } from '../auth/auth.repository';
+import { requestMeta } from '../auth/cookies';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { SubmissionLimits } from '../limits/submission-limits';
 
 const DEFAULT_PAGE = 20;
 const MAX_PAGE = 50;
@@ -34,6 +38,7 @@ export class HistoryController {
     @Inject(QUERY_HISTORY) private readonly history: QueryHistory,
     private readonly jobs: JobQueue,
     private readonly connections: ConnectionService,
+    private readonly limits: SubmissionLimits,
   ) {}
 
   /** Newest first. Pass the returned nextCursor as `cursor` for the next page. */
@@ -68,6 +73,7 @@ export class HistoryController {
       throw notFound();
     }
     await this.connections.get(user.id, entry.connectionId);
+    await this.limits.checkRate(user.id);
     return this.jobs.add('query.run', {
       userId: user.id,
       connectionId: entry.connectionId,
@@ -77,15 +83,23 @@ export class HistoryController {
 
   @Delete(':id')
   @HttpCode(204)
-  async delete(@CurrentUser() user: PublicUser, @Param('id') id: string): Promise<void> {
-    if (!(await this.history.delete(user.id, id))) {
+  async delete(
+    @CurrentUser() user: PublicUser,
+    @Param('id') id: string,
+    @Req() request: Request,
+  ): Promise<void> {
+    // The delete and its audit row commit together (ADR 0013).
+    if (!(await this.history.delete(user.id, id, requestMeta(request).ip))) {
       throw notFound();
     }
   }
 
   @Delete()
   @HttpCode(204)
-  async deleteAll(@CurrentUser() user: PublicUser): Promise<void> {
-    await this.history.deleteAll(user.id);
+  async deleteAll(
+    @CurrentUser() user: PublicUser,
+    @Req() request: Request,
+  ): Promise<void> {
+    await this.history.deleteAll(user.id, requestMeta(request).ip);
   }
 }

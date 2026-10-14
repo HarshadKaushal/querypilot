@@ -101,6 +101,23 @@ describe('ConnectionService', () => {
     });
   });
 
+  it('audits a delete once, and a second delete of the same connection not at all', async () => {
+    const { connections, repo } = service();
+    const created = await connections.create('user-1', input, null);
+    await connections.delete('user-1', created.id, '203.0.113.7');
+    await expect(connections.delete('user-1', created.id, null)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+    expect(repo.audits.filter((a) => a.eventType === 'connection.deleted')).toEqual([
+      {
+        userId: 'user-1',
+        eventType: 'connection.deleted',
+        metadata: { connectionId: created.id },
+        ip: '203.0.113.7',
+      },
+    ]);
+  });
+
   it('marks a failed retest as failing and does not log the password', async () => {
     const { connections, repo, probe } = service();
     const created = await connections.create('user-1', input, null);

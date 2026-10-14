@@ -306,14 +306,13 @@ export class ConnectionService {
   }
 
   async delete(userId: string, id: string, ip: string | null): Promise<void> {
-    await this.requireOwned(userId, id);
-    await this.repo.writeAudit({
-      userId,
-      eventType: 'connection.deleted',
-      metadata: { connectionId: id },
-      ip,
-    });
-    await this.repo.delete(userId, id);
+    // The repository deletes and audits in one transaction, and audits only a real delete,
+    // so a failure leaves neither and two requests at once write one audit row. Someone
+    // else's id deletes nothing and looks the same as a missing one.
+    if (!(await this.repo.delete(userId, id, ip))) {
+      throw notFound();
+    }
+    // Pools are closed only once the delete is committed.
     this.pools?.evict(id);
   }
 

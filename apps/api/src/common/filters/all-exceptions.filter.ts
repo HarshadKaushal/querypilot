@@ -33,6 +33,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
       this.logger.error({ ...safeErrorDetail(exception), requestId }, 'request failed');
     }
 
+    if (exception instanceof AppException && exception.retryAfterSeconds) {
+      response.setHeader('Retry-After', String(exception.retryAfterSeconds));
+    }
     response
       .status(mapped.status)
       .json(errorEnvelope(mapped.code, mapped.message, requestId));

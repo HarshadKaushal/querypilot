@@ -13,9 +13,20 @@ export class AppException extends HttpException {
     readonly code: ErrorCode,
     message: string,
     status: number,
+    /** For 429: seconds until a retry can succeed, sent as the Retry-After header. */
+    readonly retryAfterSeconds?: number,
   ) {
     super({ code, message }, status);
   }
+}
+
+/** 429 with a Retry-After header: the caller sent too much, too fast, or used up a quota. */
+export function tooMany(
+  code: 'RATE_LIMITED' | 'QUOTA_EXCEEDED' | 'TOO_MANY_JOBS',
+  message: string,
+  retryAfterSeconds: number,
+): AppException {
+  return new AppException(code, message, 429, Math.max(1, Math.ceil(retryAfterSeconds)));
 }
 
 /**

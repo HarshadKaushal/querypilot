@@ -47,6 +47,7 @@ Status of Ask Your Database against the production blueprint. Phase 6 (queue, wo
 - A crashed job, or one whose worker died, is retried up to 3 times with backoff; one with no attempts left is kept 7 days for inspection, without its credentials. Creating a connection is safe to retry.
 - A user may have 3 unfinished jobs at once; a fourth is refused with `TOO_MANY_JOBS` (429). Each user's first job runs ahead of anyone's second, so one heavy user cannot starve the others.
 - Query history (ADR 0013): every finished question or SQL job is recorded with what was asked, the SQL that ran, the outcome, the summary, and its cost, never result rows. `GET /v1/history` pages newest first with a keyset cursor; entries can be viewed, re-run (the stored SQL runs again through the guard, with no model call), or deleted one by one or all at once.
+- Limits (ADR 0013): 10 submissions a minute per user (questions, SQL, and re-runs together) and 50 questions per UTC day, both counted in Redis across every API instance; past them the API answers 429 `RATE_LIMITED` or `QUOTA_EXCEEDED` with `Retry-After`. A question that could not be queued is given back. Sign-in, refresh, and the Google callback are limited to 20 a minute per IP address; this limit steps aside if Redis is down. `GET /v1/usage` shows today's questions against the limit, rows returned, and tokens.
 - Queries run as worker jobs (ADR 0011). `POST /v1/connections/:id/queries` checks ownership and the SQL's size, queues a BullMQ job, and answers 202 with the job. The worker runs the guard and the executor. `GET /v1/jobs/:id` shows the owner `queued`, `running`, `succeeded` with the rows, or `failed` with a stable code and a fixed message; anyone else gets 404. Results stay in Redis for 15 minutes.
 
 ## Partial
@@ -58,8 +59,8 @@ Status of Ask Your Database against the production blueprint. Phase 6 (queue, wo
 - **Shared package.** It holds the error envelope, request id, and health report types. It does not yet hold API DTOs for questions, connections, or history.
 - **Observability.** Logs are structured. There are no traces, metrics, dashboards, or alerts.
 - **API surface.** Health stays unversioned. Auth and the current user live under `/v1`. There is still no Swagger document.
-- **Audit log.** Login, logout, refresh reuse, account deletion, connection create, update, test, and delete, schema refreshes, and allowlist edits are recorded. Rejected queries are a later phase.
-- **Account deletion.** The user row, refresh tokens, connections, snapshots, allowlists, cached proposals, and query history go away.
+- **Audit log.** Login, logout, refresh reuse, account deletion, connection create, update, test, and delete, schema refreshes, allowlist edits, SQL the guard rejected (without the SQL), and history deletions are recorded.
+- **Account deletion.** The user row, refresh tokens, connections, snapshots, allowlists, cached proposals, query history, and usage counters go away.
 - **Executor.** It tests connections, reads schemas, and runs guarded SQL: a READ ONLY transaction, a statement timeout (15 s), an empty `search_path`, a cursor read up to 1,000 rows and 5 MB, then `ROLLBACK`. One statement only, through the extended protocol. Two queries at once per connection across all processes, through Redis slots. A connection pauses for 60 s after 5 connection failures or timeouts in a row. There is one pool per connection, closed when credentials change or the connection is deleted. Errors map to fixed messages with a `retryable` flag. It runs only in the worker, from jobs.
 - **SQL cache invalidation.** The schema fingerprint is ready to key the SQL proposal cache, which arrives with the LLM phase.
 
@@ -68,7 +69,6 @@ Status of Ask Your Database against the production blueprint. Phase 6 (queue, wo
 Locked choices that are not implemented:
 
 - Show how old the schema snapshot is, or refresh it on a schedule (Phase 8 or 9).
-- History and quotas. Login rate limits are part of the quota phase.
 - React UI (sign-in, connect, ask, history, usage, settings) and every result state.
 - Evaluation dataset, load tests, and production deployment (NAT gateway, fixed egress IP, secrets manager).
 

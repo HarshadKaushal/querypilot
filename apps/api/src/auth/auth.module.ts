@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_ENV } from '../config/app-config.module';
+import { LimitsModule } from '../limits/limits.module';
 import type { AppEnv } from '../config/env';
 import { AUTH_REPOSITORY } from './auth.repository';
 import { AuthController } from './auth.controller';
@@ -10,6 +11,7 @@ import { PrismaAuthRepository } from './prisma-auth.repository';
 import { TokenService } from './token.service';
 
 @Module({
+  imports: [LimitsModule],
   controllers: [AuthController],
   providers: [
     AuthService,

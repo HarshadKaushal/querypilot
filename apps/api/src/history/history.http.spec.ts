@@ -159,6 +159,8 @@ describe('history routes', () => {
     expect((await del('/v1/history/h2')).status).toBe(404);
     history.deleteAll.mockResolvedValue(3);
     expect((await del('/v1/history')).status).toBe(204);
-    expect(history.deleteAll).toHaveBeenCalledWith(userId);
+    // The caller's address goes along for the audit row the store writes.
+    expect(history.delete).toHaveBeenCalledWith(userId, 'h1', expect.any(String));
+    expect(history.deleteAll).toHaveBeenCalledWith(userId, expect.any(String));
   });
 });

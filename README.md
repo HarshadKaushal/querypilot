@@ -215,6 +215,16 @@ $again = Wait-AydJob (Invoke-RestMethod "http://localhost:3000/v1/history/$($pag
 
 Pass `nextCursor` back as `cursor` for older entries. Re-run replays the stored SQL through the guard, with no model call. `DELETE /v1/history/{id}` removes one entry and `DELETE /v1/history` removes all.
 
+## Limits and usage
+
+Each user may send 10 questions, queries, or re-runs a minute, and ask 50 questions a day (UTC). Past either limit the API answers 429 with `RATE_LIMITED` or `QUOTA_EXCEEDED` and a `Retry-After` header in seconds. Sign-in and refresh are limited to 20 a minute per IP address. The limits are `SUBMISSIONS_PER_MINUTE`, `QUESTIONS_PER_DAY`, and `AUTH_REQUESTS_PER_MINUTE` in `.env`.
+
+```powershell
+Invoke-RestMethod http://localhost:3000/v1/usage -Headers $auth
+```
+
+It shows today's questions against the limit, finished questions, rows returned, and tokens.
+
 ## Run a query as a job
 
 The API queues the SQL and answers at once with a job (HTTP 202). The worker checks it with the guard, runs it read-only, and stores the outcome for 15 minutes. It needs the worker: `npm run up` starts it, or run `npm run dev:worker` next to `npm run dev`.

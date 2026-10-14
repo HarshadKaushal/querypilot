@@ -23,6 +23,11 @@ const EnvSchema = z
     GOOGLE_CLIENT_SECRET: z.string().default(''),
     GOOGLE_REDIRECT_URI: z.string().default(''),
     EGRESS_IP: z.string().default(''),
+    // Limits (ADR 0013): questions per user per UTC day; questions, SQL, and re-runs per
+    // user per minute; sign-in, refresh, and Google callbacks per IP address per minute.
+    QUESTIONS_PER_DAY: z.coerce.number().int().min(1).max(100000).default(50),
+    SUBMISSIONS_PER_MINUTE: z.coerce.number().int().min(1).max(1000).default(10),
+    AUTH_REQUESTS_PER_MINUTE: z.coerce.number().int().min(1).max(1000).default(20),
   })
   .superRefine((env, ctx) => {
     checkCoreEnv(env, ctx);

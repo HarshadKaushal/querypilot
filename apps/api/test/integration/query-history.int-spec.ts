@@ -108,7 +108,7 @@ describe('query history in PostgreSQL', () => {
     await expect(history.get(other, `${connectionId}-a`)).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
-    expect(await history.delete(other, `${connectionId}-a`)).toBe(false);
+    expect(await history.delete(other, `${connectionId}-a`, null)).toBe(false);
   });
 
   it('records the same job twice as one entry (a retried job)', async () => {
@@ -129,9 +129,19 @@ describe('query history in PostgreSQL', () => {
   });
 
   it('deletes one entry, then all, and account deletion removes the rest', async () => {
-    expect(await history.delete(owner, `${connectionId}-e`)).toBe(true);
+    expect(await history.delete(owner, `${connectionId}-e`, '203.0.113.7')).toBe(true);
     expect((await history.list(owner, 10)).entries).toHaveLength(4);
-    expect(await history.deleteAll(owner)).toBe(4);
+    expect(await history.deleteAll(owner, '203.0.113.7')).toBe(4);
+    // Each delete wrote its audit row in the same transaction; the refused one wrote none.
+    const audits = await prisma.auditLog.findMany({
+      where: { userId: { in: [owner, other] }, eventType: { startsWith: 'history.' } },
+      orderBy: { eventType: 'desc' },
+    });
+    expect(audits.map((a) => [a.userId, a.eventType, a.metadata, a.ip])).toEqual([
+      [owner, 'history.deleted', { entryId: `${connectionId}-e` }, '203.0.113.7'],
+      [owner, 'history.cleared', { count: '4' }, '203.0.113.7'],
+    ]);
+    await prisma.auditLog.deleteMany({ where: { id: { in: audits.map((a) => a.id) } } });
     await history.record(entry(`${connectionId}-z`, 9));
     await prisma.user.delete({ where: { id: owner } });
     expect(await prisma.queryRecord.count({ where: { userId: owner } })).toBe(0);

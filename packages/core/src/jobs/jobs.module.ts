@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { AskJobRunner } from '../ask/ask-job.runner';
 import { PrismaProposalCache, PROPOSAL_CACHE } from '../ask/proposal-cache';
+import { AUDIT_WRITER, PrismaAuditWriter } from '../audit/audit-writer';
 import { HistoryModule } from '../history/history.module';
+import { PrismaUsageCounters, USAGE_COUNTERS } from '../limits/usage-counters';
 import { LlmModule } from '../llm/llm.module';
 import { ConnectionsCoreModule } from '../connections/connections-core.module';
 import { SchemaCoreModule } from '../schema/schema-core.module';
@@ -36,6 +38,8 @@ export class JobQueueModule {}
     QueryJobRunner,
     AskJobRunner,
     { provide: PROPOSAL_CACHE, useClass: PrismaProposalCache },
+    { provide: USAGE_COUNTERS, useClass: PrismaUsageCounters },
+    { provide: AUDIT_WRITER, useClass: PrismaAuditWriter },
     ConnectionJobRunner,
     JobCancellation,
     JobProcessor,

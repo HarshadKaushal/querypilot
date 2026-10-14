@@ -7,6 +7,7 @@ import { ConnectionsModule } from './connections/connections.module';
 import { EgressModule } from './egress/egress.module';
 import { HealthModule } from './health/health.module';
 import { HistoryModule } from './history/history.module';
+import { UsageModule } from './usage/usage.module';
 import { JobsModule } from './jobs/jobs.module';
 import { AppLoggerModule } from './logger/logger.module';
 import { SchemaModule } from './schema/schema.module';
@@ -26,6 +27,7 @@ import { UsersModule } from './users/users.module';
     EgressModule,
     JobsModule,
     HistoryModule,
+    UsageModule,
     SchemaModule,
     SqlGuardModule,
   ],

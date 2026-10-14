@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@ayd/database';
+import { writeAuditLog } from '../audit/audit-log';
 import { notFound } from '../errors/app.exception';
 import type {
   AskJobData,
@@ -51,8 +52,10 @@ export interface QueryHistory {
   record(entry: NewHistoryEntry): Promise<void>;
   list(userId: string, limit: number, cursor?: string): Promise<HistoryPage>;
   get(userId: string, id: string): Promise<HistoryEntry>;
-  delete(userId: string, id: string): Promise<boolean>;
-  deleteAll(userId: string): Promise<number>;
+  /** Deletes the entry and writes its `history.deleted` audit row in one transaction. */
+  delete(userId: string, id: string, ip: string | null): Promise<boolean>;
+  /** Deletes every entry and writes `history.cleared` in one transaction. */
+  deleteAll(userId: string, ip: string | null): Promise<number>;
 }
 
 export const QUERY_HISTORY = Symbol('QUERY_HISTORY');
@@ -233,12 +236,32 @@ export class PrismaQueryHistory implements QueryHistory {
     return toEntry(row);
   }
 
-  async delete(userId: string, id: string): Promise<boolean> {
-    const result = await this.prisma.queryRecord.deleteMany({ where: { id, userId } });
-    return result.count > 0;
+  async delete(userId: string, id: string, ip: string | null): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const result = await tx.queryRecord.deleteMany({ where: { id, userId } });
+      if (result.count === 0) {
+        return false;
+      }
+      await writeAuditLog(tx, {
+        userId,
+        eventType: 'history.deleted',
+        metadata: { entryId: id },
+        ip,
+      });
+      return true;
+    });
   }
 
-  async deleteAll(userId: string): Promise<number> {
-    return (await this.prisma.queryRecord.deleteMany({ where: { userId } })).count;
+  async deleteAll(userId: string, ip: string | null): Promise<number> {
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.queryRecord.deleteMany({ where: { userId } });
+      await writeAuditLog(tx, {
+        userId,
+        eventType: 'history.cleared',
+        metadata: { count: String(count) },
+        ip,
+      });
+      return count;
+    });
   }
 }

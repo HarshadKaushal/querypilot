@@ -1,4 +1,6 @@
 import type { AskJobRunner } from '../ask/ask-job.runner';
+import type { QueryHistory } from '../history/query-history';
+import { MemoryAuditWriter, MemoryUsageCounters } from '../testing/memory-limits';
 import type { ConnectionJobRunner } from './connection-job.runner';
 import type { JobCancellation } from './job-cancellation';
 import { JobProcessor, type RunnableJob } from './job-processor';
@@ -147,6 +149,98 @@ describe('JobProcessor.handle', () => {
       updateData: jest.fn().mockRejectedValue(new Error('redis blip')),
     });
     await expect(p.handle(create, { onSideError })).resolves.toMatchObject({ ok: true });
+    expect(onSideError).toHaveBeenCalledWith(expect.any(Error));
+  });
+});
+
+describe('JobProcessor recording', () => {
+  function recording(outcome: unknown) {
+    const queries = { run: jest.fn(async () => outcome) } as unknown as QueryJobRunner;
+    const cancellation = {
+      requested: jest.fn(async () => false),
+    } as unknown as JobCancellation;
+    const history = { record: jest.fn().mockResolvedValue(undefined) };
+    const usage = new MemoryUsageCounters();
+    const audit = new MemoryAuditWriter();
+    const p = new JobProcessor(
+      queries,
+      {} as ConnectionJobRunner,
+      cancellation,
+      {} as AskJobRunner,
+      history as unknown as QueryHistory,
+      usage,
+      audit,
+    );
+    return { p, history, usage, audit };
+  }
+
+  // 2026-10-14 23:59 UTC: usage is counted on the day the job was submitted.
+  const timestamp = Date.UTC(2026, 9, 14, 23, 59);
+
+  it('adds a finished SQL job to the day it was submitted, without a question', async () => {
+    const { p, usage } = recording({
+      ok: true,
+      result: { sql: 'SELECT 1', columns: [], rows: [], rowCount: 7, truncated: false },
+    });
+    await p.handle(job({ timestamp }), { onSideError: jest.fn() });
+    expect(await usage.get('u1', '2026-10-14')).toMatchObject({
+      questions: 0,
+      rowsReturned: 7,
+    });
+  });
+
+  it('audits SQL the guard refused, with the guard code but not the SQL', async () => {
+    const { p, audit, usage } = recording({
+      ok: false,
+      error: {
+        code: 'SQL_REJECTED',
+        message: 'Only SELECT statements are allowed.',
+        retryable: false,
+        detail: { guardCode: 'NOT_SELECT' },
+      },
+    });
+    await p.handle(
+      job({ timestamp, data: { userId: 'u1', connectionId: 'c1', sql: 'DROP TABLE x' } }),
+      {
+        onSideError: jest.fn(),
+      },
+    );
+    expect(audit.entries).toEqual([
+      {
+        userId: 'u1',
+        eventType: 'query.rejected',
+        metadata: {
+          jobId: '7d1c8e4a-2f6b-4c3d-9e8f-0a1b2c3d4e5f',
+          connectionId: 'c1',
+          kind: 'sql',
+          guardCode: 'NOT_SELECT',
+        },
+        ip: null,
+      },
+    ]);
+    expect(JSON.stringify(audit.entries)).not.toContain('DROP');
+    expect((await usage.get('u1', '2026-10-14')).rowsReturned).toBe(0);
+  });
+
+  it('does not audit other failures', async () => {
+    const { p, audit } = recording({
+      ok: false,
+      error: { code: 'QUERY_TIMEOUT', message: 'Too slow.', retryable: true },
+    });
+    await p.handle(job({ timestamp }), { onSideError: jest.fn() });
+    expect(audit.entries).toEqual([]);
+  });
+
+  it('reports a failed usage write instead of failing the job', async () => {
+    const { p, usage } = recording({
+      ok: true,
+      result: { sql: 'SELECT 1', columns: [], rows: [], rowCount: 1, truncated: false },
+    });
+    jest.spyOn(usage, 'add').mockRejectedValue(new Error('db down'));
+    const onSideError = jest.fn();
+    await expect(p.handle(job({ timestamp }), { onSideError })).resolves.toMatchObject({
+      ok: true,
+    });
     expect(onSideError).toHaveBeenCalledWith(expect.any(Error));
   });
 });

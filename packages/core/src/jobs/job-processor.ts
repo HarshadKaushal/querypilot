@@ -1,6 +1,9 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { AskJobRunner } from '../ask/ask-job.runner';
+import { AUDIT_WRITER, type AuditWriter } from '../audit/audit-writer';
 import { INTERNAL_ERROR_MESSAGE } from '../errors/app.exception';
+import { utcDay } from '../limits/daily-quota';
+import { USAGE_COUNTERS, type UsageCounters } from '../limits/usage-counters';
 import {
   historyEntryFor,
   QUERY_HISTORY,
@@ -44,6 +47,8 @@ export class JobProcessor {
     private readonly asks: AskJobRunner,
     // Optional so tests of other behaviour can build the processor without storage.
     @Optional() @Inject(QUERY_HISTORY) private readonly history?: QueryHistory,
+    @Optional() @Inject(USAGE_COUNTERS) private readonly usage?: UsageCounters,
+    @Optional() @Inject(AUDIT_WRITER) private readonly audit?: AuditWriter,
   ) {}
 
   /** Records a job given up after its last crash, so history shows it failed. */
@@ -143,8 +148,31 @@ export class JobProcessor {
       createdAt: new Date(job.timestamp ?? Date.now()),
       outcome,
     });
-    if (entry && entry.id && this.history) {
-      await this.history.record(entry);
+    if (!entry || !entry.id) {
+      return;
+    }
+    await this.history?.record(entry);
+    // Daily usage, kept apart from history so deleting history does not erase it.
+    await this.usage?.add(entry.userId, utcDay(entry.createdAt), {
+      questions: entry.kind === 'question' ? 1 : 0,
+      rowsReturned: entry.rowCount ?? 0,
+      inputTokens: entry.inputTokens,
+      outputTokens: entry.outputTokens,
+    });
+    // SQL the guard refused for good: a spike can mean someone is probing the guard.
+    if (entry.errorCode === 'SQL_REJECTED') {
+      const guardCode = outcome.ok ? undefined : outcome.error.detail?.guardCode;
+      await this.audit?.write({
+        userId: entry.userId,
+        eventType: 'query.rejected',
+        metadata: {
+          jobId: entry.id,
+          connectionId: entry.connectionId,
+          kind: entry.kind,
+          ...(guardCode ? { guardCode } : {}),
+        },
+        ip: null,
+      });
     }
   }
 }
