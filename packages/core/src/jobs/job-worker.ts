@@ -80,6 +80,9 @@ export async function startJobWorker(options: {
     const givenUp = !!job && job.attemptsMade >= (job.opts.attempts ?? 1);
     if (job && givenUp) {
       release(job);
+      processor
+        .recordGivenUp(job)
+        .catch((record: unknown) => hooks.sideError(job.id, record));
       const kept = withoutCredentials(job.data);
       if (kept) {
         job

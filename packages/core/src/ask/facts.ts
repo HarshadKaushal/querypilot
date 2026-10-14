@@ -45,12 +45,16 @@ export interface ResultFacts {
   truncated: ExecutionSuccess['truncated'];
   columns: string[];
   numeric: NumericFact[];
-  /** For one label column and one number column: the largest rows, at most 5. */
+  /**
+   * For one label column and one number column: the largest rows, at most 5. Labels are
+   * row values, so this is empty unless the connection allows rows to reach the model.
+   */
   top: Array<{ label: string; value: number }>;
 }
 
 export function computeFacts(
   result: Omit<ExecutionSuccess, 'ok' | 'durationMs'>,
+  options: { labels: boolean },
 ): ResultFacts {
   const numeric: NumericFact[] = [];
   result.columns.forEach((column, index) => {
@@ -77,7 +81,7 @@ export function computeFacts(
     truncated: result.truncated,
     columns: result.columns.map((column) => column.name),
     numeric,
-    top: topItems(result),
+    top: options.labels ? topItems(result) : [],
   };
 }
 

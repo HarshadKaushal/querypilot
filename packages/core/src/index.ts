@@ -15,6 +15,8 @@ export * from './connections/connections-core.module';
 export * from './connections/prisma-connection.repository';
 export * from './errors/app.exception';
 export * from './errors/error-code';
+export * from './history/history.module';
+export * from './history/query-history';
 export * from './jobs/connection-job.runner';
 export * from './jobs/job-cancellation';
 export * from './jobs/job-events';

@@ -203,6 +203,18 @@ $asked.result
 
 `result.status` is `answered` (with `sql`, `rows`, `assumptions`, a `chart` choice, `facts`, a short `summary`, and `usage` totals), `ambiguous` (with a `clarifyingQuestion`; nothing ran), or `unanswerable` (with an `explanation`; nothing ran). Without a key the job fails with `LLM_NOT_CONFIGURED`.
 
+## History
+
+Every finished question or SQL job is kept in history: what was asked, the SQL that ran, the outcome, the summary, and the cost, never the rows.
+
+```powershell
+$page = Invoke-RestMethod "http://localhost:3000/v1/history?limit=20" -Headers $auth
+$page.entries | Select-Object createdAt, question, status, rowCount
+$again = Wait-AydJob (Invoke-RestMethod "http://localhost:3000/v1/history/$($page.entries[0].id)/rerun" -Method Post -Headers $auth)
+```
+
+Pass `nextCursor` back as `cursor` for older entries. Re-run replays the stored SQL through the guard, with no model call. `DELETE /v1/history/{id}` removes one entry and `DELETE /v1/history` removes all.
+
 ## Run a query as a job
 
 The API queues the SQL and answers at once with a job (HTTP 202). The worker checks it with the guard, runs it read-only, and stores the outcome for 15 minutes. It needs the worker: `npm run up` starts it, or run `npm run dev:worker` next to `npm run dev`.

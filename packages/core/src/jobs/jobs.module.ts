@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AskJobRunner } from '../ask/ask-job.runner';
 import { PrismaProposalCache, PROPOSAL_CACHE } from '../ask/proposal-cache';
+import { HistoryModule } from '../history/history.module';
 import { LlmModule } from '../llm/llm.module';
 import { ConnectionsCoreModule } from '../connections/connections-core.module';
 import { SchemaCoreModule } from '../schema/schema-core.module';
@@ -29,6 +30,7 @@ export class JobQueueModule {}
     SqlGuardCoreModule,
     UserDatabaseModule,
     LlmModule,
+    HistoryModule,
   ],
   providers: [
     QueryJobRunner,

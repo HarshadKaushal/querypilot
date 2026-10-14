@@ -11,6 +11,7 @@ import {
   LlmClient,
   PrismaConnectionRepository,
   PrismaProposalCache,
+  PrismaQueryHistory,
   PrismaSchemaRepository,
   PrismaService,
   QueryExecutor,
@@ -74,6 +75,7 @@ describe('question jobs through BullMQ', () => {
   );
   const pools = new ConnectionPools(env, logger, plainPools);
   const model = new FakeLlmProvider('fake-gemini');
+  const history = new PrismaQueryHistory(prisma);
   const cancellation = new JobCancellation(redis);
   const processor = new JobProcessor(
     {} as QueryJobRunner,
@@ -87,6 +89,7 @@ describe('question jobs through BullMQ', () => {
       new LlmClient([model]),
       new PrismaProposalCache(prisma),
     ),
+    history,
   );
   const slots = new UserJobSlots(redis);
   const queue = new JobQueue(env, cancellation, slots);
@@ -204,6 +207,17 @@ describe('question jobs through BullMQ', () => {
     });
     // The guard's rewrite is what ran.
     expect((done.result as { sql: string }).sql).toContain('LIMIT 1001');
+
+    // The worker wrote the history entry: what was asked and what ran, never the rows.
+    const recorded = await history.get(userId, done.id);
+    expect(recorded).toMatchObject({
+      kind: 'question',
+      question: 'How many open orders does each region have?',
+      status: 'answered',
+      rowCount: 1,
+    });
+    expect(recorded.sql).toContain('LIMIT 1001');
+    expect(JSON.stringify(recorded)).not.toContain('North');
   });
 
   it('never shows the model a column hidden by the allowlist', async () => {

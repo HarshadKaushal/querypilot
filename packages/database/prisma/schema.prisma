@@ -22,6 +22,7 @@ model User {
   refreshTokens RefreshToken[]
   auditLogs     AuditLog[]
   connections   Connection[]
+  queries       QueryRecord[]
 
   @@map("users")
 }
@@ -53,6 +54,7 @@ model Connection {
   schemaSnapshots     SchemaSnapshot[]
   allowedObjects      AllowedObject[]
   cachedProposals     QueryCacheEntry[]
+  queries             QueryRecord[]
 
   @@index([userId])
   @@map("connections")
@@ -135,4 +137,37 @@ model QueryCacheEntry {
 
   @@unique([connectionId, fingerprint, questionHash])
   @@map("query_cache")
+}
+
+// One finished question or SQL job, for the owner's history (blueprint 7 and 8.4). Holds
+// what was asked, the SQL that ran, the outcome, and the cost. Never result rows; the
+// summary is kept because history shows it, and it only names values the summary model
+// was allowed to see.
+model QueryRecord {
+  id            String     @id
+  userId        String     @map("user_id")
+  connectionId  String     @map("connection_id")
+  kind          String
+  question      String?
+  sql           String?
+  status        String
+  errorCode     String?    @map("error_code")
+  rowCount      Int?       @map("row_count")
+  truncated     String?
+  schemaVersion Int?       @map("schema_version")
+  cached        Boolean    @default(false)
+  summary       String?
+  models        Json
+  inputTokens   Int        @default(0) @map("input_tokens")
+  outputTokens  Int        @default(0) @map("output_tokens")
+  llmMs         Int        @default(0) @map("llm_ms")
+  queryMs       Int        @default(0) @map("query_ms")
+  totalMs       Int        @default(0) @map("total_ms")
+  createdAt     DateTime   @map("created_at")
+  finishedAt    DateTime   @default(now()) @map("finished_at")
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connection    Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc), id(sort: Desc)])
+  @@map("queries")
 }

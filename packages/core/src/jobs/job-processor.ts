@@ -1,5 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { AskJobRunner } from '../ask/ask-job.runner';
+import { INTERNAL_ERROR_MESSAGE } from '../errors/app.exception';
+import {
+  historyEntryFor,
+  QUERY_HISTORY,
+  type QueryHistory,
+} from '../history/query-history';
 import { ConnectionJobRunner } from './connection-job.runner';
 import { JobCancellation } from './job-cancellation';
 import {
@@ -21,6 +27,8 @@ export interface RunnableJob {
   data: unknown;
   updateData(data: unknown): Promise<void>;
   updateProgress(progress: { stage: JobStage }): Promise<void>;
+  /** When the job was added, in milliseconds. */
+  timestamp?: number;
 }
 
 /** Thrown when a stage finds a cancellation request the abort signal missed. */
@@ -34,7 +42,17 @@ export class JobProcessor {
     private readonly connections: ConnectionJobRunner,
     private readonly cancellation: JobCancellation,
     private readonly asks: AskJobRunner,
+    // Optional so tests of other behaviour can build the processor without storage.
+    @Optional() @Inject(QUERY_HISTORY) private readonly history?: QueryHistory,
   ) {}
+
+  /** Records a job given up after its last crash, so history shows it failed. */
+  async recordGivenUp(job: RunnableJob): Promise<void> {
+    await this.record(job, {
+      ok: false,
+      error: { code: 'INTERNAL_ERROR', message: INTERNAL_ERROR_MESSAGE, retryable: true },
+    });
+  }
 
   /**
    * Runs a BullMQ job. A job cancelled while it waited ends at once; one cancelled while it
@@ -112,6 +130,21 @@ export class JobProcessor {
     if (kept) {
       await job.updateData(kept).catch(onSideError);
     }
+    await this.record(job, outcome).catch(onSideError);
     return outcome;
+  }
+
+  /** Writes the history entry for a finished question or SQL job; other kinds have none. */
+  private async record(job: RunnableJob, outcome: JobOutcome<unknown>): Promise<void> {
+    const entry = historyEntryFor({
+      id: job.id ?? '',
+      kind: job.name,
+      data: job.data,
+      createdAt: new Date(job.timestamp ?? Date.now()),
+      outcome,
+    });
+    if (entry && entry.id && this.history) {
+      await this.history.record(entry);
+    }
   }
 }

@@ -645,3 +645,54 @@ describe('AskJobRunner chart, summary, and usage', () => {
     });
   });
 });
+
+describe('AskJobRunner row values without permission', () => {
+  const REGIONS = {
+    ok: true,
+    columns: [
+      { name: 'region', dataTypeId: 25 },
+      { name: 'open_orders', dataTypeId: 20 },
+    ],
+    rows: [
+      ['North', '2'],
+      ['East', '1'],
+    ],
+    rowCount: 2,
+    truncated: false,
+    durationMs: 6,
+  };
+
+  it('never sends a row value to the summary model or into the summary when rows are not allowed', async () => {
+    const model = new FakeLlmProvider('primary', [
+      proposal({ sql: OPEN_SQL }),
+      { error: new LlmError('unavailable', 'x', 'primary') },
+    ]);
+    const { runner } = setup({ model, run: jest.fn().mockResolvedValue(REGIONS) });
+    const outcome = await runner.run(data);
+    expect(model.requests[1]!.prompt).not.toContain('North');
+    // The owner still gets their rows back; the summary and facts carry none of them.
+    if (!outcome.ok || outcome.result.status !== 'answered') {
+      throw new Error('expected an answer');
+    }
+    expect(outcome.result.rows).toEqual(REGIONS.rows);
+    expect(JSON.stringify([outcome.result.summary, outcome.result.facts])).not.toContain(
+      'North',
+    );
+    expect(outcome).toMatchObject({ ok: true, result: { facts: { top: [] } } });
+  });
+
+  it('lets the summary name values when the connection allows rows', async () => {
+    const model = new FakeLlmProvider('primary', [
+      proposal({ sql: OPEN_SQL }),
+      { text: JSON.stringify({ summary: 'North leads with 2 open orders.' }) },
+    ]);
+    const { runner } = setup({
+      model,
+      run: jest.fn().mockResolvedValue(REGIONS),
+      sampleRows: true,
+    });
+    await expect(runner.run(data)).resolves.toMatchObject({
+      result: { summary: { text: 'North leads with 2 open orders.', source: 'model' } },
+    });
+  });
+});

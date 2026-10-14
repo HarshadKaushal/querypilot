@@ -65,16 +65,19 @@ describe('selectChart', () => {
 
 describe('computeFacts', () => {
   it('computes min, max, total, average, and the top items from string numbers', () => {
-    const facts = computeFacts({
-      columns: [col('region', TEXT), col('revenue', NUMERIC)],
-      rows: [
-        ['North', '120.50'],
-        ['East', '80'],
-        ['West', null],
-      ],
-      rowCount: 3,
-      truncated: false,
-    });
+    const facts = computeFacts(
+      {
+        columns: [col('region', TEXT), col('revenue', NUMERIC)],
+        rows: [
+          ['North', '120.50'],
+          ['East', '80'],
+          ['West', null],
+        ],
+        rowCount: 3,
+        truncated: false,
+      },
+      { labels: true },
+    );
     expect(facts).toEqual({
       rowCount: 3,
       truncated: false,
@@ -91,15 +94,18 @@ describe('computeFacts', () => {
 });
 
 describe('summaries', () => {
-  const facts = computeFacts({
-    columns: [col('region', TEXT), col('n', INT8)],
-    rows: [
-      ['North', '2'],
-      ['East', '1'],
-    ],
-    rowCount: 2,
-    truncated: false,
-  });
+  const facts = computeFacts(
+    {
+      columns: [col('region', TEXT), col('n', INT8)],
+      rows: [
+        ['North', '2'],
+        ['East', '1'],
+      ],
+      rowCount: 2,
+      truncated: false,
+    },
+    { labels: true },
+  );
 
   it('accepts a summary whose numbers all come from the facts or the rows shown', () => {
     expect(
@@ -152,6 +158,31 @@ describe('summaries', () => {
     );
     expect(templateSummary({ ...facts, truncated: 'rows' })).toContain(
       'only part of the data',
+    );
+  });
+});
+
+describe('labels without permission', () => {
+  it('keeps row values out of the facts, and so out of the template', () => {
+    const facts = computeFacts(
+      {
+        columns: [col('region', TEXT), col('n', INT8)],
+        rows: [
+          ['North', '2'],
+          ['East', '1'],
+        ],
+        rowCount: 2,
+        truncated: false,
+      },
+      { labels: false },
+    );
+    expect(facts.top).toEqual([]);
+    expect(JSON.stringify(facts)).not.toContain('North');
+    expect(templateSummary(facts)).toBe(
+      'The query returned 2 rows. n ranges from 1 to 2, with a total of 3.',
+    );
+    expect(buildSummaryPrompt({ question: 'q', facts, sample: null })).not.toContain(
+      'North',
     );
   });
 });

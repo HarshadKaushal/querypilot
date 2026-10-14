@@ -258,13 +258,16 @@ export class AskJobRunner {
           .catch(() => undefined);
       }
       const { ok: _ok, ...rows } = result;
-      const facts = computeFacts(rows);
+      // Labels (row values) appear in the facts, and so in the summary model's prompt, the
+      // template, and history, only when the connection's owner allowed rows.
+      const rowsAllowed = target.row.sendSampleRowsToLlm;
+      const facts = computeFacts(rows, { labels: rowsAllowed });
       await context.report('summarizing');
       const summary = await this.summarize(
         data.question,
         facts,
         // Rows reach the model only when the connection's owner allowed it.
-        target.row.sendSampleRowsToLlm ? rows.rows.slice(0, SUMMARY_SAMPLE_ROWS) : null,
+        rowsAllowed ? rows.rows.slice(0, SUMMARY_SAMPLE_ROWS) : null,
         attempts,
         context,
       );

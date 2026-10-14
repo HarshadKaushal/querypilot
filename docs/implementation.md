@@ -162,6 +162,10 @@ The Docker build caught what the local build could not: the worker image built o
 
 **Step 4** added the chart choice (`ask/chart.ts`), the server's facts (`ask/facts.ts`), the grounded summary (`ask/summary.ts`), and usage totals. Token accounting, planned as a step 5, is part of it. The summary's number check is deliberately strict: a summary with a number the data does not contain, such as a percentage change the model inferred, is replaced by the template rather than shown.
 
+## Phase 8: history, quotas, and audit
+
+**Step 8a** added query history (ADR 0013): the `queries` table (migration `20261014150000_query_history`), `PrismaQueryHistory` in core, recording from `JobProcessor` when a job finishes, and `apps/api/src/history`. The history integration test found a privacy defect from step 7.4: the server's facts carried labelled top items (row values) into the summary prompt and the template even when the connection did not allow rows, and a template summary naming a region was stored in history. `computeFacts` now leaves the labels out unless rows are allowed.
+
 ## How to extend this
 
 Add a phase only after this phase's checks pass: `npm test`, `npm run lint`, `npm run format:check`, and a ready health response from `npm run up`. New application tables go in a new Prisma migration. New client-visible failures go through `AppException` and an existing or newly documented error code in `@ayd/shared`. Use `notFound()` for a missing or foreign id (the two must look the same) and `invalidRequest()` for bad input; both live in `packages/core/src/errors/app.exception.ts`. Audit rows go through `writeAuditLog` in `packages/core/src/audit/audit-log.ts`, with ids and outcomes in the metadata and never secrets. Log errors with `safeErrorDetail`, which strips connection URLs.
