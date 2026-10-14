@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { z } from 'zod';
 import {
   LlmError,
@@ -10,6 +10,9 @@ import {
 
 /** The providers to try, in order: the primary model, then the fallback. */
 export const LLM_PROVIDERS = Symbol('LLM_PROVIDERS');
+
+/** The providers for summaries: a lighter, faster model first, then the main chain. */
+export const LLM_SUMMARY_PROVIDERS = Symbol('LLM_SUMMARY_PROVIDERS');
 
 export interface LlmResult<T> {
   value: T;
@@ -31,7 +34,13 @@ export type LlmObjectRequest = Omit<LlmJsonRequest, 'schema'>;
  */
 @Injectable()
 export class LlmClient {
-  constructor(@Inject(LLM_PROVIDERS) private readonly providers: LlmProvider[]) {}
+  constructor(
+    @Inject(LLM_PROVIDERS) private readonly providers: LlmProvider[],
+    // Without a summary list, summaries use the main chain.
+    @Optional()
+    @Inject(LLM_SUMMARY_PROVIDERS)
+    private readonly summaryProviders?: LlmProvider[],
+  ) {}
 
   async generateObject<T>(
     request: LlmObjectRequest,
@@ -40,7 +49,11 @@ export class LlmClient {
     const schema = jsonSchemaFor(shape);
     const attempts: LlmAttempt[] = [];
     let last = new LlmError('misconfigured', 'No model is configured.');
-    for (const provider of this.providers) {
+    const providers =
+      request.purpose === 'summary' && this.summaryProviders?.length
+        ? this.summaryProviders
+        : this.providers;
+    for (const provider of providers) {
       if (request.signal?.aborted) {
         last = new LlmError('cancelled', 'The model call was cancelled.', provider.model);
         break;

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { FakeLlmProvider } from '../testing/fake-llm-provider';
 import { attemptsOf, jsonSchemaFor, LlmClient } from './llm-client';
-import { geminiProviders } from './llm.module';
+import { geminiProviders, geminiSummaryProviders } from './llm.module';
 import { LlmError } from './llm.types';
 import { coreTestEnv } from '../testing/test-env';
 
@@ -146,5 +146,63 @@ describe('geminiProviders', () => {
         }),
       ),
     ).toHaveLength(1);
+  });
+});
+
+describe('summary routing', () => {
+  it('sends summaries to the summary model first, and SQL proposals to the main chain', async () => {
+    const primary = new FakeLlmProvider('primary', [{ text: '{"greeting":"sql"}' }]);
+    const light = new FakeLlmProvider('light', [{ text: '{"greeting":"summary"}' }]);
+    const client = new LlmClient([primary], [light, primary]);
+    const summary = await client.generateObject(
+      { ...request, purpose: 'summary' },
+      Greeting,
+    );
+    expect(summary.response.model).toBe('light');
+    const sql = await client.generateObject(
+      { ...request, purpose: 'sql_proposal' },
+      Greeting,
+    );
+    expect(sql.response.model).toBe('primary');
+    expect(light.requests).toHaveLength(1);
+  });
+
+  it('falls back from the summary model to the primary', async () => {
+    const primary = new FakeLlmProvider('primary', [{ text: '{"greeting":"ok"}' }]);
+    const light = new FakeLlmProvider('light', [
+      { error: new LlmError('rate_limited', 'x', 'light') },
+    ]);
+    const result = await new LlmClient([primary], [light, primary]).generateObject(
+      { ...request, purpose: 'summary' },
+      Greeting,
+    );
+    expect(result.attempts.map((a) => [a.model, a.outcome])).toEqual([
+      ['light', 'rate_limited'],
+      ['primary', 'ok'],
+    ]);
+  });
+
+  it('uses the main chain for summaries when no summary list is given', async () => {
+    const primary = new FakeLlmProvider('primary', [{ text: '{"greeting":"ok"}' }]);
+    const result = await new LlmClient([primary]).generateObject(
+      { ...request, purpose: 'summary' },
+      Greeting,
+    );
+    expect(result.response.model).toBe('primary');
+  });
+
+  it('builds the summary list from the settings: the light model, then the primary', () => {
+    expect(geminiSummaryProviders(coreTestEnv()).map((p) => p.model)).toEqual([
+      'gemini-3.5-flash-lite',
+      'gemini-3.8-flash',
+    ]);
+    expect(
+      geminiSummaryProviders(coreTestEnv({ LLM_SUMMARY_MODEL: '' })).map((p) => p.model),
+    ).toEqual(['gemini-3.8-flash', 'gemini-3.5-flash-lite']);
+    expect(
+      geminiSummaryProviders(coreTestEnv({ LLM_SUMMARY_MODEL: 'gemini-3.8-flash' })).map(
+        (p) => p.model,
+      ),
+    ).toEqual(['gemini-3.8-flash']);
   });
 });

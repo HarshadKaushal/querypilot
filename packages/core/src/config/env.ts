@@ -65,6 +65,8 @@ export const coreEnvFields = {
   LLM_PRIMARY_MODEL: z.string().min(1).default('gemini-3.8-flash'),
   // Tried when the primary is rate-limited, down, or answers in the wrong shape. Empty: none.
   LLM_FALLBACK_MODEL: z.string().default('gemini-3.5-flash-lite'),
+  // Summaries: a lighter, faster model first, then the primary. Empty: the main chain.
+  LLM_SUMMARY_MODEL: z.string().default('gemini-3.5-flash-lite'),
   LLM_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120000).default(30000),
   // Most rows one answer may return. The SQL guard adds or lowers LIMIT to this plus one.
   SQL_ROW_CAP: z.coerce.number().int().min(1).max(10000).default(1000),
