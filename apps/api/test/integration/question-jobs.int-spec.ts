@@ -10,6 +10,7 @@ import {
   type JobView,
   LlmClient,
   PrismaConnectionRepository,
+  PrismaProposalCache,
   PrismaSchemaRepository,
   PrismaService,
   QueryExecutor,
@@ -84,6 +85,7 @@ describe('question jobs through BullMQ', () => {
       connections,
       new QueryExecutor(env, pools, new RedisCoordination(redis), logger),
       new LlmClient([model]),
+      new PrismaProposalCache(prisma),
     ),
   );
   const slots = new UserJobSlots(redis);
@@ -270,5 +272,50 @@ describe('question jobs through BullMQ', () => {
       state: 'failed',
       error: { code: 'LLM_NOT_CONFIGURED' },
     });
+  });
+
+  // Runs last: it renames a column in the scratch database.
+  it('reuses a cached proposal, then heals once when the database changes, without widening access', async () => {
+    model.script(
+      proposal({
+        sql: 'SELECT status, count(*) AS n FROM public.orders GROUP BY status ORDER BY status',
+      }),
+    );
+    const first = await ask('Orders per status');
+    expect(first).toMatchObject({ state: 'succeeded', result: { cached: false } });
+
+    model.requests.length = 0;
+    const again = await ask('orders per status?');
+    expect(again).toMatchObject({
+      state: 'succeeded',
+      result: {
+        cached: true,
+        rows: [
+          ['open', '2'],
+          ['shipped', '1'],
+        ],
+      },
+    });
+    expect(model.requests).toHaveLength(0);
+
+    // The customer renames the column the cached SQL reads.
+    await db.admin.query('ALTER TABLE public.orders RENAME COLUMN status TO state');
+    model.script(
+      proposal({
+        status: 'unanswerable',
+        explanation: 'The orders table has no status column now.',
+      }),
+    );
+    const healed = await ask('Orders per status');
+    expect(healed).toMatchObject({
+      state: 'succeeded',
+      result: { status: 'unanswerable', schemaRefreshed: true },
+    });
+    // After the refresh the model saw the new snapshot: the old column is gone, and the
+    // renamed one is new, so it stays hidden until the owner allows it.
+    const prompt = model.requests.at(-1)!.prompt;
+    expect(prompt).toContain('Table public.orders');
+    expect(prompt).not.toContain('  status (');
+    expect(prompt).not.toContain('  state (');
   });
 });

@@ -4,5 +4,6 @@ export * from './fake-llm-provider';
 export * from './inline-job-queue';
 export * from './memory-connection.repository';
 export * from './memory-coordination';
+export * from './memory-proposal-cache';
 export * from './memory-schema.repository';
 export * from './test-env';

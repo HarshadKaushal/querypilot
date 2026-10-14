@@ -2,6 +2,7 @@ import {
   AskJobRunner,
   ConnectionJobRunner,
   LlmClient,
+  PROPOSAL_CACHE,
   JobCancellation,
   JobEvents,
   ConnectionService,
@@ -12,7 +13,7 @@ import {
   SchemaService,
   SqlGuardService,
 } from '@ayd/core';
-import { FakeLlmProvider, InlineJobQueue } from '@ayd/core/testing';
+import { FakeLlmProvider, InlineJobQueue, MemoryProposalCache } from '@ayd/core/testing';
 import type { Provider } from '@nestjs/common';
 
 /**
@@ -34,6 +35,7 @@ export function inlineJobProviders(
     JobProcessor,
     // Tests never call a real model: the fake answers from its script.
     { provide: LlmClient, useValue: new LlmClient([llm]) },
+    { provide: PROPOSAL_CACHE, useValue: new MemoryProposalCache() },
     { provide: JobQueue, useClass: InlineJobQueue },
     // Inline jobs finish before add() returns, so nothing is ever waiting to be cancelled
     // or followed.

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConnectionService } from '../connections/connection.service';
 import { AppException } from '../errors/app.exception';
 import {
@@ -12,7 +12,7 @@ import {
 import { fromException } from '../jobs/query-job.runner';
 import { LlmClient } from '../llm/llm-client';
 import { LlmError, type LlmAttempt } from '../llm/llm.types';
-import { SchemaService } from '../schema/schema.service';
+import { SchemaService, type SchemaView } from '../schema/schema.service';
 import { SqlGuardService } from '../sql-guard/sql-guard.service';
 import { QueryExecutor } from '../user-database/query-executor';
 import {
@@ -21,6 +21,7 @@ import {
   SQL_SYSTEM_PROMPT,
   type ProposalFeedback,
 } from './prompt';
+import { PROPOSAL_CACHE, questionKey, type ProposalCache } from './proposal-cache';
 import { SqlProposalSchema, type SqlProposal } from './sql-proposal';
 
 /** Rewrites after the guard rejects a proposal (blueprint 9.5: at most 2). */
@@ -33,15 +34,24 @@ const PROPOSAL_MAX_TOKENS = 4096;
 const QUERY_INVALID_FEEDBACK =
   'PostgreSQL could not run this query as written. Check that each column belongs to the table it is read from, that types match in comparisons and joins, and that every selected column is grouped or aggregated.';
 
+/** What one pass over a schema produced: a final outcome, or "the schema changed". */
+type Pass =
+  | { kind: 'done'; outcome: JobOutcome<AskResult> }
+  | { kind: 'schema_changed'; error: JobError };
+
 /**
  * Answers a question in English (blueprint section 9, steps 1 to 7): reads the allowlisted
- * schema, asks the model for one SELECT, checks it with the guard, and runs it read-only.
+ * schema, finds a cached proposal or asks the model for one SELECT, checks it with the
+ * guard, and runs it read-only.
  *
  * Retries are bounded. A guard rejection goes back to the model with the guard's reason, up
- * to MAX_GUARD_RETRIES times. A query PostgreSQL rejects as invalid (a wrong column type, a
- * missing GROUP BY) gets one more attempt. Timeouts, permission errors, and connection
- * problems are not retried. An ambiguous or unanswerable question stops before anything
- * runs. The model only ever sees allowed tables and columns, and no rows in this step.
+ * to MAX_GUARD_RETRIES times. A query PostgreSQL rejects as invalid gets one more attempt.
+ * When the database no longer has a table or column the snapshot listed
+ * (QUERY_SCHEMA_CHANGED), the schema is refreshed and the question answered again, once;
+ * new objects stay hidden until allowed, so this never widens access. Timeouts, permission
+ * errors, and connection problems are not retried. An ambiguous or unanswerable question
+ * stops before anything runs. The model only ever sees allowed tables and columns, and no
+ * rows in this step.
  */
 @Injectable()
 export class AskJobRunner {
@@ -51,6 +61,7 @@ export class AskJobRunner {
     private readonly connections: ConnectionService,
     private readonly executor: QueryExecutor,
     private readonly llm: LlmClient,
+    @Inject(PROPOSAL_CACHE) private readonly cache: ProposalCache,
   ) {}
 
   async run(
@@ -60,114 +71,27 @@ export class AskJobRunner {
     const attempts: LlmAttempt[] = [];
     try {
       await context.report('loading_schema');
-      const schema = await this.schemas.schema(data.userId, data.connectionId);
-      if (schema.tables.length === 0) {
-        return failed(
-          'SCHEMA_NOT_READY',
-          'No tables are allowed for this connection yet. Choose tables in the allowlist first.',
-        );
-      }
-      const shown = selectTables(schema.tables, data.question);
-      let feedback: ProposalFeedback | undefined;
-      let guardRetries = 0;
-      let queryRetried = false;
-
+      let schema = await this.schemas.schema(data.userId, data.connectionId);
+      let refreshed = false;
       for (;;) {
-        await context.report('generating_sql');
-        const proposal = await this.propose(
-          data.question,
-          shown,
-          feedback,
-          attempts,
-          context,
-        );
-        const model = attempts.at(-1)?.model ?? '';
-        if (proposal.status !== 'ok') {
-          return {
-            ok: true,
-            result:
-              proposal.status === 'ambiguous'
-                ? {
-                    status: 'ambiguous',
-                    question: data.question,
-                    clarifyingQuestion: proposal.clarifyingQuestion,
-                    assumptions: proposal.assumptions,
-                    explanation: proposal.explanation,
-                    schemaVersion: schema.version,
-                    model,
-                    llmAttempts: attempts,
-                  }
-                : {
-                    status: 'unanswerable',
-                    question: data.question,
-                    explanation: proposal.explanation,
-                    schemaVersion: schema.version,
-                    model,
-                    llmAttempts: attempts,
-                  },
-          };
-        }
-
-        await context.report('checking_sql');
-        const check = await this.guard.check(
-          data.userId,
-          data.connectionId,
-          proposal.sql,
-        );
-        if (!check.allowed) {
-          if (guardRetries < MAX_GUARD_RETRIES) {
-            guardRetries += 1;
-            feedback = { sql: proposal.sql, reason: check.reason };
-            continue;
-          }
+        if (schema.tables.length === 0) {
           return failed(
-            'SQL_REJECTED',
-            'The assistant could not write a query that passes the safety checks. Try asking in a different way.',
-            false,
-            { guardCode: check.code },
+            'SCHEMA_NOT_READY',
+            'No tables are allowed for this connection yet. Choose tables in the allowlist first.',
           );
         }
-
-        context.signal?.throwIfAborted();
-        await context.report('connecting');
-        const target = await this.connections.resolveTarget(
-          data.userId,
-          data.connectionId,
-        );
-        if (!target.ok) {
-          return { ok: false, error: fromException(target.error) };
+        const pass = await this.answer(data, schema, refreshed, attempts, context);
+        if (pass.kind === 'done') {
+          return pass.outcome;
         }
-        context.signal?.throwIfAborted();
-        await context.report('running_query');
-        const result = await this.executor.run({
-          connectionId: data.connectionId,
-          target: target.request,
-          sql: check.sql,
-          signal: context.signal,
-        });
-        if (!result.ok) {
-          if (result.code === 'QUERY_INVALID' && !queryRetried) {
-            queryRetried = true;
-            feedback = { sql: proposal.sql, reason: QUERY_INVALID_FEEDBACK };
-            continue;
-          }
-          return failed(result.code, result.message, result.retryable);
+        if (refreshed) {
+          return { ok: false, error: pass.error };
         }
-        const { ok: _ok, ...rows } = result;
-        return {
-          ok: true,
-          result: {
-            status: 'answered',
-            question: data.question,
-            sql: check.sql,
-            assumptions: proposal.assumptions,
-            explanation: proposal.explanation,
-            ...rows,
-            schemaVersion: check.schemaVersion,
-            model,
-            llmAttempts: attempts,
-          },
-        };
+        // The database changed since the last refresh: read it again and retry once.
+        refreshed = true;
+        await context.report('reading_schema');
+        await this.schemas.refresh(data.userId, data.connectionId, null);
+        schema = await this.schemas.schema(data.userId, data.connectionId);
       }
     } catch (error) {
       if (error instanceof AppException) {
@@ -177,6 +101,161 @@ export class AskJobRunner {
         return { ok: false, error: llmFailure(error) };
       }
       throw error;
+    }
+  }
+
+  /** One attempt to answer against this schema: cache first, then the model. */
+  private async answer(
+    data: AskJobData,
+    schema: SchemaView,
+    refreshed: boolean,
+    attempts: LlmAttempt[],
+    context: JobContext,
+  ): Promise<Pass> {
+    const key = questionKey(data.question);
+    const shown = selectTables(schema.tables, data.question);
+    let cached = await this.cache.find(data.connectionId, schema.fingerprint, key);
+    let feedback: ProposalFeedback | undefined;
+    let guardRetries = 0;
+    let queryRetried = false;
+
+    for (;;) {
+      let proposal: SqlProposal;
+      let model: string;
+      const fromCache = cached !== null;
+      if (cached) {
+        proposal = {
+          status: 'ok',
+          sql: cached.sql,
+          assumptions: cached.assumptions,
+          clarifyingQuestion: '',
+          explanation: cached.explanation,
+        };
+        model = cached.model;
+        cached = null;
+      } else {
+        await context.report('generating_sql');
+        proposal = await this.propose(data.question, shown, feedback, attempts, context);
+        model = attempts.at(-1)?.model ?? '';
+      }
+      const common = {
+        question: data.question,
+        schemaVersion: schema.version,
+        model,
+        llmAttempts: attempts,
+        cached: fromCache,
+        schemaRefreshed: refreshed,
+      };
+      if (proposal.status !== 'ok') {
+        return {
+          kind: 'done',
+          outcome: {
+            ok: true,
+            result:
+              proposal.status === 'ambiguous'
+                ? {
+                    ...common,
+                    status: 'ambiguous',
+                    clarifyingQuestion: proposal.clarifyingQuestion,
+                    assumptions: proposal.assumptions,
+                    explanation: proposal.explanation,
+                  }
+                : {
+                    ...common,
+                    status: 'unanswerable',
+                    explanation: proposal.explanation,
+                  },
+          },
+        };
+      }
+
+      await context.report('checking_sql');
+      const check = await this.guard.check(data.userId, data.connectionId, proposal.sql);
+      if (!check.allowed) {
+        if (fromCache) {
+          // A cached proposal the guard no longer accepts: drop it and ask the model.
+          await this.cache.forget(data.connectionId, schema.fingerprint, key);
+          continue;
+        }
+        if (guardRetries < MAX_GUARD_RETRIES) {
+          guardRetries += 1;
+          feedback = { sql: proposal.sql, reason: check.reason };
+          continue;
+        }
+        return done(
+          failed(
+            'SQL_REJECTED',
+            'The assistant could not write a query that passes the safety checks. Try asking in a different way.',
+            false,
+            { guardCode: check.code },
+          ),
+        );
+      }
+
+      context.signal?.throwIfAborted();
+      await context.report('connecting');
+      const target = await this.connections.resolveTarget(data.userId, data.connectionId);
+      if (!target.ok) {
+        return done({ ok: false, error: fromException(target.error) });
+      }
+      context.signal?.throwIfAborted();
+      await context.report('running_query');
+      const result = await this.executor.run({
+        connectionId: data.connectionId,
+        target: target.request,
+        sql: check.sql,
+        signal: context.signal,
+      });
+      if (!result.ok) {
+        if (
+          fromCache &&
+          (result.code === 'QUERY_INVALID' || result.code === 'QUERY_SCHEMA_CHANGED')
+        ) {
+          await this.cache.forget(data.connectionId, schema.fingerprint, key);
+        }
+        if (result.code === 'QUERY_SCHEMA_CHANGED') {
+          return {
+            kind: 'schema_changed',
+            error: {
+              code: result.code,
+              message: result.message,
+              retryable: result.retryable,
+            },
+          };
+        }
+        if (result.code === 'QUERY_INVALID' && (fromCache || !queryRetried)) {
+          if (!fromCache) {
+            queryRetried = true;
+            feedback = { sql: proposal.sql, reason: QUERY_INVALID_FEEDBACK };
+          }
+          continue;
+        }
+        return done(failed(result.code, result.message, result.retryable));
+      }
+      if (!fromCache) {
+        // A failure to cache must not fail an answered question.
+        await this.cache
+          .save(data.connectionId, schema.fingerprint, key, {
+            sql: proposal.sql,
+            assumptions: proposal.assumptions,
+            explanation: proposal.explanation,
+            model,
+          })
+          .catch(() => undefined);
+      }
+      const { ok: _ok, ...rows } = result;
+      return done({
+        ok: true,
+        result: {
+          ...common,
+          status: 'answered',
+          sql: check.sql,
+          assumptions: proposal.assumptions,
+          explanation: proposal.explanation,
+          ...rows,
+          schemaVersion: check.schemaVersion,
+        },
+      });
     }
   }
 
@@ -215,6 +294,10 @@ export class AskJobRunner {
       throw error;
     }
   }
+}
+
+function done(outcome: JobOutcome<AskResult>): Pass {
+  return { kind: 'done', outcome };
 }
 
 function failed(

@@ -27,31 +27,32 @@ model User {
 }
 
 model Connection {
-  id                  String           @id
-  userId              String           @map("user_id")
+  id                  String            @id
+  userId              String            @map("user_id")
   label               String
   host                String
   port                Int
-  databaseName        String           @map("database_name")
-  sslMode             String           @map("ssl_mode")
-  usernameCiphertext  String           @map("username_ciphertext")
-  usernameIv          String           @map("username_iv")
-  usernameTag         String           @map("username_tag")
-  passwordCiphertext  String           @map("password_ciphertext")
-  passwordIv          String           @map("password_iv")
-  passwordTag         String           @map("password_tag")
-  encryptedDataKey    String           @map("encrypted_data_key")
-  dataKeyIv           String           @map("data_key_iv")
-  dataKeyTag          String           @map("data_key_tag")
-  keyVersion          Int              @map("key_version")
+  databaseName        String            @map("database_name")
+  sslMode             String            @map("ssl_mode")
+  usernameCiphertext  String            @map("username_ciphertext")
+  usernameIv          String            @map("username_iv")
+  usernameTag         String            @map("username_tag")
+  passwordCiphertext  String            @map("password_ciphertext")
+  passwordIv          String            @map("password_iv")
+  passwordTag         String            @map("password_tag")
+  encryptedDataKey    String            @map("encrypted_data_key")
+  dataKeyIv           String            @map("data_key_iv")
+  dataKeyTag          String            @map("data_key_tag")
+  keyVersion          Int               @map("key_version")
   status              String
-  lastTestedAt        DateTime?        @map("last_tested_at")
-  sendSampleRowsToLlm Boolean          @default(false) @map("send_sample_rows_to_llm")
-  createdAt           DateTime         @default(now()) @map("created_at")
-  updatedAt           DateTime         @updatedAt @map("updated_at")
-  user                User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastTestedAt        DateTime?         @map("last_tested_at")
+  sendSampleRowsToLlm Boolean           @default(false) @map("send_sample_rows_to_llm")
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   schemaSnapshots     SchemaSnapshot[]
   allowedObjects      AllowedObject[]
+  cachedProposals     QueryCacheEntry[]
 
   @@index([userId])
   @@map("connections")
@@ -113,4 +114,25 @@ model AllowedObject {
 
   @@index([connectionId])
   @@map("allowed_objects")
+}
+
+// Validated SQL proposals, so a repeated question skips the model (blueprint 7). The key is
+// the connection, the allowlisted schema's fingerprint (it changes with every refresh and
+// allowlist edit), and a hash of the normalized question. Never holds result rows.
+model QueryCacheEntry {
+  id           String     @id
+  connectionId String     @map("connection_id")
+  fingerprint  String
+  questionHash String     @map("question_hash")
+  sql          String
+  assumptions  Json
+  explanation  String
+  model        String
+  hits         Int        @default(0)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  lastUsedAt   DateTime   @default(now()) @map("last_used_at")
+  connection   Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, fingerprint, questionHash])
+  @@map("query_cache")
 }

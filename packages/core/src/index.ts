@@ -2,6 +2,7 @@
 // HTTP. Test helpers live in src/testing and are not part of the build.
 export * from './ask/ask-job.runner';
 export * from './ask/prompt';
+export * from './ask/proposal-cache';
 export * from './ask/sql-proposal';
 export * from './audit/audit-log';
 export * from './config/env';

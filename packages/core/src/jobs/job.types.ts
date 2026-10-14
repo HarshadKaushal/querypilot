@@ -95,6 +95,10 @@ export type AskResult =
       schemaVersion: number;
       model: string;
       llmAttempts: LlmAttempt[];
+      /** True when the SQL came from the proposal cache, not the model. */
+      cached: boolean;
+      /** True when the schema was refreshed to answer (the database had changed). */
+      schemaRefreshed: boolean;
     } & Omit<ExecutionSuccess, 'ok'>)
   | {
       status: 'ambiguous';
@@ -105,6 +109,10 @@ export type AskResult =
       schemaVersion: number;
       model: string;
       llmAttempts: LlmAttempt[];
+      /** True when the SQL came from the proposal cache, not the model. */
+      cached: boolean;
+      /** True when the schema was refreshed to answer (the database had changed). */
+      schemaRefreshed: boolean;
     }
   | {
       status: 'unanswerable';
@@ -113,6 +121,10 @@ export type AskResult =
       schemaVersion: number;
       model: string;
       llmAttempts: LlmAttempt[];
+      /** True when the SQL came from the proposal cache, not the model. */
+      cached: boolean;
+      /** True when the schema was refreshed to answer (the database had changed). */
+      schemaRefreshed: boolean;
     };
 
 export type JobState = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';

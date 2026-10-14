@@ -6,6 +6,7 @@ import { LlmError } from '../llm/llm.types';
 import type { SchemaService, SchemaView } from '../schema/schema.service';
 import type { SqlGuardService } from '../sql-guard/sql-guard.service';
 import { FakeLlmProvider } from '../testing/fake-llm-provider';
+import { MemoryProposalCache } from '../testing/memory-proposal-cache';
 import type { QueryExecutor } from '../user-database/query-executor';
 import { AskJobRunner } from './ask-job.runner';
 
@@ -60,10 +61,14 @@ function setup(options: {
   check?: jest.Mock;
   run?: jest.Mock;
   schema?: jest.Mock;
+  refresh?: jest.Mock;
+  cache?: MemoryProposalCache;
 }) {
+  const cache = options.cache ?? new MemoryProposalCache();
   const model = options.model ?? new FakeLlmProvider('primary');
   const schemas = {
     schema: options.schema ?? jest.fn().mockResolvedValue(schemaView),
+    refresh: options.refresh ?? jest.fn().mockResolvedValue({ version: 4 }),
   } as unknown as SchemaService;
   const guard = {
     check:
@@ -91,10 +96,11 @@ function setup(options: {
     connections,
     executor,
     new LlmClient(providers),
+    cache,
   );
   const stages: string[] = [];
   const context: JobContext = { report: async (stage) => void stages.push(stage) };
-  return { runner, model, guard, executor, stages, context };
+  return { runner, model, guard, executor, stages, context, cache, schemas };
 }
 
 const OPEN_SQL =
@@ -365,5 +371,180 @@ describe('AskJobRunner', () => {
     await expect(
       runner.run(data, { report: async () => undefined, signal: controller.signal }),
     ).rejects.toBe('cancelled by its owner');
+  });
+});
+
+describe('AskJobRunner proposal cache', () => {
+  it('answers a repeated question from the cache, without the model, still through the guard', async () => {
+    const cache = new MemoryProposalCache();
+    const first = setup({
+      model: new FakeLlmProvider('primary', [proposal({ sql: OPEN_SQL })]),
+      cache,
+    });
+    await expect(first.runner.run(data)).resolves.toMatchObject({
+      result: { cached: false },
+    });
+    expect(cache.entries.size).toBe(1);
+
+    const again = setup({ model: new FakeLlmProvider('primary'), cache });
+    const outcome = await again.runner.run({
+      ...data,
+      question: '  how many ORDERS are open  ',
+    });
+    expect(outcome).toMatchObject({
+      ok: true,
+      result: { status: 'answered', cached: true, model: 'primary', rows: [['4']] },
+    });
+    expect(again.model.requests).toHaveLength(0);
+    expect(again.guard.check).toHaveBeenCalledWith('u1', 'c1', OPEN_SQL);
+    expect(again.stages).not.toContain('generating_sql');
+  });
+
+  it('does not cache ambiguous answers or failures', async () => {
+    const cache = new MemoryProposalCache();
+    const ambiguous = setup({
+      model: new FakeLlmProvider('primary', [
+        proposal({ status: 'ambiguous', clarifyingQuestion: 'Which?' }),
+      ]),
+      cache,
+    });
+    await ambiguous.runner.run(data);
+    const timeout = setup({
+      model: new FakeLlmProvider('primary', [proposal({ sql: OPEN_SQL })]),
+      run: jest.fn().mockResolvedValue({
+        ok: false,
+        code: 'QUERY_TIMEOUT',
+        message: 'm',
+        retryable: false,
+      }),
+      cache,
+    });
+    await timeout.runner.run(data);
+    expect(cache.entries.size).toBe(0);
+  });
+
+  it('drops a cached proposal the guard now rejects, and asks the model instead', async () => {
+    const cache = new MemoryProposalCache();
+    await setup({
+      model: new FakeLlmProvider('primary', [proposal({ sql: OPEN_SQL })]),
+      cache,
+    }).runner.run(data);
+    const check = jest
+      .fn()
+      .mockResolvedValueOnce({
+        allowed: false,
+        code: 'column_not_allowed',
+        reason: 'Hidden now.',
+        schemaVersion: 3,
+      })
+      .mockResolvedValueOnce({
+        allowed: true,
+        sql: 'SELECT 1',
+        limitApplied: false,
+        rowCap: 1000,
+        schemaVersion: 3,
+      });
+    const later = setup({
+      model: new FakeLlmProvider('primary', [proposal({ sql: 'SELECT 1' })]),
+      check,
+      cache,
+    });
+    await expect(later.runner.run(data)).resolves.toMatchObject({
+      result: { cached: false, sql: 'SELECT 1' },
+    });
+    expect(later.model.requests).toHaveLength(1);
+    // The model's feedback is not about the cached SQL: it starts fresh.
+    expect(later.model.requests[0]!.prompt).not.toContain('previous query');
+  });
+
+  it('drops a cached proposal PostgreSQL rejects as invalid, and asks the model instead', async () => {
+    const cache = new MemoryProposalCache();
+    await setup({
+      model: new FakeLlmProvider('primary', [proposal({ sql: OPEN_SQL })]),
+      cache,
+    }).runner.run(data);
+    const run = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        code: 'QUERY_INVALID',
+        message: 'm',
+        retryable: true,
+      })
+      .mockResolvedValueOnce(ROWS);
+    const later = setup({
+      model: new FakeLlmProvider('primary', [proposal({ sql: OPEN_SQL })]),
+      run,
+      cache,
+    });
+    await expect(later.runner.run(data)).resolves.toMatchObject({
+      result: { cached: false },
+    });
+    expect(later.model.requests).toHaveLength(1);
+  });
+});
+
+describe('AskJobRunner self-healing', () => {
+  const changed = {
+    ok: false,
+    code: 'QUERY_SCHEMA_CHANGED',
+    message: 'Refresh the schema and ask again.',
+    retryable: false,
+  };
+
+  it('refreshes the schema once and answers again when the database has changed', async () => {
+    const newer = { ...schemaView, version: 4, fingerprint: 'g' };
+    const schema = jest
+      .fn()
+      .mockResolvedValueOnce(schemaView)
+      .mockResolvedValueOnce(newer);
+    const run = jest.fn().mockResolvedValueOnce(changed).mockResolvedValueOnce(ROWS);
+    const healing = setup({
+      model: new FakeLlmProvider('primary', [
+        proposal({ sql: OPEN_SQL }),
+        proposal({ sql: OPEN_SQL }),
+      ]),
+      schema,
+      run,
+    });
+    const outcome = await healing.runner.run(data, healing.context);
+    expect(outcome).toMatchObject({
+      ok: true,
+      result: { status: 'answered', schemaRefreshed: true },
+    });
+    expect(healing.schemas.refresh).toHaveBeenCalledWith('u1', 'c1', null);
+    expect(healing.stages).toContain('reading_schema');
+    expect(healing.model.requests).toHaveLength(2);
+  });
+
+  it('returns QUERY_SCHEMA_CHANGED when the database still disagrees after one refresh', async () => {
+    const healing = setup({
+      model: new FakeLlmProvider('primary', [
+        proposal({ sql: OPEN_SQL }),
+        proposal({ sql: OPEN_SQL }),
+      ]),
+      run: jest.fn().mockResolvedValue(changed),
+    });
+    await expect(healing.runner.run(data)).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'QUERY_SCHEMA_CHANGED' },
+    });
+    expect(healing.schemas.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns the refresh problem when the refresh itself fails', async () => {
+    const healing = setup({
+      model: new FakeLlmProvider('primary', [proposal({ sql: OPEN_SQL })]),
+      run: jest.fn().mockResolvedValue(changed),
+      refresh: jest
+        .fn()
+        .mockRejectedValue(
+          new AppException('NOT_READ_ONLY', 'This role can change data.', 400),
+        ),
+    });
+    await expect(healing.runner.run(data)).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'NOT_READ_ONLY' },
+    });
   });
 });
