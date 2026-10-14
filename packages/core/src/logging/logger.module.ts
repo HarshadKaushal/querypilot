@@ -16,6 +16,7 @@ export const REDACTED_PATHS = [
   '*.password',
   '*.secret',
   '*.token',
+  '*.apiKey',
 ];
 
 /**

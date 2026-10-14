@@ -59,6 +59,13 @@ export const coreEnvFields = {
     .min(3600)
     .max(30 * 86400)
     .default(7 * 86400),
+  // The model layer (ADR 0012). Empty key: the worker still starts, and model calls fail
+  // with a clear "not configured" outcome. Free AI Studio keys let Google use the content.
+  GEMINI_API_KEY: z.string().default(''),
+  LLM_PRIMARY_MODEL: z.string().min(1).default('gemini-3.8-flash'),
+  // Tried when the primary is rate-limited, down, or answers in the wrong shape. Empty: none.
+  LLM_FALLBACK_MODEL: z.string().default('gemini-3.5-flash-lite'),
+  LLM_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120000).default(30000),
   // Most rows one answer may return. The SQL guard adds or lowers LIMIT to this plus one.
   SQL_ROW_CAP: z.coerce.number().int().min(1).max(10000).default(1000),
   // Executor limits for queries on user databases (ADR 0010).

@@ -50,6 +50,8 @@ Status of Ask Your Database against the production blueprint. Phase 6 (queue, wo
 
 ## Partial
 
+- **Model layer (Phase 7 step 1).** `LlmClient` asks Gemini (`gemini-3.8-flash`, falling back to `gemini-3.5-flash-lite`) for JSON in a Zod-defined shape, through the official SDK and the Interactions API, and falls back on rate limits, outages, and malformed answers (ADR 0012). Nothing calls it yet; the ask pipeline is step 2. `npm run try-llm --workspace=@ayd/worker` checks a key.
+
 - **Worker.** It takes every job that opens a user database from the queue (query, connection create, update, and test, schema refresh) and runs them, five at a time per process. It reports progress, honours cancellation, retries crashes, and keeps each user to their share of the queue.
 - **Shared package.** It holds the error envelope, request id, and health report types. It does not yet hold API DTOs for questions, connections, or history.
 - **Observability.** Logs are structured. There are no traces, metrics, dashboards, or alerts.
@@ -65,7 +67,7 @@ Locked choices that are not implemented:
 
 - When a query returns `QUERY_SCHEMA_CHANGED`, refresh the schema and retry once against the new snapshot (Phase 7). New objects stay hidden until allowed, so this cannot widen access.
 - Show how old the schema snapshot is, or refresh it on a schedule (Phase 8 or 9).
-- Gemini as the platform LLM, behind a provider interface, with a second call for the summary.
+- The ask pipeline: question to SQL with the model, guard retries, the proposal cache, charts, and the grounded summary (Phase 7 steps 2 to 5).
 - History and quotas. Login rate limits are part of the quota phase.
 - React UI (sign-in, connect, ask, history, usage, settings) and every result state.
 - Evaluation dataset, load tests, and production deployment (NAT gateway, fixed egress IP, secrets manager).

@@ -152,6 +152,10 @@ The Docker build caught what the local build could not: the worker image built o
 
 **Phase 6 acceptance.** The API returns a job id at once (202, every route that opens a user database). Progress streams over SSE with the current stage. A crashed job is retried, and a job whose worker died is run again by another worker, safely, because every job tolerates a second run. One user cannot starve others: the cap and the priority order. Each line has a test against real Redis and BullMQ.
 
+## Phase 7: model layer and ask pipeline
+
+**Step 1** added the model layer (ADR 0012): a provider interface, `GeminiProvider` on Google's official SDK and the Interactions API, `LlmClient` with the fallback chain, and `FakeLlmProvider` for tests. Google moved structured output to the Interactions API in 2026, so the request fields come from the SDK's type definitions, not from memory, and the unit tests pin the exact request the provider sends. The key is optional, so the worker starts without it.
+
 ## How to extend this
 
 Add a phase only after this phase's checks pass: `npm test`, `npm run lint`, `npm run format:check`, and a ready health response from `npm run up`. New application tables go in a new Prisma migration. New client-visible failures go through `AppException` and an existing or newly documented error code in `@ayd/shared`. Use `notFound()` for a missing or foreign id (the two must look the same) and `invalidRequest()` for bad input; both live in `packages/core/src/errors/app.exception.ts`. Audit rows go through `writeAuditLog` in `packages/core/src/audit/audit-log.ts`, with ids and outcomes in the metadata and never secrets. Log errors with `safeErrorDetail`, which strips connection URLs.

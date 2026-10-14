@@ -25,7 +25,7 @@ Playwright and the evaluation runner are not created yet. They get their own com
 
 ## Rules
 
-- Never call Gemini, or any other live model, from a test. Use a fake provider. Real model calls belong in `eval/`.
+- Never call Gemini, or any other live model, from a test. Use `FakeLlmProvider` from `@ayd/core/testing`, which answers from a script and records each request. Real model calls belong in `eval/`; `npm run try-llm --workspace=@ayd/worker` checks a key by hand.
 - Each integration test starts from a clean database state. Tests must not depend on rows left by another test.
 - Prefer many unit tests, fewer integration tests, and a short browser suite that covers the demo flow only.
 - Safety code gets the heavy coverage: the SQL guard, the SSRF guard, authorization, encryption, and read-only execution. There is no global coverage percentage. `@ayd/ssrf-guard` and `@ayd/crypto` are unit-tested with no network.

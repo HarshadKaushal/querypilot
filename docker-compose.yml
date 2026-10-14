@@ -97,6 +97,8 @@ services:
       CRYPTO_MASTER_KEY_VERSION: '1'
       CRYPTO_MASTER_KEYS: '1:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY='
       SSRF_ALLOW_PRIVATE: 'true'
+      # From the root .env, which Compose reads for substitution. Empty disables model calls.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     depends_on:
       app-db:
         condition: service_healthy

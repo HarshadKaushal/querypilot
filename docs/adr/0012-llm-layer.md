@@ -1,0 +1,19 @@
+# ADR 0012: Model layer
+
+Phase 7 turns questions into SQL with a language model. This records how the platform talks to models; the ask pipeline that uses them is built on top.
+
+**Provider.** Gemini through Google AI Studio keys, as locked in the blueprint. The primary model is `gemini-3.8-flash` and the fallback `gemini-3.5-flash-lite`: the two models Google's documentation recommends for new projects in October 2026, both stable, both on the free tier. Preview models are avoided (stricter limits, shorter life), and the 2.5 family is limited to existing users. The models are settings (`LLM_PRIMARY_MODEL`, `LLM_FALLBACK_MODEL`), so changing them needs no code.
+
+**API.** Google's official SDK, `@google/genai`, calling the Interactions API, which Google recommends for new projects (`generateContent` remains supported). Each call sends a system instruction, the prompt, and `response_format` with `mime_type: application/json` and a JSON Schema. `store: false` keeps interactions stateless on Google's side; no conversation state is kept between calls. Temperature is 0, so the same question over the same schema gives the same SQL. The SDK's own retries are off: the fallback chain decides what to try next.
+
+**One schema per answer.** Each answer shape is a Zod schema. `z.toJSONSchema` turns it into the JSON Schema sent to the model, and the same Zod schema validates the answer. A model cannot return a field the code does not expect.
+
+**Fallback chain.** `LlmClient` tries the providers in order. A rate limit (429), an outage (5xx, timeout, network), or an answer that is not valid JSON in the expected shape moves on to the next model. A missing or refused key (401, 403) and a cancelled job stop at once, because the next model would fail the same way. A 400 or 404 (an unknown model name, a schema the model cannot follow) counts as a bad answer and also falls back. Every attempt is recorded with its model, outcome, latency, and token counts, for the accounting step.
+
+**Errors.** Provider error text can echo the request, so it is never kept or shown: each failure gets a fixed sentence, classified from the HTTP status.
+
+**Where it runs.** Only in the worker, from jobs; the API never imports `LlmModule`. The key is `GEMINI_API_KEY`, optional so the worker still starts without it, and model calls then fail as "not configured". Compose passes it to the worker from the root `.env`. Log redaction covers `*.apiKey`.
+
+**Data leaving the platform.** Free-tier keys let Google use prompts and answers to improve its products. Prompts carry only the allowlisted schema and the question. Result rows go to the model only when the connection's `sendSampleRowsToLlm` setting allows it (user's decision, Phase 7). Production should use a paid key; the deployment phase records this.
+
+**Tests.** No test calls a real model (`docs/testing.md`). `FakeLlmProvider` in `@ayd/core/testing` answers from a script and records what it was shown. `npm run try-llm --workspace=@ayd/worker` checks a real key by hand.

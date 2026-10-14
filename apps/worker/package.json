@@ -7,7 +7,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "test": "npm run test:unit",
-    "test:unit": "node ../../scripts/jest.cjs --config jest.config.cjs"
+    "test:unit": "node ../../scripts/jest.cjs --config jest.config.cjs",
+    "try-llm": "node scripts/try-llm.cjs"
   },
   "dependencies": {
     "@ayd/core": "*",
