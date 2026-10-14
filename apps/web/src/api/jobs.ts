@@ -51,12 +51,19 @@ export interface WatchOptions {
   /** Waits before each reconnect; when they run out, the job is polled instead. */
   retryDelaysMs?: number[];
   pollMs?: number;
+  /**
+   * A stream silent this long is treated as dead and reconnected. The API sends a
+   * keep-alive every 15 seconds, so 45 seconds of nothing means the line is gone (a server
+   * restart behind a proxy, or a dropped network) even though it never closed.
+   */
+  idleMs?: number;
 }
 
 /**
  * Follows a job until it finishes and returns its final view. It listens to the job's event
  * stream; if the stream ends early (the server closes it after 10 minutes, or the network
- * drops), it reconnects, and after repeated failures it polls GET /v1/jobs/:id instead.
+ * drops, or it goes silent), it reconnects, and after repeated failures it polls
+ * GET /v1/jobs/:id instead.
  * The stream is read with fetch because EventSource cannot send the Authorization header.
  */
 export async function watchJob<Result>(
@@ -73,9 +80,24 @@ export async function watchJob<Result>(
   }
   for (let failures = 0; failures <= delays.length;) {
     let progressed = false;
+    // One controller per attempt, so a silent stream can be dropped without stopping
+    // the whole watch; leaving the page still aborts it through the caller's signal.
+    const attempt = new AbortController();
+    const forward = () => attempt.abort(signal?.reason);
+    signal?.addEventListener('abort', forward, { once: true });
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    let silence: ReturnType<typeof setTimeout> | undefined;
+    const restartSilence = () => {
+      clearTimeout(silence);
+      silence = setTimeout(() => {
+        attempt.abort(new DOMException('The job stream went silent.', 'TimeoutError'));
+        void reader?.cancel().catch(() => undefined);
+      }, options.idleMs ?? 45_000);
+    };
     try {
-      const response = await api.stream(`/v1/jobs/${initial.id}/events`, signal!);
-      const reader = response.body!.getReader();
+      restartSilence();
+      const response = await api.stream(`/v1/jobs/${initial.id}/events`, attempt.signal);
+      reader = response.body!.getReader();
       const decoder = new TextDecoder();
       const parser = new JobEventParser();
       for (;;) {
@@ -83,6 +105,8 @@ export async function watchJob<Result>(
         if (done) {
           break;
         }
+        // Any data counts as a sign of life, keep-alive comments included.
+        restartSilence();
         for (const view of parser.push(decoder.decode(value, { stream: true }))) {
           latest = view as JobView<Result>;
           progressed = true;
@@ -101,6 +125,9 @@ export async function watchJob<Result>(
       if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
         throw error;
       }
+    } finally {
+      clearTimeout(silence);
+      signal?.removeEventListener('abort', forward);
     }
     // A stream that delivered something was working; only back-to-back failures count.
     failures = progressed ? 0 : failures + 1;
