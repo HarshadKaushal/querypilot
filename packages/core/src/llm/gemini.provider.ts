@@ -50,9 +50,16 @@ export class GeminiProvider implements LlmProvider {
       throw new LlmError('misconfigured', 'GEMINI_API_KEY is not set.', this.model);
     }
     const started = Date.now();
+    // The SDK's own timeout let a call run 113 s against a 30 s setting, so the deadline is
+    // enforced here: the call is aborted and no longer awaited, and the client's fallback
+    // chain tries the next model. A job cancellation still aborts it too.
+    const deadline = AbortSignal.timeout(this.timeoutMs);
+    const signal = request.signal
+      ? AbortSignal.any([request.signal, deadline])
+      : deadline;
     let interaction: Awaited<ReturnType<InteractionsClient['interactions']['create']>>;
     try {
-      interaction = await this.client.interactions.create(
+      const call = this.client.interactions.create(
         {
           model: this.model,
           system_instruction: request.system,
@@ -73,9 +80,10 @@ export class GeminiProvider implements LlmProvider {
         {
           timeout: this.timeoutMs,
           maxRetries: 0,
-          fetchOptions: { signal: request.signal },
+          fetchOptions: { signal },
         },
       );
+      interaction = await Promise.race([call, rejectWhenAborted(signal)]);
     } catch (error) {
       throw new LlmError(
         classify(error, request.signal),
@@ -104,6 +112,18 @@ export class GeminiProvider implements LlmProvider {
       latencyMs: Date.now() - started,
     };
   }
+}
+
+/** Rejects once the signal aborts, so a call the SDK keeps waiting on is not awaited. */
+function rejectWhenAborted(signal: AbortSignal): Promise<never> {
+  return new Promise((_, reject) => {
+    const fail = () => reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+    if (signal.aborted) {
+      fail();
+    } else {
+      signal.addEventListener('abort', fail, { once: true });
+    }
+  });
 }
 
 /** The HTTP status on an SDK error, wherever the SDK put it. */

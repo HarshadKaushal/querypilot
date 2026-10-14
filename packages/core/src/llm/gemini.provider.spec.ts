@@ -54,7 +54,12 @@ describe('GeminiProvider', () => {
         },
         store: false,
       },
-      { timeout: 15000, maxRetries: 0, fetchOptions: { signal: controller.signal } },
+      // The call's signal joins the job's cancel signal with this provider's own deadline.
+      {
+        timeout: 15000,
+        maxRetries: 0,
+        fetchOptions: { signal: expect.any(AbortSignal) },
+      },
     );
   });
 
@@ -108,6 +113,31 @@ describe('GeminiProvider', () => {
         signal: controller.signal,
       }),
     ).rejects.toMatchObject({ kind: 'cancelled' });
+  });
+
+  it('gives up on a model that does not answer by the deadline, so the next one is tried', async () => {
+    // The SDK's timeout once let a call run 113 s; this model never answers at all.
+    const silent = client(() => new Promise(() => undefined));
+    const started = Date.now();
+    await expect(
+      new GeminiProvider('m', 'key', 50, silent.client).generateJson(request),
+    ).rejects.toMatchObject({ kind: 'unavailable', model: 'm' });
+    expect(Date.now() - started).toBeLessThan(2000);
+    const passed = (silent.create.mock.calls[0] as unknown[])[1] as {
+      fetchOptions: { signal: AbortSignal };
+    };
+    expect(passed.fetchOptions.signal.aborted).toBe(true);
+  });
+
+  it('still reports a cancelled job as cancelled, not as a timeout', async () => {
+    const controller = new AbortController();
+    const silent = client(() => new Promise(() => undefined));
+    const pending = new GeminiProvider('m', 'key', 60_000, silent.client).generateJson({
+      ...request,
+      signal: controller.signal,
+    });
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ kind: 'cancelled' });
   });
 
   it('treats an unfinished or empty answer as bad output', async () => {
