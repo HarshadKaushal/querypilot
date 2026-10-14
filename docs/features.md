@@ -73,4 +73,13 @@ Locked choices that are not implemented:
 - Show how old the schema snapshot is, or refresh it on a schedule (Phase 8 or 9).
 - Evaluation dataset, load tests, and production deployment (NAT gateway, fixed egress IP, secrets manager).
 
+Still open against the assignment brief (the brief asks for these directly):
+
+- **API documentation.** No Swagger or OpenAPI document yet.
+- **DTO validation.** Input is checked by hand-written code in each controller and service, not class-validator DTOs with a validation pipe.
+- **Evaluation dataset with results.** No question set or accuracy and safety report yet (Phase 11).
+- **Deployment instructions.** The README covers local setup with Docker Compose; production deployment is Phase 12.
+
+Also open from the blueprint: tracing, metrics, dashboards, and alerts; CORS, CSRF, and security headers (Phase 10); a chart-type switcher on the ask screen; example question-and-SQL pairs in the prompt; a circuit breaker per model provider (there is a fallback chain); a background job that re-wraps keys after rotation (the function exists, `rewrapCredentials`); readiness checks for the queue and the model; data export; monthly partitions and retention for history and audit; a rate limit on connection tests; browser tests in CI; and editing a saved connection's address or login in the app.
+
 Out of scope for v1, from the blueprint: databases other than PostgreSQL, SSH tunnels, per-tenant egress IPs, team workspaces, scheduled reports, write access, stored result rows, and custom model fine-tuning.
