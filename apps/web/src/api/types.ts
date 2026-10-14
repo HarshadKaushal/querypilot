@@ -144,3 +144,95 @@ export interface AllowlistInput {
     columns?: Array<{ name: string; description?: string | null }>;
   }>;
 }
+
+/** How to draw an answer, chosen by fixed server rules (packages/core/src/ask/chart.ts). */
+export interface ChartSpec {
+  type: 'stat' | 'line' | 'bar' | 'pie' | 'table';
+  /** The x-axis column (the first column), or the label of a stat card. */
+  x?: string;
+  /** The value columns (the other columns). */
+  y?: string[];
+  /** Whole rows in column order: x first, then the y values. */
+  points?: unknown[][];
+  /** True when a long line was thinned to at most 200 points. */
+  downsampled?: boolean;
+}
+
+export interface ResultColumn {
+  name: string;
+  /** PostgreSQL type OID. Numbers and dates may arrive as strings. */
+  dataTypeId: number;
+}
+
+/** Rows as returned by the executor: arrays in column order. */
+export interface ResultRows {
+  columns: ResultColumn[];
+  rows: unknown[][];
+  rowCount: number;
+  /** Cut at the row cap (1,000) or at 5 MB; false when complete. */
+  truncated: false | 'rows' | 'size';
+  durationMs: number;
+}
+
+/** The result of a query.run job (SQL written by the user, checked by the guard). */
+export interface QueryJobResult extends ResultRows {
+  /** The SQL that ran, as the guard rewrote it. */
+  sql: string;
+  schemaVersion: number;
+}
+
+export interface AskUsage {
+  llmCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  llmMs: number;
+  queryMs: number;
+  totalMs: number;
+  models: string[];
+  fallbackUsed: boolean;
+}
+
+interface AskCommon {
+  question: string;
+  explanation: string;
+  schemaVersion: number;
+  model: string;
+  /** The SQL came from the saved-query cache, without asking the model. */
+  cached: boolean;
+  /** The schema was read again because the database had changed. */
+  schemaRefreshed: boolean;
+  usage?: AskUsage;
+}
+
+/** The result of a question.ask job. Nothing runs unless the status is answered. */
+export type AskResult =
+  | (AskCommon &
+      ResultRows & {
+        status: 'answered';
+        sql: string;
+        assumptions: string[];
+        chart: ChartSpec;
+        summary: { text: string; source: 'model' | 'template' };
+      })
+  | (AskCommon & {
+      status: 'ambiguous';
+      clarifyingQuestion: string;
+      assumptions: string[];
+    })
+  | (AskCommon & { status: 'unanswerable' });
+
+/** GET /v1/connections/:id/schema: only the allowed tables and columns. */
+export interface SchemaView {
+  connectionId: string;
+  version: number;
+  tables: Array<{
+    schema: string;
+    name: string;
+    kind: RelationKind;
+    columns: Array<{ name: string; type: string; nullable: boolean }>;
+    foreignKeys: Array<{
+      columns: string[];
+      references: { schema: string; table: string; columns: string[] };
+    }>;
+  }>;
+}

@@ -4,7 +4,10 @@ import { Link, Outlet, useLocation } from 'react-router';
 import { useAuth } from '../auth/auth-context';
 
 // Pages are added here as they are built (Phase 9 steps b to d).
-const PAGES = [{ to: '/connections', label: 'Connections' }];
+const PAGES = [
+  { to: '/ask', label: 'Ask' },
+  { to: '/connections', label: 'Connections' },
+];
 
 /** The frame around every signed-in page: header, menu (a drawer on phones), content. */
 export function AppLayout() {
