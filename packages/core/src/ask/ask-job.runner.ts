@@ -21,7 +21,17 @@ import {
   SQL_SYSTEM_PROMPT,
   type ProposalFeedback,
 } from './prompt';
+import { selectChart } from './chart';
+import { computeFacts, type ResultFacts } from './facts';
 import { PROPOSAL_CACHE, questionKey, type ProposalCache } from './proposal-cache';
+import {
+  buildSummaryPrompt,
+  SUMMARY_SAMPLE_ROWS,
+  SUMMARY_SYSTEM_PROMPT,
+  SummarySchema,
+  summaryIsGrounded,
+  templateSummary,
+} from './summary';
 import { SqlProposalSchema, type SqlProposal } from './sql-proposal';
 
 /** Rewrites after the guard rejects a proposal (blueprint 9.5: at most 2). */
@@ -29,6 +39,9 @@ export const MAX_GUARD_RETRIES = 2;
 
 /** Room for the SQL, the assumptions, and the model's brief thinking. */
 const PROPOSAL_MAX_TOKENS = 4096;
+
+/** A short summary needs far less room. */
+const SUMMARY_MAX_TOKENS = 1024;
 
 /** Sent back to the model when PostgreSQL could not run its query. Fixed text: never the database's. */
 const QUERY_INVALID_FEEDBACK =
@@ -69,6 +82,7 @@ export class AskJobRunner {
     context: JobContext = NO_JOB_CONTEXT,
   ): Promise<JobOutcome<AskResult>> {
     const attempts: LlmAttempt[] = [];
+    const started = Date.now();
     try {
       await context.report('loading_schema');
       let schema = await this.schemas.schema(data.userId, data.connectionId);
@@ -82,7 +96,7 @@ export class AskJobRunner {
         }
         const pass = await this.answer(data, schema, refreshed, attempts, context);
         if (pass.kind === 'done') {
-          return pass.outcome;
+          return withUsage(pass.outcome, attempts, started);
         }
         if (refreshed) {
           return { ok: false, error: pass.error };
@@ -244,6 +258,16 @@ export class AskJobRunner {
           .catch(() => undefined);
       }
       const { ok: _ok, ...rows } = result;
+      const facts = computeFacts(rows);
+      await context.report('summarizing');
+      const summary = await this.summarize(
+        data.question,
+        facts,
+        // Rows reach the model only when the connection's owner allowed it.
+        target.row.sendSampleRowsToLlm ? rows.rows.slice(0, SUMMARY_SAMPLE_ROWS) : null,
+        attempts,
+        context,
+      );
       return done({
         ok: true,
         result: {
@@ -254,8 +278,56 @@ export class AskJobRunner {
           explanation: proposal.explanation,
           ...rows,
           schemaVersion: check.schemaVersion,
+          chart: selectChart(rows),
+          facts,
+          summary,
         },
       });
+    }
+  }
+
+  /**
+   * The grounded summary (blueprint 9.9). The model sees the question, the server's facts,
+   * and rows only when allowed. Its summary is kept only if every number in it appears in
+   * what it was shown; otherwise, or when the model fails, a template built from the facts
+   * is used. A summary never fails an answered question.
+   */
+  private async summarize(
+    question: string,
+    facts: ResultFacts,
+    sample: unknown[][] | null,
+    attempts: LlmAttempt[],
+    context: JobContext,
+  ): Promise<{ text: string; source: 'model' | 'template' }> {
+    const template = { text: templateSummary(facts), source: 'template' as const };
+    if (facts.rowCount === 0) {
+      return template;
+    }
+    try {
+      const result = await this.llm.generateObject(
+        {
+          purpose: 'summary',
+          system: SUMMARY_SYSTEM_PROMPT,
+          prompt: buildSummaryPrompt({ question, facts, sample }),
+          maxOutputTokens: SUMMARY_MAX_TOKENS,
+          signal: context.signal,
+        },
+        SummarySchema,
+      );
+      attempts.push(...result.attempts);
+      const text = result.value.summary.trim();
+      return text && summaryIsGrounded(text, facts, sample, question)
+        ? { text, source: 'model' }
+        : template;
+    } catch (error) {
+      attempts.push(...((error as { attempts?: LlmAttempt[] }).attempts ?? []));
+      if (error instanceof LlmError && error.kind === 'cancelled') {
+        context.signal?.throwIfAborted();
+      }
+      if (error instanceof LlmError) {
+        return template;
+      }
+      throw error;
     }
   }
 
@@ -294,6 +366,35 @@ export class AskJobRunner {
       throw error;
     }
   }
+}
+
+/** Totals for the accounting step: model calls, tokens, and time. */
+function withUsage(
+  outcome: JobOutcome<AskResult>,
+  attempts: LlmAttempt[],
+  started: number,
+): JobOutcome<AskResult> {
+  if (!outcome.ok) {
+    return outcome;
+  }
+  return {
+    ok: true,
+    result: {
+      ...outcome.result,
+      usage: {
+        llmCalls: attempts.length,
+        inputTokens: attempts.reduce((sum, a) => sum + a.inputTokens, 0),
+        outputTokens: attempts.reduce((sum, a) => sum + a.outputTokens, 0),
+        llmMs: attempts.reduce((sum, a) => sum + a.latencyMs, 0),
+        queryMs: outcome.result.status === 'answered' ? outcome.result.durationMs : 0,
+        totalMs: Date.now() - started,
+        models: [
+          ...new Set(attempts.filter((a) => a.outcome === 'ok').map((a) => a.model)),
+        ],
+        fallbackUsed: attempts.some((a) => a.outcome !== 'ok'),
+      },
+    },
+  };
 }
 
 function done(outcome: JobOutcome<AskResult>): Pass {

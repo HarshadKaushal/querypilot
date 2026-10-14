@@ -63,6 +63,7 @@ function setup(options: {
   schema?: jest.Mock;
   refresh?: jest.Mock;
   cache?: MemoryProposalCache;
+  sampleRows?: boolean;
 }) {
   const cache = options.cache ?? new MemoryProposalCache();
   const model = options.model ?? new FakeLlmProvider('primary');
@@ -82,9 +83,11 @@ function setup(options: {
       })),
   } as unknown as SqlGuardService;
   const connections = {
-    resolveTarget: jest
-      .fn()
-      .mockResolvedValue({ ok: true, request: { hostIp: '1.1.1.1' } }),
+    resolveTarget: jest.fn().mockResolvedValue({
+      ok: true,
+      request: { hostIp: '1.1.1.1' },
+      row: { sendSampleRowsToLlm: options.sampleRows ?? false },
+    }),
   } as unknown as ConnectionService;
   const executor = {
     run: options.run ?? jest.fn().mockResolvedValue(ROWS),
@@ -101,6 +104,11 @@ function setup(options: {
   const stages: string[] = [];
   const context: JobContext = { report: async (stage) => void stages.push(stage) };
   return { runner, model, guard, executor, stages, context, cache, schemas };
+}
+
+/** The model calls that proposed SQL; an answered question also asks for a summary. */
+function sqlCalls(model: FakeLlmProvider) {
+  return model.requests.filter((request) => request.purpose === 'sql_proposal');
 }
 
 const OPEN_SQL =
@@ -136,6 +144,7 @@ describe('AskJobRunner', () => {
       'checking_sql',
       'connecting',
       'running_query',
+      'summarizing',
     ]);
   });
 
@@ -237,7 +246,7 @@ describe('AskJobRunner', () => {
         detail: { guardCode: 'not_select' },
       },
     });
-    expect(model.requests).toHaveLength(3);
+    expect(sqlCalls(model)).toHaveLength(3);
     expect(executor.run).not.toHaveBeenCalled();
   });
 
@@ -281,7 +290,7 @@ describe('AskJobRunner', () => {
       ok: false,
       error: { code: 'QUERY_INVALID' },
     });
-    expect(twice.model.requests).toHaveLength(2);
+    expect(sqlCalls(twice.model)).toHaveLength(2);
 
     for (const code of ['QUERY_TIMEOUT', 'QUERY_NOT_PERMITTED', 'CONNECTION_FAILED']) {
       const once = setup({
@@ -294,7 +303,7 @@ describe('AskJobRunner', () => {
         ok: false,
         error: { code },
       });
-      expect(once.model.requests).toHaveLength(1);
+      expect(sqlCalls(once.model)).toHaveLength(1);
     }
   });
 
@@ -328,7 +337,10 @@ describe('AskJobRunner', () => {
     const outcome = await runner.run(data);
     expect(outcome).toMatchObject({ ok: true, result: { model: 'fallback' } });
     if (outcome.ok) {
-      expect(outcome.result.llmAttempts.map((a) => [a.model, a.outcome])).toEqual([
+      // The first two attempts are the SQL proposal; the summary call follows.
+      expect(
+        outcome.result.llmAttempts.slice(0, 2).map((a) => [a.model, a.outcome]),
+      ).toEqual([
         ['primary', 'bad_output'],
         ['fallback', 'ok'],
       ]);
@@ -354,7 +366,7 @@ describe('AskJobRunner', () => {
       ok: false,
       error: { code: 'SCHEMA_NOT_READY', message: expect.stringContaining('allowlist') },
     });
-    expect(empty.model.requests).toHaveLength(0);
+    expect(sqlCalls(empty.model)).toHaveLength(0);
   });
 
   it('lets a cancellation during the model call escape, so the processor marks it cancelled', async () => {
@@ -395,7 +407,7 @@ describe('AskJobRunner proposal cache', () => {
       ok: true,
       result: { status: 'answered', cached: true, model: 'primary', rows: [['4']] },
     });
-    expect(again.model.requests).toHaveLength(0);
+    expect(sqlCalls(again.model)).toHaveLength(0);
     expect(again.guard.check).toHaveBeenCalledWith('u1', 'c1', OPEN_SQL);
     expect(again.stages).not.toContain('generating_sql');
   });
@@ -452,7 +464,7 @@ describe('AskJobRunner proposal cache', () => {
     await expect(later.runner.run(data)).resolves.toMatchObject({
       result: { cached: false, sql: 'SELECT 1' },
     });
-    expect(later.model.requests).toHaveLength(1);
+    expect(sqlCalls(later.model)).toHaveLength(1);
     // The model's feedback is not about the cached SQL: it starts fresh.
     expect(later.model.requests[0]!.prompt).not.toContain('previous query');
   });
@@ -480,7 +492,7 @@ describe('AskJobRunner proposal cache', () => {
     await expect(later.runner.run(data)).resolves.toMatchObject({
       result: { cached: false },
     });
-    expect(later.model.requests).toHaveLength(1);
+    expect(sqlCalls(later.model)).toHaveLength(1);
   });
 });
 
@@ -514,7 +526,7 @@ describe('AskJobRunner self-healing', () => {
     });
     expect(healing.schemas.refresh).toHaveBeenCalledWith('u1', 'c1', null);
     expect(healing.stages).toContain('reading_schema');
-    expect(healing.model.requests).toHaveLength(2);
+    expect(sqlCalls(healing.model)).toHaveLength(2);
   });
 
   it('returns QUERY_SCHEMA_CHANGED when the database still disagrees after one refresh', async () => {
@@ -545,6 +557,91 @@ describe('AskJobRunner self-healing', () => {
     await expect(healing.runner.run(data)).resolves.toMatchObject({
       ok: false,
       error: { code: 'NOT_READ_ONLY' },
+    });
+  });
+});
+
+describe('AskJobRunner chart, summary, and usage', () => {
+  const summaryOf = (text: string) => ({ text: JSON.stringify({ summary: text }) });
+
+  it('summarizes from facts only when the connection does not allow rows', async () => {
+    const model = new FakeLlmProvider('primary', [
+      proposal({ sql: OPEN_SQL }),
+      summaryOf('There are 4 open orders.'),
+    ]);
+    const { runner } = setup({ model });
+    const outcome = await runner.run(data);
+    expect(outcome).toMatchObject({
+      ok: true,
+      result: {
+        chart: { type: 'stat', x: 'open_orders' },
+        facts: { rowCount: 1, numeric: [{ column: 'open_orders', total: 4 }] },
+        summary: { text: 'There are 4 open orders.', source: 'model' },
+      },
+    });
+    const prompt = model.requests[1]!.prompt;
+    expect(model.requests[1]!.purpose).toBe('summary');
+    expect(prompt).toContain('No rows are shown');
+    expect(prompt).not.toContain('[["4"]]');
+  });
+
+  it('shows the first rows to the summary model when the connection allows it', async () => {
+    const model = new FakeLlmProvider('primary', [
+      proposal({ sql: OPEN_SQL }),
+      summaryOf('There are 4 open orders.'),
+    ]);
+    const { runner } = setup({ model, sampleRows: true });
+    await runner.run(data);
+    expect(model.requests[1]!.prompt).toContain('[["4"]]');
+  });
+
+  it('replaces a summary with an invented number by the template', async () => {
+    const model = new FakeLlmProvider('primary', [
+      proposal({ sql: OPEN_SQL }),
+      summaryOf('There are 40 open orders, up 12% from last month.'),
+    ]);
+    const { runner } = setup({ model });
+    await expect(runner.run(data)).resolves.toMatchObject({
+      result: {
+        summary: {
+          text: 'The query returned 1 row. open_orders is 4.',
+          source: 'template',
+        },
+      },
+    });
+  });
+
+  it('uses the template when the summary model fails, without failing the answer', async () => {
+    const model = new FakeLlmProvider('primary', [
+      proposal({ sql: OPEN_SQL }),
+      { error: new LlmError('rate_limited', 'x', 'primary') },
+    ]);
+    const { runner } = setup({ model });
+    await expect(runner.run(data)).resolves.toMatchObject({
+      ok: true,
+      result: { status: 'answered', summary: { source: 'template' } },
+    });
+  });
+
+  it('totals model calls, tokens, and time for accounting', async () => {
+    const model = new FakeLlmProvider('primary', [
+      { ...proposal({ sql: OPEN_SQL }), inputTokens: 900, outputTokens: 60 },
+      { ...summaryOf('There are 4 open orders.'), inputTokens: 300, outputTokens: 20 },
+    ]);
+    const { runner } = setup({ model });
+    const outcome = await runner.run(data);
+    expect(outcome).toMatchObject({
+      ok: true,
+      result: {
+        usage: {
+          llmCalls: 2,
+          inputTokens: 1200,
+          outputTokens: 80,
+          queryMs: 7,
+          models: ['primary'],
+          fallbackUsed: false,
+        },
+      },
     });
   });
 });

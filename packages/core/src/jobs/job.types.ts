@@ -1,5 +1,7 @@
 import type { ErrorCode } from '@ayd/shared';
 import type { PendingConnection, PendingCreate } from '../connections/connection.service';
+import type { ChartSpec } from '../ask/chart';
+import type { ResultFacts } from '../ask/facts';
 import type { LlmAttempt } from '../llm/llm.types';
 import type { ExecutionSuccess } from '../user-database/query-executor';
 
@@ -83,6 +85,20 @@ export interface QueryJobResult extends Omit<ExecutionSuccess, 'ok'> {
   schemaVersion: number;
 }
 
+/** Model calls, tokens, and time for one question, for accounting (blueprint 9.10). */
+export interface AskUsage {
+  llmCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  llmMs: number;
+  queryMs: number;
+  totalMs: number;
+  /** Models that produced an accepted answer. */
+  models: string[];
+  /** True when some call failed and another model or attempt was needed. */
+  fallbackUsed: boolean;
+}
+
 /** What answering a question produced. Nothing runs unless the status is answered. */
 export type AskResult =
   | ({
@@ -99,6 +115,11 @@ export type AskResult =
       cached: boolean;
       /** True when the schema was refreshed to answer (the database had changed). */
       schemaRefreshed: boolean;
+      /** Added once the job finishes. */
+      usage?: AskUsage;
+      chart: ChartSpec;
+      facts: ResultFacts;
+      summary: { text: string; source: 'model' | 'template' };
     } & Omit<ExecutionSuccess, 'ok'>)
   | {
       status: 'ambiguous';
@@ -113,6 +134,8 @@ export type AskResult =
       cached: boolean;
       /** True when the schema was refreshed to answer (the database had changed). */
       schemaRefreshed: boolean;
+      /** Added once the job finishes. */
+      usage?: AskUsage;
     }
   | {
       status: 'unanswerable';
@@ -125,6 +148,8 @@ export type AskResult =
       cached: boolean;
       /** True when the schema was refreshed to answer (the database had changed). */
       schemaRefreshed: boolean;
+      /** Added once the job finishes. */
+      usage?: AskUsage;
     };
 
 export type JobState = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
@@ -133,6 +158,7 @@ export type JobState = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelle
 export type JobStage =
   | 'loading_schema'
   | 'generating_sql'
+  | 'summarizing'
   | 'checking_sql'
   | 'connecting'
   | 'running_query'

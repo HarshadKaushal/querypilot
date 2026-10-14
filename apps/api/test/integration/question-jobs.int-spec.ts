@@ -176,6 +176,11 @@ describe('question jobs through BullMQ', () => {
     model.requests.length = 0;
   });
 
+  /** Model calls that proposed SQL; an answered question also asks for a summary. */
+  function sqlCalls() {
+    return model.requests.filter((request) => request.purpose === 'sql_proposal');
+  }
+
   it('answers a question with rows from the database', async () => {
     model.script(
       proposal({
@@ -221,7 +226,7 @@ describe('question jobs through BullMQ', () => {
       state: 'succeeded',
       result: { status: 'answered', rows: [['East'], ['North']] },
     });
-    expect(model.requests).toHaveLength(2);
+    expect(sqlCalls()).toHaveLength(2);
     expect(model.requests[1]!.prompt).toContain('SELECT email FROM public.customers');
     expect(model.requests[1]!.prompt).toMatch(/Reason: .*email/);
   });
@@ -296,7 +301,7 @@ describe('question jobs through BullMQ', () => {
         ],
       },
     });
-    expect(model.requests).toHaveLength(0);
+    expect(sqlCalls()).toHaveLength(0);
 
     // The customer renames the column the cached SQL reads.
     await db.admin.query('ALTER TABLE public.orders RENAME COLUMN status TO state');

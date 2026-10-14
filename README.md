@@ -201,7 +201,7 @@ $asked = Wait-AydJob (Invoke-RestMethod "http://localhost:3000/v1/connections/$(
 $asked.result
 ```
 
-`result.status` is `answered` (with `sql`, `rows`, and `assumptions`), `ambiguous` (with a `clarifyingQuestion`; nothing ran), or `unanswerable` (with an `explanation`; nothing ran). Without a key the job fails with `LLM_NOT_CONFIGURED`.
+`result.status` is `answered` (with `sql`, `rows`, `assumptions`, a `chart` choice, `facts`, a short `summary`, and `usage` totals), `ambiguous` (with a `clarifyingQuestion`; nothing ran), or `unanswerable` (with an `explanation`; nothing ran). Without a key the job fails with `LLM_NOT_CONFIGURED`.
 
 ## Run a query as a job
 
