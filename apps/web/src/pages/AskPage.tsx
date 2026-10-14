@@ -11,7 +11,7 @@ import {
   Textarea,
   Title,
 } from '@mantine/core';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { ApiError } from '../api/client';
@@ -31,6 +31,8 @@ import { FailureView } from '../components/answer/FailureView';
 import { JobProgress } from '../components/JobProgress';
 import { CONNECTIONS_KEY } from './ConnectionsPage';
 import { examplesFor } from './examples';
+import { HISTORY_KEY } from './HistoryPage';
+import { USAGE_KEY } from './UsagePage';
 
 // The API's limits (jobs.controller.ts), checked here first so the user sees why at once.
 const MAX_QUESTION = 2000;
@@ -53,7 +55,9 @@ export function AskPage() {
   const signal = useUnmountSignal();
   const [params, setParams] = useSearchParams();
   const [mode, setMode] = useState<Mode>('question');
-  const [text, setText] = useState('');
+  const queryClient = useQueryClient();
+  // "Ask again" from History opens this page with the question filled in.
+  const [text, setText] = useState(() => params.get('q') ?? '');
   const [running, setRunning] = useState<JobView | null>(null);
   const [starting, setStarting] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -113,6 +117,9 @@ export function AskPage() {
     } finally {
       setStarting(false);
       setRunning(null);
+      // A finished job is a new history entry, and may have used a question.
+      void queryClient.invalidateQueries({ queryKey: HISTORY_KEY });
+      void queryClient.invalidateQueries({ queryKey: USAGE_KEY });
     }
   }
 

@@ -236,3 +236,47 @@ export interface SchemaView {
     }>;
   }>;
 }
+
+/** One finished question or SQL job. History never holds result rows. */
+export interface HistoryEntry {
+  /** The job id. */
+  id: string;
+  connectionId: string;
+  kind: 'question' | 'sql';
+  question: string | null;
+  sql: string | null;
+  status: 'answered' | 'ambiguous' | 'unanswerable' | 'failed' | 'cancelled';
+  errorCode: string | null;
+  rowCount: number | null;
+  truncated: string | null;
+  schemaVersion: number | null;
+  cached: boolean;
+  /** The summary, or the explanation for ambiguous and unanswerable questions. */
+  summary: string | null;
+  models: string[];
+  inputTokens: number;
+  outputTokens: number;
+  llmMs: number;
+  queryMs: number;
+  totalMs: number;
+  createdAt: string;
+  finishedAt: string;
+}
+
+/** GET /v1/history: newest first; pass nextCursor back as cursor for older entries. */
+export interface HistoryPage {
+  entries: HistoryEntry[];
+  nextCursor: string | null;
+}
+
+/** GET /v1/usage: today (UTC) against the limits. */
+export interface UsageToday {
+  day: string;
+  plan: string;
+  /** Counted when submitted, so it includes questions still running. */
+  questions: { used: number; limit: number };
+  submissionsPerMinute: number;
+  finishedQuestions: number;
+  rowsReturned: number;
+  tokens: { input: number; output: number };
+}

@@ -2,7 +2,7 @@
 
 Middleware that lets a signed-in user connect their own PostgreSQL database and ask questions in plain English. The platform proposes SQL, checks it, runs it read-only, and returns a table, a chart, the SQL, and a short summary.
 
-This repository has finished **Phase 8 (history, quotas, and audit)**: the API answers questions in English through worker jobs, keeps history, and enforces limits. **Phase 9 (the web app)** is under way: sign-in, connecting a database, choosing what the AI sees, and asking questions work so far. See [docs/features.md](docs/features.md).
+This repository has finished **Phase 8 (history, quotas, and audit)**: the API answers questions in English through worker jobs, keeps history, and enforces limits. **Phase 9 (the web app)** is under way: sign-in, connecting a database, choosing what the AI sees, asking questions, history, usage, and settings all work in the app; browser tests and an accessibility pass remain. See [docs/features.md](docs/features.md).
 
 ## Prerequisites
 

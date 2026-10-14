@@ -10,6 +10,9 @@ import { AskPage } from './pages/AskPage';
 import { ConnectionPage } from './pages/ConnectionPage';
 import { ConnectionsPage } from './pages/ConnectionsPage';
 import { ConnectWizardPage } from './pages/ConnectWizardPage';
+import { HistoryPage } from './pages/HistoryPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { UsagePage } from './pages/UsagePage';
 import { SignInPage } from './pages/SignInPage';
 
 export function createQueryClient(): QueryClient {
@@ -51,6 +54,9 @@ export function AppRoutes() {
       <Route element={<RequireAuth />}>
         <Route element={<AppLayout />}>
           <Route path="/ask" element={<AskPage />} />
+          <Route path="/history" element={<HistoryPage />} />
+          <Route path="/usage" element={<UsagePage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="/connections" element={<ConnectionsPage />} />
           <Route path="/connections/new" element={<ConnectWizardPage />} />
           <Route path="/connections/:id" element={<ConnectionPage />} />
