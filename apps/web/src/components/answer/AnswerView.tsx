@@ -144,7 +144,9 @@ function SqlDetails({ sql, assumptions }: { sql: string; assumptions: string[] }
         <Accordion.Control>The SQL that ran</Accordion.Control>
         <Accordion.Panel>
           <Stack gap="xs">
-            <Code block>{sql}</Code>
+            <Code block tabIndex={0} aria-label="The SQL that ran">
+              {sql}
+            </Code>
             <Group>
               <CopyButton value={sql}>
                 {({ copied, copy }) => (

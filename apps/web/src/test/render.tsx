@@ -8,6 +8,7 @@ import { vi } from 'vitest';
 import type { ApiClient } from '../api/client';
 import type { JobView, PublicUser } from '../api/types';
 import { AuthContext, type AuthContextValue, type AuthState } from '../auth/auth-context';
+import { theme } from '../theme';
 
 export const USER: PublicUser = {
   id: 'u1',
@@ -61,7 +62,7 @@ export function renderWithApp(
   return {
     auth,
     ...render(
-      <MantineProvider>
+      <MantineProvider theme={theme}>
         <Notifications />
         <QueryClientProvider client={queryClient}>
           <MemoryRouter initialEntries={[options.route ?? '/']}>

@@ -20,13 +20,17 @@
     "test:all": "npm run test:unit && npm run test:int && npm run test:e2e",
     "up": "docker compose up --build",
     "up:deps": "docker compose up -d app-db sample-db redis",
-    "down": "docker compose down"
+    "down": "docker compose down",
+    "test:browser": "npm run build && playwright test -c e2e/playwright.config.ts",
+    "test:browser:live": "npm run build && playwright test -c e2e/playwright.live.config.ts"
   },
   "engines": {
     "node": ">=24.9"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.0",
     "@types/node": "^24.19.2",
     "eslint": "^10.12.0",
     "eslint-plugin-react-hooks": "^7.1.1",

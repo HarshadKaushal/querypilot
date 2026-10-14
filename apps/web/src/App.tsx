@@ -14,6 +14,7 @@ import { HistoryPage } from './pages/HistoryPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { UsagePage } from './pages/UsagePage';
 import { SignInPage } from './pages/SignInPage';
+import { cssVariablesResolver, theme } from './theme';
 
 export function createQueryClient(): QueryClient {
   return new QueryClient({
@@ -34,7 +35,11 @@ const queryClient = createQueryClient();
 /** Providers (theme, server data, routing, sign-in) and the pages. */
 export function App() {
   return (
-    <MantineProvider defaultColorScheme="auto">
+    <MantineProvider
+      theme={theme}
+      cssVariablesResolver={cssVariablesResolver}
+      defaultColorScheme="auto"
+    >
       <Notifications />
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>

@@ -10,7 +10,8 @@ export default defineConfig({
     // the API then share one origin, so the httpOnly refresh cookie works without CORS
     // (ADR 0014). Production puts both behind one domain the same way (Phase 12).
     proxy: {
-      '/v1': { target: 'http://localhost:3000' },
+      // AYD_API_URL lets the browser tests point a second dev server at their own API.
+      '/v1': { target: process.env.AYD_API_URL ?? 'http://localhost:3000' },
     },
   },
   test: {

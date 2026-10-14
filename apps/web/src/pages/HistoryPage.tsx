@@ -217,7 +217,9 @@ function HistoryCard({ entry, label }: { entry: HistoryEntry; label?: string }) 
             {entry.kind === 'question' ? (
               <Text fw={500}>{entry.question}</Text>
             ) : (
-              <Code block>{entry.sql}</Code>
+              <Code block tabIndex={0} aria-label="SQL">
+                {entry.sql}
+              </Code>
             )}
             <Text size="xs" c="dimmed">
               {new Date(entry.createdAt).toLocaleString()}

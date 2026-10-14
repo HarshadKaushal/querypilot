@@ -28,3 +28,5 @@ Phase 7 turns questions into SQL with a language model. This records how the pla
 - `usage`: model calls, input and output tokens, model time, query time, total time, the models that answered, and whether a fallback was needed (blueprint 9.10). Phase 8 stores these in history.
 
 **Tests.** No test calls a real model (`docs/testing.md`). `FakeLlmProvider` in `@ayd/core/testing` answers from a script and records what it was shown. `npm run try-llm --workspace=@ayd/worker` checks a real key by hand.
+
+**Scripted model for browser tests.** With `LLM_FAKE=true`, the worker's model chains hold only `ScriptedLlmProvider`, which answers by fixed rules on the question's words (a count, a count per region, an ambiguous "best", a DELETE for the guard to refuse, otherwise unanswerable) and writes a summary without numbers. It exists so the browser tests run the real pipeline after the model without calling one. The settings check refuses it in production, as it refuses `SSRF_ALLOW_PRIVATE`.

@@ -2,7 +2,7 @@
 
 Middleware that lets a signed-in user connect their own PostgreSQL database and ask questions in plain English. The platform proposes SQL, checks it, runs it read-only, and returns a table, a chart, the SQL, and a short summary.
 
-This repository has finished **Phase 8 (history, quotas, and audit)**: the API answers questions in English through worker jobs, keeps history, and enforces limits. **Phase 9 (the web app)** is under way: sign-in, connecting a database, choosing what the AI sees, asking questions, history, usage, and settings all work in the app; browser tests and an accessibility pass remain. See [docs/features.md](docs/features.md).
+This repository has finished **Phase 8 (history, quotas, and audit)**: the API answers questions in English through worker jobs, keeps history, and enforces limits. **Phase 9 (the web app)** is finished: sign-in, connecting a database, choosing what the AI sees, asking questions, history, usage, and settings, with browser tests and accessibility checks. See [docs/features.md](docs/features.md).
 
 ## Prerequisites
 
@@ -304,7 +304,7 @@ npm test
 npm run build
 ```
 
-`npm test` is the unit suite and does not need Docker. `npm run test:int` and `npm run test:e2e` need the application Postgres and Redis from `npm run up:deps`, after migrations. See [docs/testing.md](docs/testing.md).
+`npm run test:browser` runs the browser tests (Playwright; first run `npx playwright install chromium`) against servers of their own, with a scripted model; `npm run test:browser:live` asks the real model one question. Both build first, which restarts dev servers you have running. `npm test` is the unit suite and does not need Docker. `npm run test:int` and `npm run test:e2e` need the application Postgres and Redis from `npm run up:deps`, after migrations. See [docs/testing.md](docs/testing.md).
 
 CI runs lint, format, unit tests, and build on every push. A second job runs integration and API end-to-end tests against Postgres and Redis.
 

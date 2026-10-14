@@ -14,6 +14,8 @@ Phase 9 adds the React frontend in `apps/web`, an npm workspace like the others 
 
 **Answers.** The ask screen draws the chart the server chose (ADR 0012) and never picks one itself, so the same result always looks the same. Rows arrive as arrays in column order, and PostgreSQL sends bigint and numeric values as strings, so the chart and the table's sorting convert them. The results table draws only the visible rows once there are more than 100 (TanStack Virtual), and the chart code, most of the app's size, loads only when an answer has a chart. Each failure code the user can act on has its own title; the message under it is the API's.
 
+**Accessibility.** Browser tests run axe on every page at desktop and phone sizes. They found Mantine's default contrast too low in light mode, so `src/theme.ts` uses blue 8 for primary buttons, gray 7 for dimmed text, and a darker text shade on light badges, buttons, and alerts; scrollable code blocks are focusable so a keyboard can scroll them.
+
 **Types.** The response types in `apps/web/src/api/types.ts` are copied from the server code rather than imported, because the server types live in Node-only packages (`@ayd/core`) the browser bundle must not include. The error codes come from `@ayd/shared` as a type-only import. Moving the response types into `@ayd/shared` is a later clean-up; until then a route change must update both.
 
 **Module format.** The web app is the one ES-module workspace. It does not extend `tsconfig.base.json`, which targets Node with CommonJS output; `tsc` only type-checks it and Vite builds it.

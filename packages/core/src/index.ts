@@ -34,6 +34,7 @@ export * from './limits/usage-counters';
 export * from './llm/gemini.provider';
 export * from './llm/llm-client';
 export * from './llm/llm.module';
+export * from './llm/scripted.provider';
 export * from './llm/llm.types';
 export * from './logging/logger.module';
 export * from './logging/safe-error';

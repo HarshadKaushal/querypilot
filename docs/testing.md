@@ -7,7 +7,7 @@ Unit tests sit next to the code. Everything that needs infrastructure lives in i
 | Unit               | No database, Redis, or network            | Next to the source file                           | `*.spec.ts`, `*.spec.tsx`    |
 | Integration        | Real Postgres and Redis                   | `apps/<app>/test/integration/`                    | `*.int-spec.ts`              |
 | API end-to-end     | The Nest app plus real Postgres and Redis | `apps/api/test/e2e/`                              | `*.e2e-spec.ts`              |
-| Browser end-to-end | Web, API, worker, and databases           | `e2e/` at the repo root, when the web app exists  | `*.spec.ts`                  |
+| Browser end-to-end | Web, API, worker, and databases           | `e2e/` at the repo root                           | `*.spec.ts`                  |
 | Evaluation         | A model and the sample database           | `eval/` at the repo root, in the evaluation phase | dataset, runner, and results |
 
 ## Commands
@@ -17,11 +17,20 @@ npm test
 npm run test:int
 npm run test:e2e
 npm run test:all
+npm run test:browser
+npm run test:browser:live
 ```
 
 `npm test` is `test:unit`. It has to finish without Docker. The web app runs Vitest with Testing Library in jsdom (`vitest run`), on the same Vite config as the app; its page tests use `renderWithApp()` and `fakeApi()` from `apps/web/src/test/render.tsx`, which give a page the app's providers and a mocked API client instead of a server. `job()` and `eventStream()` in the same file build job views and a streamed response in the API's event format, for pages that follow jobs. The API, the worker, and `@ayd/core` run Jest through `scripts/jest.cjs`, which turns on Node's VM modules so Jest can load NestJS 12, an ES-module-only package. Integration and API end-to-end tests expect `npm run up:deps` and `npm run migrate --workspace=@ayd/database` first. They use port 5434 and Redis on 6379 on a laptop. CI points them at its own Postgres and Redis.
 
-Playwright and the evaluation runner are not created yet. They get their own commands when those folders exist. Evaluation reports accuracy. It is not a pass/fail suite, and it is the only place a real model is called.
+Browser tests use Playwright (`e2e/`). `npm run test:browser` builds everything, then starts its own API (port 3100), worker, and web dev server (port 5174) on their own job queue (`ayd-e2e`), so they never meet the servers you run by hand. It needs `npm run up:deps` and the sample database, and runs every test at a desktop size and a phone size (Pixel 7):
+
+- `demo.spec.ts`: the blueprint's demo flow. Sign in with the form, connect the sample database through the wizard, ask a question (summary, chart, table), an ambiguous question, an unsafe request the SQL guard refuses, unsafe SQL, then history, usage, and deleting the account.
+- `a11y.spec.ts`: axe accessibility checks (WCAG 2.1 A and AA) on every page; serious and critical problems fail.
+
+The worker in these tests runs with `LLM_FAKE=true`: a scripted model (`packages/core/src/llm/scripted.provider.ts`) answers by fixed rules, so everything after the model (guard, executor, chart, summary) is real and the results never vary. `LLM_FAKE` is refused in production. `npm run test:browser:live` is the one exception to "no real model": it asks the real model one question (`live.spec.ts`), needs `GEMINI_API_KEY`, and is run on purpose, never by `test:all`. Building restarts dev servers you have running, because they run from the built files.
+
+The evaluation runner is not created yet. Evaluation reports accuracy. It is not a pass/fail suite, and apart from the live browser test it is the only place a real model is called.
 
 ## Rules
 
@@ -41,4 +50,4 @@ On every push: lint, format check, unit tests (including the web app's), and bui
 
 On every push, in a second job: migrate a Postgres service, then integration and API end-to-end tests.
 
-Browser tests run when `e2e/` exists, on pull requests. Evaluation runs when `eval/` exists, on a schedule and when prompts or models change.
+Browser tests run locally for now (the user's choice); a CI job needs the whole stack started in GitHub Actions and comes with the deployment work. Evaluation runs when `eval/` exists, on a schedule and when prompts or models change.

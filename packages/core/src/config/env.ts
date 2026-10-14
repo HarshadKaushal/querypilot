@@ -68,6 +68,12 @@ export const coreEnvFields = {
   // Summaries: a lighter, faster model first, then the primary. Empty: the main chain.
   LLM_SUMMARY_MODEL: z.string().default('gemini-3.5-flash-lite'),
   LLM_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120000).default(30000),
+  // Browser tests only: answer questions from fixed rules instead of a real model, so the
+  // rest of the pipeline runs for real. Refused in production.
+  LLM_FAKE: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
   // Most rows one answer may return. The SQL guard adds or lowers LIMIT to this plus one.
   SQL_ROW_CAP: z.coerce.number().int().min(1).max(10000).default(1000),
   // Executor limits for queries on user databases (ADR 0010).
@@ -96,7 +102,7 @@ export const coreEnvFields = {
 
 /** Cross-field rules for the core settings. Apps call this from their own superRefine. */
 export function checkCoreEnv(
-  env: { NODE_ENV: string; SSRF_ALLOW_PRIVATE: boolean },
+  env: { NODE_ENV: string; SSRF_ALLOW_PRIVATE: boolean; LLM_FAKE?: boolean },
   ctx: z.RefinementCtx,
 ): void {
   if (env.NODE_ENV === 'production' && env.SSRF_ALLOW_PRIVATE) {
@@ -104,6 +110,13 @@ export function checkCoreEnv(
       code: 'custom',
       path: ['SSRF_ALLOW_PRIVATE'],
       message: 'SSRF_ALLOW_PRIVATE cannot be true when NODE_ENV is production',
+    });
+  }
+  if (env.NODE_ENV === 'production' && env.LLM_FAKE) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['LLM_FAKE'],
+      message: 'LLM_FAKE cannot be true when NODE_ENV is production',
     });
   }
 }

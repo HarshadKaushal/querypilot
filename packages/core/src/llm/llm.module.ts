@@ -3,9 +3,13 @@ import { APP_ENV, type CoreEnv } from '../config/env';
 import { GeminiProvider } from './gemini.provider';
 import { LLM_PROVIDERS, LLM_SUMMARY_PROVIDERS, LlmClient } from './llm-client';
 import type { LlmProvider } from './llm.types';
+import { ScriptedLlmProvider } from './scripted.provider';
 
 /** The primary model, then the fallback when one is set and differs. */
 export function geminiProviders(env: CoreEnv): LlmProvider[] {
+  if (env.LLM_FAKE) {
+    return [new ScriptedLlmProvider()];
+  }
   const models = [env.LLM_PRIMARY_MODEL];
   if (env.LLM_FALLBACK_MODEL && env.LLM_FALLBACK_MODEL !== env.LLM_PRIMARY_MODEL) {
     models.push(env.LLM_FALLBACK_MODEL);
@@ -21,7 +25,7 @@ export function geminiProviders(env: CoreEnv): LlmProvider[] {
  * An empty LLM_SUMMARY_MODEL sends summaries through the main chain.
  */
 export function geminiSummaryProviders(env: CoreEnv): LlmProvider[] {
-  if (!env.LLM_SUMMARY_MODEL) {
+  if (env.LLM_FAKE || !env.LLM_SUMMARY_MODEL) {
     return geminiProviders(env);
   }
   const models = [env.LLM_SUMMARY_MODEL];

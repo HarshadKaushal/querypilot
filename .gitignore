@@ -6,3 +6,5 @@ coverage
 .DS_Store
 packages/database/prisma/*.db
 packages/database/src/generated
+e2e/test-results
+playwright-report

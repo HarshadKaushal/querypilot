@@ -39,6 +39,14 @@ describe('loadEnv', () => {
     ).toThrow('Invalid environment: SSRF_ALLOW_PRIVATE');
   });
 
+  it('refuses the scripted test model in production, and leaves it off by default', () => {
+    expect(loadEnv(VALID).LLM_FAKE).toBe(false);
+    expect(loadEnv({ ...VALID, LLM_FAKE: 'true' }).LLM_FAKE).toBe(true);
+    expect(() => loadEnv({ ...VALID, NODE_ENV: 'production', LLM_FAKE: 'true' })).toThrow(
+      'Invalid environment: LLM_FAKE',
+    );
+  });
+
   it('reads .env from the repository root', () => {
     const rootPackage = JSON.parse(
       readFileSync(join(dirname(ROOT_ENV_FILE), 'package.json'), 'utf8'),

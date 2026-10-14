@@ -195,7 +195,9 @@ export function ConnectWizardPage() {
                   placeholders in angle brackets. The platform refuses a login that can
                   change data or create tables.
                 </Text>
-                <Code block>{egress.data.setupSql}</Code>
+                <Code block tabIndex={0} aria-label="Setup SQL">
+                  {egress.data.setupSql}
+                </Code>
                 <Group>
                   <CopyButton value={egress.data.setupSql}>
                     {({ copied, copy }) => (
