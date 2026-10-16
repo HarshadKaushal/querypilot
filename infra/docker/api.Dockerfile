@@ -1,6 +1,5 @@
 FROM node:24-alpine AS build
 WORKDIR /repo
-ENV DATABASE_URL=postgresql://ayd:ayd@localhost:5432/ayd
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/worker/package.json apps/worker/package.json

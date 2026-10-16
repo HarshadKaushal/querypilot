@@ -1,14 +1,17 @@
 import { randomUUID } from 'node:crypto';
-import { PrismaQueryHistory, PrismaService, type NewHistoryEntry } from '@ayd/core';
+import { SequelizeQueryHistory, type NewHistoryEntry } from '@ayd/core';
+import { AuditLog, Connection, QueryRecord, User } from '@ayd/database';
+import { Op } from 'sequelize';
 import { loadEnv } from '../../src/config/env';
+import { openAppDatabase } from '../helpers/app-database';
 
 // Phase 8 acceptance for history: entries page newest first with a stable keyset cursor,
 // only their owner sees them, deletion works, account deletion removes them, and the table
 // has no place for result rows.
 
 describe('query history in PostgreSQL', () => {
-  const prisma = new PrismaService(loadEnv());
-  const history = new PrismaQueryHistory(prisma);
+  const db = openAppDatabase(loadEnv().DATABASE_URL);
+  const history = new SequelizeQueryHistory(db);
   const owner = randomUUID();
   const other = randomUUID();
   const connectionId = randomUUID();
@@ -40,37 +43,33 @@ describe('query history in PostgreSQL', () => {
 
   beforeAll(async () => {
     for (const id of [owner, other]) {
-      await prisma.user.create({
-        data: {
-          id,
-          googleSubject: `test:${id}`,
-          email: `${id}@example.test`,
-          name: 'History test',
-          lastLoginAt: new Date(),
-        },
+      await User.create({
+        id,
+        googleSubject: `test:${id}`,
+        email: `${id}@example.test`,
+        name: 'History test',
+        lastLoginAt: new Date(),
       });
     }
-    await prisma.connection.create({
-      data: {
-        id: connectionId,
-        userId: owner,
-        label: 'History',
-        host: 'db.example',
-        port: 5432,
-        databaseName: 'x',
-        sslMode: 'require',
-        usernameCiphertext: 'u',
-        usernameIv: 'u',
-        usernameTag: 'u',
-        passwordCiphertext: 'p',
-        passwordIv: 'p',
-        passwordTag: 'p',
-        encryptedDataKey: 'k',
-        dataKeyIv: 'k',
-        dataKeyTag: 'k',
-        keyVersion: 1,
-        status: 'active',
-      },
+    await Connection.create({
+      id: connectionId,
+      userId: owner,
+      label: 'History',
+      host: 'db.example',
+      port: 5432,
+      databaseName: 'x',
+      sslMode: 'require',
+      usernameCiphertext: 'u',
+      usernameIv: 'u',
+      usernameTag: 'u',
+      passwordCiphertext: 'p',
+      passwordIv: 'p',
+      passwordTag: 'p',
+      encryptedDataKey: 'k',
+      dataKeyIv: 'k',
+      dataKeyTag: 'k',
+      keyVersion: 1,
+      status: 'active',
     });
     // Two entries share a minute, so the id breaks the tie.
     for (const [id, minute] of [
@@ -85,8 +84,8 @@ describe('query history in PostgreSQL', () => {
   });
 
   afterAll(async () => {
-    await prisma.user.deleteMany({ where: { id: { in: [owner, other] } } });
-    await prisma.$disconnect();
+    await User.destroy({ where: { id: [owner, other] } });
+    await db.sequelize.close();
   });
 
   it('pages newest first with a cursor, without gaps or repeats', async () => {
@@ -119,9 +118,10 @@ describe('query history in PostgreSQL', () => {
   });
 
   it('has no column that could hold result rows', async () => {
-    const columns = await prisma.$queryRaw<Array<{ column_name: string }>>`
-      SELECT column_name FROM information_schema.columns WHERE table_name = 'queries'`;
-    const names = columns.map((c) => c.column_name);
+    const [columns] = await db.sequelize.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'queries'`,
+    );
+    const names = (columns as Array<{ column_name: string }>).map((c) => c.column_name);
     expect(names).toContain('sql');
     expect(
       names.filter((name) => /rows|result|data/.test(name) && name !== 'row_count'),
@@ -133,17 +133,17 @@ describe('query history in PostgreSQL', () => {
     expect((await history.list(owner, 10)).entries).toHaveLength(4);
     expect(await history.deleteAll(owner, '203.0.113.7')).toBe(4);
     // Each delete wrote its audit row in the same transaction; the refused one wrote none.
-    const audits = await prisma.auditLog.findMany({
-      where: { userId: { in: [owner, other] }, eventType: { startsWith: 'history.' } },
-      orderBy: { eventType: 'desc' },
+    const audits = await AuditLog.findAll({
+      where: { userId: [owner, other], eventType: { [Op.startsWith]: 'history.' } },
+      order: [['eventType', 'DESC']],
     });
     expect(audits.map((a) => [a.userId, a.eventType, a.metadata, a.ip])).toEqual([
       [owner, 'history.deleted', { entryId: `${connectionId}-e` }, '203.0.113.7'],
       [owner, 'history.cleared', { count: '4' }, '203.0.113.7'],
     ]);
-    await prisma.auditLog.deleteMany({ where: { id: { in: audits.map((a) => a.id) } } });
+    await AuditLog.destroy({ where: { id: audits.map((a) => a.id) } });
     await history.record(entry(`${connectionId}-z`, 9));
-    await prisma.user.delete({ where: { id: owner } });
-    expect(await prisma.queryRecord.count({ where: { userId: owner } })).toBe(0);
+    await User.destroy({ where: { id: owner } });
+    expect(await QueryRecord.count({ where: { userId: owner } })).toBe(0);
   });
 });

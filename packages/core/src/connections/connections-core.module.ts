@@ -6,15 +6,15 @@ import {
   ConnectionService,
   DnsAddressResolver,
 } from './connection.service';
-import { PrismaConnectionRepository } from './prisma-connection.repository';
+import { SequelizeConnectionRepository } from './sequelize-connection.repository';
 
 /** Connection storage, credential sealing, and target resolution, without HTTP routes. */
 @Module({
   imports: [UserDatabaseModule],
   providers: [
     ConnectionService,
-    PrismaConnectionRepository,
-    { provide: CONNECTION_REPOSITORY, useExisting: PrismaConnectionRepository },
+    SequelizeConnectionRepository,
+    { provide: CONNECTION_REPOSITORY, useExisting: SequelizeConnectionRepository },
     { provide: ADDRESS_RESOLVER, useClass: DnsAddressResolver },
   ],
   exports: [ConnectionService],

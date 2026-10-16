@@ -3,37 +3,38 @@ import type { Logger } from 'nestjs-pino';
 import { loadEnv } from '../../src/config/env';
 import {
   ConnectionService,
-  PrismaConnectionRepository,
-  PrismaSchemaRepository,
-  PrismaService,
   SchemaService,
+  SequelizeConnectionRepository,
+  SequelizeSchemaRepository,
   UserDatabaseProbe,
 } from '@ayd/core';
+import { AllowedObject, AuditLog, SchemaSnapshot, User } from '@ayd/database';
 import {
   createScratchDatabase,
   plainClients,
   type ScratchDatabase,
 } from '../helpers/scratch-database';
+import { openAppDatabase } from '../helpers/app-database';
 
-// Phase 3 acceptance, end to end: real services, the application database through Prisma,
+// Phase 3 acceptance, end to end: real services, the application database through Sequelize,
 // and a multi-schema scratch database as the user's database. SSL is off because the
 // application Postgres has no TLS.
 
 describe('schema refresh end to end', () => {
   const env = loadEnv();
-  const prisma = new PrismaService(env);
+  const appDb = openAppDatabase(env.DATABASE_URL);
   const probe = new UserDatabaseProbe(
     { warn: () => undefined } as unknown as Logger,
     plainClients,
   );
   const connections = new ConnectionService(
-    new PrismaConnectionRepository(prisma),
+    new SequelizeConnectionRepository(appDb),
     { lookup: async () => ['127.0.0.1'] },
     probe,
     env,
   );
   const schemas = new SchemaService(
-    new PrismaSchemaRepository(prisma),
+    new SequelizeSchemaRepository(appDb),
     connections,
     probe,
   );
@@ -60,14 +61,12 @@ describe('schema refresh end to end', () => {
       GRANT SELECT ON ALL TABLES IN SCHEMA sales TO ${reader};
     `);
     for (const id of [userId, otherUserId]) {
-      await prisma.user.create({
-        data: {
-          id,
-          googleSubject: `test:${id}`,
-          email: `${id}@example.test`,
-          name: 'Schema refresh test',
-          lastLoginAt: new Date(),
-        },
+      await User.create({
+        id,
+        googleSubject: `test:${id}`,
+        email: `${id}@example.test`,
+        name: 'Schema refresh test',
+        lastLoginAt: new Date(),
       });
     }
     const created = await connections.create(
@@ -87,8 +86,8 @@ describe('schema refresh end to end', () => {
   });
 
   afterAll(async () => {
-    await prisma.user.deleteMany({ where: { id: { in: [userId, otherUserId] } } });
-    await prisma.$disconnect();
+    await User.destroy({ where: { id: [userId, otherUserId] } });
+    await appDb.sequelize.close();
     await db.drop();
   });
 
@@ -137,7 +136,7 @@ describe('schema refresh end to end', () => {
 
     // The dropped table's allowlist rows went with the refresh.
     expect(
-      await prisma.allowedObject.count({
+      await AllowedObject.count({
         where: { connectionId, tableName: 'old_notes' },
       }),
     ).toBe(0);
@@ -152,10 +151,10 @@ describe('schema refresh end to end', () => {
     for (let i = 0; i < 3; i++) {
       await schemas.refresh(userId, connectionId, null);
     }
-    const versions = await prisma.schemaSnapshot.findMany({
+    const versions = await SchemaSnapshot.findAll({
       where: { connectionId },
-      select: { version: true },
-      orderBy: { version: 'asc' },
+      attributes: ['version'],
+      order: [['version', 'ASC']],
     });
     expect(versions.map((row) => row.version)).toEqual([3, 4, 5, 6, 7]);
   });
@@ -206,7 +205,7 @@ describe('schema refresh end to end', () => {
   });
 
   it('writes an audit row for each refresh without the password', async () => {
-    const audits = await prisma.auditLog.findMany({
+    const audits = await AuditLog.findAll({
       where: { userId, eventType: 'schema.refreshed' },
     });
     expect(audits.length).toBeGreaterThanOrEqual(7);
@@ -214,8 +213,8 @@ describe('schema refresh end to end', () => {
   });
 
   it('refuses a snapshot read from a database the connection no longer points at', async () => {
-    const before = await prisma.schemaSnapshot.count({ where: { connectionId } });
-    const outcome = await new PrismaSchemaRepository(prisma).commitSnapshot(userId, {
+    const before = await SchemaSnapshot.count({ where: { connectionId } });
+    const outcome = await new SequelizeSchemaRepository(appDb).commitSnapshot(userId, {
       connectionId,
       database: { host: 'scratch.example', port: db.port, databaseName: 'some_other_db' },
       document: { formatVersion: 1, tables: [] },
@@ -224,18 +223,16 @@ describe('schema refresh end to end', () => {
       nextAllowlist: () => [],
     });
     expect(outcome).toEqual({ status: 'stale' });
-    expect(await prisma.schemaSnapshot.count({ where: { connectionId } })).toBe(before);
+    expect(await SchemaSnapshot.count({ where: { connectionId } })).toBe(before);
   });
 
   it('deletes the snapshots and allowlist when the connection moves to another database', async () => {
     const other = await createScratchDatabase();
     try {
-      expect(
-        await prisma.allowedObject.count({ where: { connectionId } }),
-      ).toBeGreaterThan(0);
+      expect(await AllowedObject.count({ where: { connectionId } })).toBeGreaterThan(0);
       await connections.update(userId, connectionId, { databaseName: other.name }, null);
-      expect(await prisma.schemaSnapshot.count({ where: { connectionId } })).toBe(0);
-      expect(await prisma.allowedObject.count({ where: { connectionId } })).toBe(0);
+      expect(await SchemaSnapshot.count({ where: { connectionId } })).toBe(0);
+      expect(await AllowedObject.count({ where: { connectionId } })).toBe(0);
       await expect(schemas.schema(userId, connectionId)).rejects.toMatchObject({
         code: 'SCHEMA_NOT_READY',
       });

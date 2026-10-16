@@ -1,75 +1,71 @@
 import { randomUUID } from 'node:crypto';
-import { PrismaConnectionRepository, PrismaService } from '@ayd/core';
+import { SequelizeConnectionRepository } from '@ayd/core';
+import { AuditLog, Connection, User } from '@ayd/database';
 import { loadEnv } from '../../src/config/env';
+import { openAppDatabase } from '../helpers/app-database';
 
 // Deleting a connection and writing its audit row happen in one transaction, and only a
 // real delete is audited: someone else's id, or two deletes at once, write no extra row.
 
 describe('connection delete in PostgreSQL', () => {
-  const prisma = new PrismaService(loadEnv());
-  const repo = new PrismaConnectionRepository(prisma);
+  const db = openAppDatabase(loadEnv().DATABASE_URL);
+  const repo = new SequelizeConnectionRepository(db);
   const owner = randomUUID();
   const other = randomUUID();
 
   function connection(id: string) {
-    return prisma.connection.create({
-      data: {
-        id,
-        userId: owner,
-        label: 'Delete test',
-        host: 'db.example',
-        port: 5432,
-        databaseName: 'x',
-        sslMode: 'require',
-        usernameCiphertext: 'u',
-        usernameIv: 'u',
-        usernameTag: 'u',
-        passwordCiphertext: 'p',
-        passwordIv: 'p',
-        passwordTag: 'p',
-        encryptedDataKey: 'k',
-        dataKeyIv: 'k',
-        dataKeyTag: 'k',
-        keyVersion: 1,
-        status: 'active',
-      },
+    return Connection.create({
+      id,
+      userId: owner,
+      label: 'Delete test',
+      host: 'db.example',
+      port: 5432,
+      databaseName: 'x',
+      sslMode: 'require',
+      usernameCiphertext: 'u',
+      usernameIv: 'u',
+      usernameTag: 'u',
+      passwordCiphertext: 'p',
+      passwordIv: 'p',
+      passwordTag: 'p',
+      encryptedDataKey: 'k',
+      dataKeyIv: 'k',
+      dataKeyTag: 'k',
+      keyVersion: 1,
+      status: 'active',
     });
   }
 
   function audits(connectionId: string) {
-    return prisma.auditLog.findMany({
-      where: {
-        eventType: 'connection.deleted',
-        metadata: { path: ['connectionId'], equals: connectionId },
-      },
+    return AuditLog.findAll({
+      where: { eventType: 'connection.deleted', metadata: { connectionId } },
     });
   }
 
   beforeAll(async () => {
     for (const id of [owner, other]) {
-      await prisma.user.create({
-        data: {
-          id,
-          googleSubject: `test:${id}`,
-          email: `${id}@example.test`,
-          name: 'Delete test',
-          lastLoginAt: new Date(),
-        },
+      await User.create({
+        id,
+        googleSubject: `test:${id}`,
+        email: `${id}@example.test`,
+        name: 'Delete test',
+        lastLoginAt: new Date(),
       });
     }
   });
 
   afterAll(async () => {
-    await prisma.auditLog.deleteMany({ where: { userId: { in: [owner, other] } } });
-    await prisma.user.deleteMany({ where: { id: { in: [owner, other] } } });
-    await prisma.$disconnect();
+    // An array in a where clause means IN (...).
+    await AuditLog.destroy({ where: { userId: [owner, other] } });
+    await User.destroy({ where: { id: [owner, other] } });
+    await db.sequelize.close();
   });
 
   it('deletes and audits together, with the IP address', async () => {
     const id = randomUUID();
     await connection(id);
     expect(await repo.delete(owner, id, '203.0.113.7')).toBe(true);
-    expect(await prisma.connection.count({ where: { id } })).toBe(0);
+    expect(await Connection.count({ where: { id } })).toBe(0);
     const rows = await audits(id);
     expect(rows.map((r) => [r.userId, r.ip])).toEqual([[owner, '203.0.113.7']]);
   });
@@ -78,7 +74,7 @@ describe('connection delete in PostgreSQL', () => {
     const id = randomUUID();
     await connection(id);
     expect(await repo.delete(other, id, null)).toBe(false);
-    expect(await prisma.connection.count({ where: { id } })).toBe(1);
+    expect(await Connection.count({ where: { id } })).toBe(1);
     expect(await audits(id)).toEqual([]);
   });
 

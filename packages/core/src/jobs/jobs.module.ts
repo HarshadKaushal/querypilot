@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { AskJobRunner } from '../ask/ask-job.runner';
-import { PrismaProposalCache, PROPOSAL_CACHE } from '../ask/proposal-cache';
-import { AUDIT_WRITER, PrismaAuditWriter } from '../audit/audit-writer';
+import { SequelizeProposalCache, PROPOSAL_CACHE } from '../ask/proposal-cache';
+import { AUDIT_WRITER, SequelizeAuditWriter } from '../audit/audit-writer';
 import { HistoryModule } from '../history/history.module';
-import { PrismaUsageCounters, USAGE_COUNTERS } from '../limits/usage-counters';
+import { SequelizeUsageCounters, USAGE_COUNTERS } from '../limits/usage-counters';
 import { LlmModule } from '../llm/llm.module';
 import { ConnectionsCoreModule } from '../connections/connections-core.module';
 import { SchemaCoreModule } from '../schema/schema-core.module';
@@ -37,9 +37,9 @@ export class JobQueueModule {}
   providers: [
     QueryJobRunner,
     AskJobRunner,
-    { provide: PROPOSAL_CACHE, useClass: PrismaProposalCache },
-    { provide: USAGE_COUNTERS, useClass: PrismaUsageCounters },
-    { provide: AUDIT_WRITER, useClass: PrismaAuditWriter },
+    { provide: PROPOSAL_CACHE, useClass: SequelizeProposalCache },
+    { provide: USAGE_COUNTERS, useClass: SequelizeUsageCounters },
+    { provide: AUDIT_WRITER, useClass: SequelizeAuditWriter },
     ConnectionJobRunner,
     JobCancellation,
     JobProcessor,

@@ -1,16 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import {
   DailyQuota,
-  PrismaAuditWriter,
-  PrismaService,
-  PrismaUsageCounters,
   RateLimiter,
   RedisService,
+  SequelizeAuditWriter,
+  SequelizeUsageCounters,
   quotaKey,
   rateKey,
   utcDay,
 } from '@ayd/core';
+import { AuditLog, UsageCounter, User } from '@ayd/database';
 import { loadEnv } from '../../src/config/env';
+import { openAppDatabase } from '../helpers/app-database';
 
 // Phase 8 acceptance for limits: the rate limit and the daily quota hold across API
 // instances (two Redis clients stand in for two instances), many requests at once cannot
@@ -20,18 +21,16 @@ describe('limits in Redis and usage in PostgreSQL', () => {
   const env = loadEnv();
   const first = new RedisService(env);
   const second = new RedisService(env);
-  const prisma = new PrismaService(env);
+  const db = openAppDatabase(env.DATABASE_URL);
   const userId = randomUUID();
 
   beforeAll(async () => {
-    await prisma.user.create({
-      data: {
-        id: userId,
-        googleSubject: `test:${userId}`,
-        email: `${userId}@example.test`,
-        name: 'Limits test',
-        lastLoginAt: new Date(),
-      },
+    await User.create({
+      id: userId,
+      googleSubject: `test:${userId}`,
+      email: `${userId}@example.test`,
+      name: 'Limits test',
+      lastLoginAt: new Date(),
     });
   });
 
@@ -45,9 +44,9 @@ describe('limits in Redis and usage in PostgreSQL', () => {
       ],
       [],
     );
-    await prisma.auditLog.deleteMany({ where: { userId } });
-    await prisma.user.deleteMany({ where: { id: userId } });
-    await prisma.$disconnect();
+    await AuditLog.destroy({ where: { userId } });
+    await User.destroy({ where: { id: userId } });
+    await db.sequelize.close();
     await Promise.all([first.onModuleDestroy(), second.onModuleDestroy()]);
   });
 
@@ -92,7 +91,7 @@ describe('limits in Redis and usage in PostgreSQL', () => {
   });
 
   it('adds usage per user and UTC day, and audit rows without the SQL', async () => {
-    const usage = new PrismaUsageCounters(prisma);
+    const usage = new SequelizeUsageCounters(db);
     await usage.add(userId, '2026-10-14', {
       questions: 1,
       rowsReturned: 12,
@@ -120,35 +119,49 @@ describe('limits in Redis and usage in PostgreSQL', () => {
     });
     expect((await usage.get(userId, '2026-10-13')).questions).toBe(0);
 
-    await new PrismaAuditWriter(prisma).write({
+    await new SequelizeAuditWriter().write({
       userId,
       eventType: 'query.rejected',
       metadata: { jobId: 'j1', connectionId: 'c1', kind: 'sql', guardCode: 'NOT_SELECT' },
       ip: null,
     });
-    const rows = await prisma.auditLog.findMany({ where: { userId } });
+    const rows = await AuditLog.findAll({ where: { userId } });
     expect(rows).toHaveLength(1);
     expect(rows[0].eventType).toBe('query.rejected');
   });
 
+  it('counts every job when many finish at the same moment', async () => {
+    // Postgres adds inside one INSERT ... ON CONFLICT statement, so no update is lost.
+    const usage = new SequelizeUsageCounters(db);
+    const one = { questions: 1, rowsReturned: 2, inputTokens: 3, outputTokens: 4 };
+    await Promise.all(
+      Array.from({ length: 20 }, () => usage.add(userId, '2026-10-20', one)),
+    );
+    expect(await usage.get(userId, '2026-10-20')).toEqual({
+      day: '2026-10-20',
+      questions: 20,
+      rowsReturned: 40,
+      inputTokens: 60,
+      outputTokens: 80,
+    });
+  });
+
   it('removes usage rows with the account', async () => {
     const other = randomUUID();
-    await prisma.user.create({
-      data: {
-        id: other,
-        googleSubject: `test:${other}`,
-        email: `${other}@example.test`,
-        name: 'Limits test 2',
-        lastLoginAt: new Date(),
-      },
+    await User.create({
+      id: other,
+      googleSubject: `test:${other}`,
+      email: `${other}@example.test`,
+      name: 'Limits test 2',
+      lastLoginAt: new Date(),
     });
-    await new PrismaUsageCounters(prisma).add(other, '2026-10-14', {
+    await new SequelizeUsageCounters(db).add(other, '2026-10-14', {
       questions: 1,
       rowsReturned: 1,
       inputTokens: 1,
       outputTokens: 1,
     });
-    await prisma.user.delete({ where: { id: other } });
-    expect(await prisma.usageCounter.count({ where: { userId: other } })).toBe(0);
+    await User.destroy({ where: { id: other } });
+    expect(await UsageCounter.count({ where: { userId: other } })).toBe(0);
   });
 });

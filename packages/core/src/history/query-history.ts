@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import type { Prisma } from '@ayd/database';
+import { QueryRecord } from '@ayd/database';
+import { Op } from 'sequelize';
 import { writeAuditLog } from '../audit/audit-log';
+import { DatabaseService } from '../database/database.service';
 import { notFound } from '../errors/app.exception';
 import type {
   AskJobData,
@@ -9,7 +11,6 @@ import type {
   QueryJobData,
   QueryJobResult,
 } from '../jobs/job.types';
-import { PrismaService } from '../prisma/prisma.service';
 
 /** One history entry as its owner sees it. Never result rows. */
 export interface HistoryEntry {
@@ -156,23 +157,21 @@ export function decodeCursor(cursor: string): { createdAt: Date; id: string } | 
   return { createdAt, id };
 }
 
-type Row = Awaited<ReturnType<PrismaService['queryRecord']['findFirstOrThrow']>>;
-
-function toEntry(row: Row): HistoryEntry {
+function toEntry(row: QueryRecord): HistoryEntry {
   return {
     id: row.id,
     connectionId: row.connectionId,
-    kind: row.kind as HistoryEntry['kind'],
+    kind: row.kind,
     question: row.question,
     sql: row.sql,
-    status: row.status as HistoryEntry['status'],
+    status: row.status,
     errorCode: row.errorCode,
     rowCount: row.rowCount,
     truncated: row.truncated,
     schemaVersion: row.schemaVersion,
     cached: row.cached,
     summary: row.summary,
-    models: Array.isArray(row.models) ? (row.models as string[]) : [],
+    models: Array.isArray(row.models) ? row.models : [],
     inputTokens: row.inputTokens,
     outputTokens: row.outputTokens,
     llmMs: row.llmMs,
@@ -184,18 +183,13 @@ function toEntry(row: Row): HistoryEntry {
 }
 
 @Injectable()
-export class PrismaQueryHistory implements QueryHistory {
-  constructor(private readonly prisma: PrismaService) {}
+export class SequelizeQueryHistory implements QueryHistory {
+  constructor(private readonly db: DatabaseService) {}
 
   async record(entry: NewHistoryEntry): Promise<void> {
-    const { models, ...fields } = entry;
-    const data = { ...fields, models: models as Prisma.InputJsonArray };
-    // A job retried after its record was written records the same id again.
-    await this.prisma.queryRecord.upsert({
-      where: { id: entry.id },
-      create: data,
-      update: data,
-    });
+    // A job retried after its record was written records the same id again:
+    // INSERT ... ON CONFLICT (id) DO UPDATE. The retry also sets a new finished_at.
+    await QueryRecord.upsert(entry, { conflictFields: ['id'] });
   }
 
   async list(userId: string, limit: number, cursor?: string): Promise<HistoryPage> {
@@ -203,21 +197,25 @@ export class PrismaQueryHistory implements QueryHistory {
     if (cursor && !after) {
       return { entries: [], nextCursor: null };
     }
-    const rows = await this.prisma.queryRecord.findMany({
+    const rows = await QueryRecord.findAll({
       where: {
         userId,
+        // Rows older than the cursor: an earlier time, or the same time and a smaller id.
         ...(after
           ? {
-              OR: [
-                { createdAt: { lt: after.createdAt } },
-                { createdAt: after.createdAt, id: { lt: after.id } },
+              [Op.or]: [
+                { createdAt: { [Op.lt]: after.createdAt } },
+                { createdAt: after.createdAt, id: { [Op.lt]: after.id } },
               ],
             }
           : {}),
       },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      order: [
+        ['createdAt', 'DESC'],
+        ['id', 'DESC'],
+      ],
       // One extra row says whether another page exists.
-      take: limit + 1,
+      limit: limit + 1,
     });
     const page = rows.slice(0, limit);
     const last = page.at(-1);
@@ -229,7 +227,7 @@ export class PrismaQueryHistory implements QueryHistory {
   }
 
   async get(userId: string, id: string): Promise<HistoryEntry> {
-    const row = await this.prisma.queryRecord.findFirst({ where: { id, userId } });
+    const row = await QueryRecord.findOne({ where: { id, userId } });
     if (!row) {
       throw notFound();
     }
@@ -237,30 +235,26 @@ export class PrismaQueryHistory implements QueryHistory {
   }
 
   async delete(userId: string, id: string, ip: string | null): Promise<boolean> {
-    return this.prisma.$transaction(async (tx) => {
-      const result = await tx.queryRecord.deleteMany({ where: { id, userId } });
-      if (result.count === 0) {
+    return this.db.transaction(async (transaction) => {
+      const deleted = await QueryRecord.destroy({ where: { id, userId }, transaction });
+      if (deleted === 0) {
         return false;
       }
-      await writeAuditLog(tx, {
-        userId,
-        eventType: 'history.deleted',
-        metadata: { entryId: id },
-        ip,
-      });
+      await writeAuditLog(
+        { userId, eventType: 'history.deleted', metadata: { entryId: id }, ip },
+        transaction,
+      );
       return true;
     });
   }
 
   async deleteAll(userId: string, ip: string | null): Promise<number> {
-    return this.prisma.$transaction(async (tx) => {
-      const { count } = await tx.queryRecord.deleteMany({ where: { userId } });
-      await writeAuditLog(tx, {
-        userId,
-        eventType: 'history.cleared',
-        metadata: { count: String(count) },
-        ip,
-      });
+    return this.db.transaction(async (transaction) => {
+      const count = await QueryRecord.destroy({ where: { userId }, transaction });
+      await writeAuditLog(
+        { userId, eventType: 'history.cleared', metadata: { count: String(count) }, ip },
+        transaction,
+      );
       return count;
     });
   }

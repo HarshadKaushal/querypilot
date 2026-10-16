@@ -1,0 +1,8 @@
+// Tells sequelize-cli where its settings and migrations are. Run it through
+// `npm run migrate --workspace=@ayd/database`, which reads the root .env first.
+const { resolve } = require('node:path');
+
+module.exports = {
+  config: resolve(__dirname, 'config/database.cjs'),
+  'migrations-path': resolve(__dirname, 'migrations'),
+};

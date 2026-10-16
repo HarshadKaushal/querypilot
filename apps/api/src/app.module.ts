@@ -1,4 +1,4 @@
-import { PrismaModule, RedisModule } from '@ayd/core';
+import { DatabaseModule, RedisModule } from '@ayd/core';
 import { Module } from '@nestjs/common';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { AppConfigModule } from './config/app-config.module';
@@ -18,7 +18,7 @@ import { UsersModule } from './users/users.module';
   imports: [
     AppConfigModule,
     AppLoggerModule,
-    PrismaModule,
+    DatabaseModule,
     RedisModule,
     HealthModule,
     AuthModule,

@@ -1,26 +1,27 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { AuthRepository } from '../../src/auth/storage/auth.repository';
 import { MemoryAuthRepository } from '../../src/testing/memory-auth.repository';
-import { PrismaAuthRepository } from '../../src/auth/storage/prisma-auth.repository';
+import { SequelizeAuthRepository } from '../../src/auth/storage/sequelize-auth.repository';
 import { loadEnv } from '../../src/config/env';
-import { PrismaService } from '@ayd/core';
+import { AuditLog, User } from '@ayd/database';
+import { Op } from 'sequelize';
+import { openAppDatabase } from '../helpers/app-database';
 
 // One contract, run against both implementations. The unit tests use the in-memory fake,
 // so this proves the fake behaves like the real repository on the security-relevant rules:
 // single-use refresh tokens, family revocation, and account deletion.
 
-const prisma = new PrismaService(loadEnv());
+const db = openAppDatabase(loadEnv().DATABASE_URL);
 // Deletion audit rows outlive their user, so they are removed by id at the end.
 const deletedUserIds: string[] = [];
 
 afterAll(async () => {
-  await prisma.user.deleteMany({ where: { googleSubject: { startsWith: 'contract:' } } });
+  await User.destroy({ where: { googleSubject: { [Op.startsWith]: 'contract:' } } });
   for (const id of deletedUserIds) {
-    await prisma.auditLog.deleteMany({
-      where: { metadata: { path: ['deletedUserId'], equals: id } },
-    });
+    // metadata is JSONB: this matches metadata->>'deletedUserId' = id.
+    await AuditLog.destroy({ where: { metadata: { deletedUserId: id } } });
   }
-  await prisma.$disconnect();
+  await db.sequelize.close();
 });
 
 // auditEvents reads back the audit rows a deletion left, which the interface does not expose.
@@ -205,13 +206,14 @@ contract(
       .map(({ userId, eventType }) => ({ userId, eventType })),
 );
 contract(
-  'Prisma',
-  () => new PrismaAuthRepository(prisma),
+  'Sequelize',
+  () => new SequelizeAuthRepository(db),
   async (_repo, deletedUserId) => {
     deletedUserIds.push(deletedUserId);
-    return prisma.auditLog.findMany({
-      where: { metadata: { path: ['deletedUserId'], equals: deletedUserId } },
-      select: { userId: true, eventType: true },
+    return AuditLog.findAll({
+      where: { metadata: { deletedUserId } },
+      attributes: ['userId', 'eventType'],
+      raw: true,
     });
   },
 );

@@ -9,22 +9,22 @@ import {
   JobQueue,
   type JobView,
   LlmClient,
-  PrismaConnectionRepository,
-  PrismaProposalCache,
-  PrismaQueryHistory,
-  PrismaSchemaRepository,
-  PrismaService,
   QueryExecutor,
   type QueryJobRunner,
   RedisCoordination,
   RedisService,
   type RunningJobWorker,
   SchemaService,
+  SequelizeConnectionRepository,
+  SequelizeProposalCache,
+  SequelizeQueryHistory,
+  SequelizeSchemaRepository,
   SqlGuardService,
   startJobWorker,
   UserDatabaseProbe,
   UserJobSlots,
 } from '@ayd/core';
+import { User } from '@ayd/database';
 import { FakeLlmProvider } from '@ayd/core/testing';
 import type { Logger } from 'nestjs-pino';
 import { loadEnv } from '../../src/config/env';
@@ -34,6 +34,7 @@ import {
   plainPools,
   type ScratchDatabase,
 } from '../helpers/scratch-database';
+import { openAppDatabase } from '../helpers/app-database';
 
 // Phase 7 step 2 acceptance: a question in English runs end to end through BullMQ, the
 // real SQL guard, and the real executor against a real database. Only the model is a
@@ -59,23 +60,23 @@ describe('question jobs through BullMQ', () => {
     ...process.env,
     JOB_QUEUE_NAME: `test-ask-${randomUUID().slice(0, 8)}`,
   });
-  const prisma = new PrismaService(env);
+  const appDb = openAppDatabase(env.DATABASE_URL);
   const redis = new RedisService(env);
   const probe = new UserDatabaseProbe(logger, plainClients);
   const connections = new ConnectionService(
-    new PrismaConnectionRepository(prisma),
+    new SequelizeConnectionRepository(appDb),
     { lookup: async () => ['127.0.0.1'] },
     probe,
     env,
   );
   const schemas = new SchemaService(
-    new PrismaSchemaRepository(prisma),
+    new SequelizeSchemaRepository(appDb),
     connections,
     probe,
   );
   const pools = new ConnectionPools(env, logger, plainPools);
   const model = new FakeLlmProvider('fake-gemini');
-  const history = new PrismaQueryHistory(prisma);
+  const history = new SequelizeQueryHistory(appDb);
   const cancellation = new JobCancellation(redis);
   const processor = new JobProcessor(
     {} as QueryJobRunner,
@@ -87,7 +88,7 @@ describe('question jobs through BullMQ', () => {
       connections,
       new QueryExecutor(env, pools, new RedisCoordination(redis), logger),
       new LlmClient([model]),
-      new PrismaProposalCache(prisma),
+      new SequelizeProposalCache(appDb),
     ),
     history,
   );
@@ -127,14 +128,12 @@ describe('question jobs through BullMQ', () => {
       INSERT INTO public.orders VALUES (1, 1, 'open'), (2, 1, 'open'), (3, 2, 'shipped');
       GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${login.username};
     `);
-    await prisma.user.create({
-      data: {
-        id: userId,
-        googleSubject: `test:${userId}`,
-        email: `${userId}@example.test`,
-        name: 'Question job test',
-        lastLoginAt: new Date(),
-      },
+    await User.create({
+      id: userId,
+      googleSubject: `test:${userId}`,
+      email: `${userId}@example.test`,
+      name: 'Question job test',
+      lastLoginAt: new Date(),
     });
     const created = await connections.create(
       userId,
@@ -170,8 +169,8 @@ describe('question jobs through BullMQ', () => {
     await queue.onModuleDestroy();
     await pools.onModuleDestroy();
     await redis.onModuleDestroy();
-    await prisma.user.deleteMany({ where: { id: userId } });
-    await prisma.$disconnect();
+    await User.destroy({ where: { id: userId } });
+    await appDb.sequelize.close();
     await db.drop();
   });
 

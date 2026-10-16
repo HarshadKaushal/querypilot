@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { UsageCounter } from '@ayd/database';
+import { DatabaseService } from '../database/database.service';
 
 export interface UsageDelta {
   questions: number;
@@ -19,27 +20,40 @@ export interface UsageCounters {
 export const USAGE_COUNTERS = Symbol('USAGE_COUNTERS');
 
 @Injectable()
-export class PrismaUsageCounters implements UsageCounters {
-  constructor(private readonly prisma: PrismaService) {}
+export class SequelizeUsageCounters implements UsageCounters {
+  constructor(private readonly db: DatabaseService) {}
 
+  /**
+   * Adds to the day's row, creating it on the first job of the day. Raw SQL, because
+   * Sequelize's upsert can only overwrite a value, not add to it. Postgres does the adding,
+   * so two jobs finishing at the same moment both count.
+   */
   async add(userId: string, day: string, delta: UsageDelta): Promise<void> {
-    const date = new Date(`${day}T00:00:00.000Z`);
-    await this.prisma.usageCounter.upsert({
-      where: { userId_day: { userId, day: date } },
-      create: { userId, day: date, ...delta },
-      update: {
-        questions: { increment: delta.questions },
-        rowsReturned: { increment: delta.rowsReturned },
-        inputTokens: { increment: delta.inputTokens },
-        outputTokens: { increment: delta.outputTokens },
+    await this.db.sequelize.query(
+      `INSERT INTO usage_counters
+         (user_id, day, questions, rows_returned, input_tokens, output_tokens)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (user_id, day) DO UPDATE SET
+         questions = usage_counters.questions + EXCLUDED.questions,
+         rows_returned = usage_counters.rows_returned + EXCLUDED.rows_returned,
+         input_tokens = usage_counters.input_tokens + EXCLUDED.input_tokens,
+         output_tokens = usage_counters.output_tokens + EXCLUDED.output_tokens`,
+      {
+        // Sent as parameters ($1 to $6), never pasted into the SQL text.
+        bind: [
+          userId,
+          day,
+          delta.questions,
+          delta.rowsReturned,
+          delta.inputTokens,
+          delta.outputTokens,
+        ],
       },
-    });
+    );
   }
 
   async get(userId: string, day: string): Promise<DailyUsage> {
-    const row = await this.prisma.usageCounter.findUnique({
-      where: { userId_day: { userId, day: new Date(`${day}T00:00:00.000Z`) } },
-    });
+    const row = await UsageCounter.findOne({ where: { userId, day } });
     return {
       day,
       questions: row?.questions ?? 0,

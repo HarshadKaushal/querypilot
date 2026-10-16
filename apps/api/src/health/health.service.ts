@@ -1,12 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import type { DependencyCheck, HealthReport } from '@ayd/shared';
-import { PrismaService, RedisService, safeErrorDetail } from '@ayd/core';
+import { DatabaseService, RedisService, safeErrorDetail } from '@ayd/core';
 
 @Injectable()
 export class HealthService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly redis: RedisService,
     private readonly logger: Logger,
   ) {}
@@ -17,7 +17,7 @@ export class HealthService {
 
   async ready(): Promise<HealthReport> {
     const [appDatabase, redis] = await Promise.all([
-      this.probe('appDatabase', () => this.prisma.ping()),
+      this.probe('appDatabase', () => this.db.ping()),
       this.probe('redis', () => this.redis.ping()),
     ]);
     const status =

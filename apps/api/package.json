@@ -3,13 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "npm run generate --workspace=@ayd/database && node scripts/dev.cjs",
-    "build": "npm run generate --workspace=@ayd/database && tsc -p tsconfig.build.json",
+    "dev": "node scripts/dev.cjs",
+    "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "test": "npm run test:unit",
     "test:unit": "npm run build --workspace=@ayd/ssrf-guard && npm run build --workspace=@ayd/crypto && npm run build --workspace=@ayd/sql-guard && npm run build --workspace=@ayd/database && npm run build --workspace=@ayd/core && node ../../scripts/jest.cjs --config jest.unit.config.cjs",
-    "test:int": "npm run generate --workspace=@ayd/database && node ../../scripts/jest.cjs --config jest.int.config.cjs --runInBand",
-    "test:e2e": "npm run generate --workspace=@ayd/database && node ../../scripts/jest.cjs --config jest.e2e.config.cjs --runInBand",
+    "test:int": "node ../../scripts/jest.cjs --config jest.int.config.cjs --runInBand",
+    "test:e2e": "node ../../scripts/jest.cjs --config jest.e2e.config.cjs --runInBand",
     "try-query": "node scripts/try-query.cjs"
   },
   "dependencies": {
@@ -30,6 +30,7 @@
     "pg": "^8.23.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
+    "sequelize": "^6.37.8",
     "zod": "^4.6.6"
   },
   "devDependencies": {

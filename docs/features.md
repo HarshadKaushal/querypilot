@@ -12,7 +12,7 @@ Status of Ask Your Database against the production blueprint. Phase 6 (queue, wo
 - Structured JSON logs with redaction of credential-like fields and database URLs inside error messages.
 - `x-request-id` on responses, reused when the client sends a safe value.
 - Error envelope for 404, application errors, and unexpected failures. Unexpected messages are replaced with a fixed sentence.
-- Prisma schema and migrations in `packages/database`. The API container runs `prisma migrate deploy` from that package on startup.
+- Application database schema and migrations in `packages/database`. The API container runs the migrations from that package on startup. Since 2026-10-16 these are Sequelize models and sequelize-cli migrations instead of Prisma (ADR 0015); the tables are the same, with time columns as `TIMESTAMPTZ`.
 - Liveness at `GET /health/live`.
 - Readiness at `GET /health/ready`, covering the application database and Redis.
 - Sample retail schema (customers, products, orders, order items, payments) and a read-only login, `sample_ro`.

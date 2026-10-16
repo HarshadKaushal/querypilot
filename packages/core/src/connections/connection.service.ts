@@ -8,6 +8,7 @@ import {
   sealCredentials,
   type SealedCredentials,
 } from '@ayd/crypto';
+import { ConnectionStatus } from '@ayd/database';
 import { assessResolution } from '@ayd/ssrf-guard';
 import { AppException, invalidRequest, notFound } from '../errors/app.exception';
 import { ConnectionPools } from '../user-database/connection-pools';
@@ -145,7 +146,7 @@ export class ConnectionService {
       id: pending.id,
       userId,
       ...pending.settings,
-      status: 'active',
+      status: ConnectionStatus.Active,
       lastTestedAt: new Date(),
       ...pending.sealed,
     });
@@ -283,7 +284,7 @@ export class ConnectionService {
       id,
       {
         ...pending.settings,
-        status: 'active',
+        status: ConnectionStatus.Active,
         lastTestedAt: new Date(),
         ...pending.sealed,
       },
@@ -357,7 +358,7 @@ export class ConnectionService {
     ok: boolean,
   ): Promise<PublicConnection | null> {
     return this.repo.update(userId, id, {
-      status: ok ? 'active' : 'failing',
+      status: ok ? ConnectionStatus.Active : ConnectionStatus.Failing,
       lastTestedAt: new Date(),
     });
   }

@@ -1,4 +1,5 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
+import type { SslMode } from '@ayd/database';
 import { Client, type ClientConfig } from 'pg';
 import { Logger } from 'nestjs-pino';
 import { safeErrorDetail } from '../logging/safe-error';
@@ -24,7 +25,8 @@ export interface PgClientLike {
 
 export type PgClientFactory = (config: ClientConfig) => PgClientLike;
 
-export type SslMode = 'require' | 'verify-full';
+// The list lives with the connections table it is stored in.
+export type { SslMode };
 
 export interface ProbeRequest {
   hostIp: string;

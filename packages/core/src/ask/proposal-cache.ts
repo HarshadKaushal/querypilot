@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import type { Prisma } from '@ayd/database';
-import { PrismaService } from '../prisma/prisma.service';
+import { QueryCacheEntry } from '@ayd/database';
+import { Op, literal } from 'sequelize';
+import { DatabaseService } from '../database/database.service';
 
 /** A model's SQL proposal that passed the guard and ran. Never any result rows. */
 export interface CachedProposal {
@@ -54,32 +55,27 @@ export function questionKey(question: string): string {
 }
 
 @Injectable()
-export class PrismaProposalCache implements ProposalCache {
-  constructor(private readonly prisma: PrismaService) {}
+export class SequelizeProposalCache implements ProposalCache {
+  constructor(private readonly db: DatabaseService) {}
 
   async find(
     connectionId: string,
     fingerprint: string,
     questionKey: string,
   ): Promise<CachedProposal | null> {
-    const where = {
-      connectionId_fingerprint_questionHash: {
-        connectionId,
-        fingerprint,
-        questionHash: questionKey,
-      },
-    };
-    const row = await this.prisma.queryCacheEntry.findUnique({ where });
+    const where = { connectionId, fingerprint, questionHash: questionKey };
+    const row = await QueryCacheEntry.findOne({ where });
     if (!row) {
       return null;
     }
-    await this.prisma.queryCacheEntry.update({
-      where,
-      data: { hits: { increment: 1 }, lastUsedAt: new Date() },
-    });
+    // hits + 1 is computed by Postgres, so two hits at the same moment both count.
+    await QueryCacheEntry.update(
+      { hits: literal('hits + 1'), lastUsedAt: new Date() },
+      { where },
+    );
     return {
       sql: row.sql,
-      assumptions: Array.isArray(row.assumptions) ? (row.assumptions as string[]) : [],
+      assumptions: Array.isArray(row.assumptions) ? row.assumptions : [],
       explanation: row.explanation,
       model: row.model,
     };
@@ -91,34 +87,34 @@ export class PrismaProposalCache implements ProposalCache {
     questionKey: string,
     proposal: CachedProposal,
   ): Promise<void> {
-    const fields = {
-      sql: proposal.sql,
-      assumptions: proposal.assumptions as Prisma.InputJsonArray,
-      explanation: proposal.explanation,
-      model: proposal.model,
-    };
-    await this.prisma.$transaction([
-      this.prisma.queryCacheEntry.deleteMany({
-        where: { connectionId, fingerprint: { not: fingerprint } },
-      }),
-      this.prisma.queryCacheEntry.upsert({
-        where: {
-          connectionId_fingerprint_questionHash: {
+    await this.db.transaction(async (transaction) => {
+      await QueryCacheEntry.destroy({
+        where: { connectionId, fingerprint: { [Op.ne]: fingerprint } },
+        transaction,
+      });
+      // INSERT ... ON CONFLICT (connection_id, fingerprint, question_hash) DO UPDATE SET
+      // only the listed columns, so an existing entry keeps its id, hits, and created_at.
+      await QueryCacheEntry.bulkCreate(
+        [
+          {
+            id: randomUUID(),
             connectionId,
             fingerprint,
             questionHash: questionKey,
+            sql: proposal.sql,
+            assumptions: proposal.assumptions,
+            explanation: proposal.explanation,
+            model: proposal.model,
+            lastUsedAt: new Date(),
           },
+        ],
+        {
+          conflictAttributes: ['connectionId', 'fingerprint', 'questionHash'],
+          updateOnDuplicate: ['sql', 'assumptions', 'explanation', 'model', 'lastUsedAt'],
+          transaction,
         },
-        create: {
-          id: randomUUID(),
-          connectionId,
-          fingerprint,
-          questionHash: questionKey,
-          ...fields,
-        },
-        update: { ...fields, lastUsedAt: new Date() },
-      }),
-    ]);
+      );
+    });
   }
 
   async forget(
@@ -126,7 +122,7 @@ export class PrismaProposalCache implements ProposalCache {
     fingerprint: string,
     questionKey: string,
   ): Promise<void> {
-    await this.prisma.queryCacheEntry.deleteMany({
+    await QueryCacheEntry.destroy({
       where: { connectionId, fingerprint, questionHash: questionKey },
     });
   }

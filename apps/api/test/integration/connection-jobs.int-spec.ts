@@ -5,19 +5,19 @@ import {
   ConnectionService,
   JobCancellation,
   type RunningJobWorker,
+  SequelizeConnectionRepository,
+  SequelizeSchemaRepository,
   startJobWorker,
   UserJobSlots,
   JobProcessor,
   JobQueue,
   type JobView,
-  PrismaConnectionRepository,
-  PrismaSchemaRepository,
-  PrismaService,
   type QueryJobRunner,
   RedisService,
   SchemaService,
   UserDatabaseProbe,
 } from '@ayd/core';
+import { User } from '@ayd/database';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import type { Logger } from 'nestjs-pino';
@@ -27,6 +27,7 @@ import {
   plainClients,
   type ScratchDatabase,
 } from '../helpers/scratch-database';
+import { openAppDatabase } from '../helpers/app-database';
 
 // Phase 6 step 3b acceptance: connection create, update, and test, and schema refresh, run
 // as jobs through BullMQ against a real database. A new login is saved only after the
@@ -39,16 +40,16 @@ describe('connection and schema jobs through BullMQ', () => {
     ...process.env,
     JOB_QUEUE_NAME: `test-jobs-${randomUUID().slice(0, 8)}`,
   });
-  const prisma = new PrismaService(env);
+  const appDb = openAppDatabase(env.DATABASE_URL);
   const probe = new UserDatabaseProbe(logger, plainClients);
   const connections = new ConnectionService(
-    new PrismaConnectionRepository(prisma),
+    new SequelizeConnectionRepository(appDb),
     { lookup: async () => ['127.0.0.1'] },
     probe,
     env,
   );
   const schemas = new SchemaService(
-    new PrismaSchemaRepository(prisma),
+    new SequelizeSchemaRepository(appDb),
     connections,
     probe,
   );
@@ -109,14 +110,12 @@ describe('connection and schema jobs through BullMQ', () => {
       GRANT SELECT ON public.items TO ${reader.username};
       GRANT SELECT, INSERT ON public.items TO ${writer.username};
     `);
-    await prisma.user.create({
-      data: {
-        id: userId,
-        googleSubject: `test:${userId}`,
-        email: `${userId}@example.test`,
-        name: 'Connection job test',
-        lastLoginAt: new Date(),
-      },
+    await User.create({
+      id: userId,
+      googleSubject: `test:${userId}`,
+      email: `${userId}@example.test`,
+      name: 'Connection job test',
+      lastLoginAt: new Date(),
     });
     worker = await startJobWorker({
       env,
@@ -138,8 +137,8 @@ describe('connection and schema jobs through BullMQ', () => {
     await inspectConnection.quit();
     await queue.onModuleDestroy();
     await redis.onModuleDestroy();
-    await prisma.user.deleteMany({ where: { id: userId } });
-    await prisma.$disconnect();
+    await User.destroy({ where: { id: userId } });
+    await appDb.sequelize.close();
     await db.drop();
   });
 

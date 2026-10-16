@@ -1,8 +1,8 @@
 import {
   APP_ENV,
   createLoggerModule,
+  DatabaseModule,
   JobRunnersModule,
-  PrismaModule,
   RedisModule,
 } from '@ayd/core';
 import { Global, Module, type DynamicModule } from '@nestjs/common';
@@ -30,7 +30,7 @@ export class WorkerModule {
       imports: [
         WorkerConfigModule.register(env),
         createLoggerModule({ service: 'worker' }),
-        PrismaModule,
+        DatabaseModule,
         RedisModule,
         JobRunnersModule,
       ],

@@ -7,7 +7,7 @@ import { AuthController } from './sign-in/auth.controller';
 import { AuthService } from './sign-in/auth.service';
 import { GOOGLE_CLIENT, GoogleOAuthClient } from './sign-in/google.client';
 import { AUTH_REPOSITORY } from './storage/auth.repository';
-import { PrismaAuthRepository } from './storage/prisma-auth.repository';
+import { SequelizeAuthRepository } from './storage/sequelize-auth.repository';
 import { TokenService } from './tokens/token.service';
 
 @Module({
@@ -17,8 +17,8 @@ import { TokenService } from './tokens/token.service';
     AuthService,
     TokenService,
     AuthGuard,
-    PrismaAuthRepository,
-    { provide: AUTH_REPOSITORY, useExisting: PrismaAuthRepository },
+    SequelizeAuthRepository,
+    { provide: AUTH_REPOSITORY, useExisting: SequelizeAuthRepository },
     {
       provide: GOOGLE_CLIENT,
       inject: [APP_ENV],

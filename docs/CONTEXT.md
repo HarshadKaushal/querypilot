@@ -2,7 +2,7 @@
 
 The shared starting point for every Claude session on this repository, including several running at once. **Read this first, then update it** (see "Keeping this file current"). The code is the source of truth; this file says where things stand and what was decided, so a new session does not have to rediscover it.
 
-Last updated: 2026-10-16, after the web app's feature layout (base `fc89f70`).
+Last updated: 2026-10-16, after the move from Prisma to Sequelize (base `17bd754`).
 
 ## Keeping this file current
 
@@ -19,6 +19,7 @@ Last updated: 2026-10-16, after the web app's feature layout (base `fc89f70`).
 
 - **Phases 0 to 9 of the blueprint are done.** Phases 10 (observability and hardening), 11 (evaluation and load tests), and 12 (deployment) are not started.
 - **Against the assignment brief,** two items are open, the evaluation dataset with results and deployment instructions. Swagger docs and DTO validation are done. See "Open items".
+- **The application database uses Sequelize** (since 2026-10-16, ADR 0015), not Prisma. The development database `ayd` is migrated.
 - **All work is committed locally on `main`;** nothing is pushed. The user reviews commits afterwards.
 
 ## The project in brief
@@ -36,7 +37,7 @@ Last updated: 2026-10-16, after the web app's feature layout (base `fc89f70`).
 | Area           | Tools                                                                                                       |
 | -------------- | ----------------------------------------------------------------------------------------------------------- |
 | API and worker | NestJS 12 (ESM-only, loaded from CommonJS via `module: node20`)                                             |
-| Data           | Prisma 7, Postgres 18, Redis 8                                                                              |
+| Data           | Sequelize 6 (`sequelize-typescript`, `@nestjs/sequelize`, sequelize-cli), Postgres 18, Redis 8              |
 | Jobs           | BullMQ 6                                                                                                    |
 | Model          | `@google/genai` (Interactions API); models `gemini-3.8-flash`, fallback and summary `gemini-3.5-flash-lite` |
 | Web            | React 19, Vite 8, Mantine 9, TanStack Query, React Router 8                                                 |
@@ -44,19 +45,19 @@ Last updated: 2026-10-16, after the web app's feature layout (base `fc89f70`).
 
 ## Repository map
 
-| Path                  | What                                                                                                            |
-| --------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `apps/api`            | HTTP API: auth, validation, ownership, limits, app-database work, queues jobs, streams progress (SSE)           |
-| `apps/worker`         | Takes jobs from Redis. The only process that opens customer databases or calls the model                        |
-| `apps/web`            | React app by feature: `app/`, `lib/`, `components/`, `features/<name>/` (requests in each `api.ts`)             |
-| `packages/core`       | Shared Nest modules: connections, schema, executor, jobs, ask pipeline (`src/ask/`), LLM layer, limits, history |
-| `packages/sql-guard`  | SQL guard (`guard.ts`, rules in `analyzer.ts`)                                                                  |
-| `packages/ssrf-guard` | Host and address checks                                                                                         |
-| `packages/crypto`     | Envelope encryption of credentials                                                                              |
-| `packages/database`   | Prisma schema and migrations                                                                                    |
-| `packages/shared`     | Error codes and envelope, request id                                                                            |
-| `e2e/`                | Playwright browser tests (own API on 3100, web on 5174, queue `ayd-e2e`)                                        |
-| `docs/`               | Blueprint, ADRs 0001 to 0014, features, implementation, testing, `extra.md`, AI reviews                         |
+| Path                  | What                                                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `apps/api`            | HTTP API: auth, validation, ownership, limits, app-database work, queues jobs, streams progress (SSE)                    |
+| `apps/worker`         | Takes jobs from Redis. The only process that opens customer databases or calls the model                                 |
+| `apps/web`            | React app by feature: `app/`, `lib/`, `components/`, `features/<name>/` (requests in each `api.ts`)                      |
+| `packages/core`       | Shared Nest modules: database (`src/database/`), connections, schema, executor, jobs, ask pipeline, LLM, limits, history |
+| `packages/sql-guard`  | SQL guard (`guard.ts`, rules in `analyzer.ts`)                                                                           |
+| `packages/ssrf-guard` | Host and address checks                                                                                                  |
+| `packages/crypto`     | Envelope encryption of credentials                                                                                       |
+| `packages/database`   | Sequelize `src/models/`, `src/types/`, `src/enums/`, and sequelize-cli `migrations/` (`npm run migrate`)                 |
+| `packages/shared`     | Error codes and envelope, request id                                                                                     |
+| `e2e/`                | Playwright browser tests (own API on 3100, web on 5174, queue `ayd-e2e`)                                                 |
+| `docs/`               | Blueprint, ADRs 0001 to 0015, features, implementation, testing, `extra.md`, AI reviews                                  |
 
 Imports starting `@ayd/` are these packages. They are linked through `node_modules`, and run from each package's built `dist`.
 
@@ -78,14 +79,14 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
 
 ## Tests and checks
 
-| Command                                                 | What                                            | Last result                                                                                           |
-| ------------------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `npm test`                                              | Unit tests, no Docker                           | API 112, web 68, worker 6, core 291 (+2 provider tests since), guard 310, ssrf 25, crypto 4, shared 4 |
-| `npm run test:int`                                      | Real Postgres and Redis                         | 95                                                                                                    |
-| `npm run test:e2e`                                      | API end to end                                  | 3                                                                                                     |
-| `npm run test:browser`                                  | Playwright demo flow and axe, desktop and phone | 6                                                                                                     |
-| `npm run test:browser:live`                             | One real-Gemini question (opt-in)               | 1                                                                                                     |
-| `npm run lint`, `npm run format:check`, `npm run build` |                                                 | pass (one known lint warning: TanStack Virtual and the React Compiler)                                |
+| Command                                                 | What                                            | Last result                                                                                                                 |
+| ------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `npm test`                                              | Unit tests, no Docker                           | API 112, web 68, worker 6, core 293, guard 310, ssrf 25, crypto 4, shared 4 (exits 1: see sql-guard coverage in loose ends) |
+| `npm run test:int`                                      | Real Postgres and Redis                         | 97                                                                                                                          |
+| `npm run test:e2e`                                      | API end to end                                  | 3                                                                                                                           |
+| `npm run test:browser`                                  | Playwright demo flow and axe, desktop and phone | 6                                                                                                                           |
+| `npm run test:browser:live`                             | One real-Gemini question (opt-in)               | 1                                                                                                                           |
+| `npm run lint`, `npm run format:check`, `npm run build` |                                                 | pass (one known lint warning: TanStack Virtual and the React Compiler)                                                      |
 
 `test:int`, `test:browser`, and `build` rebuild packages: see the parallel-session rules above.
 
@@ -119,6 +120,11 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
   - Local only for now; a CI job later.
 - **Development setup:** the dev API stays listening on all interfaces (with dev login on); the user chose not to change it.
 - **Docs:** `docs/extra.md` lists what the project does beyond the brief.
+- **ORM (2026-10-16): Sequelize, not Prisma,** because the brief requires it (although `CLAUDE.md` names Prisma). Details in ADR 0015:
+  - `sequelize-typescript` decorator models with `@nestjs/sequelize`.
+  - Migrations rewritten as sequelize-cli JavaScript (not Prisma's SQL kept).
+  - Models, types, enums, the Nest module, and the service each in their own files.
+  - Time columns are `TIMESTAMPTZ(3)`.
 - **API docs file names:** `*.dto.ts` holds what a client sends (validated); `*.responses.ts` holds what it gets back (docs only).
 - **API docs (Swagger), in two stages:**
   - Stage 1 (done 2026-10-16): `/docs` with tags, summaries, status codes, and example bodies.
@@ -138,6 +144,9 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
 - **After moving or renaming source files, the old build output stays in `dist`.** `tsc` never deletes files. Remove the stale ones, or code might load an outdated copy.
 - **When testing by hand, use throwaway dev-login users and delete them afterwards** (`DELETE /v1/users/me`).
 - **Decorators run from the bottom up.** In a DTO, put the basic type check (`@IsString`, `@IsArray`) closest to the property, or a wrong type gets the wrong message (for example "too long" for a number).
+- **Sequelize transactions:** every query inside `db.transaction(async (transaction) => ...)` needs `{ transaction }`. Without it the query runs outside the transaction and is not rolled back.
+- **Sequelize reads `TIMESTAMP` (no time zone) as local time**, 5 h 30 min off here. New time columns must be `TIMESTAMPTZ(3)` (`DataType.DATE(3)` in the model).
+- **Models need explicit `@Column` types** (tsx emits no decorator metadata) and `useDefineForClassFields: false` (already set in `packages/database`), or every value reads `undefined`.
 - **A first question may be "answered from a saved query"** if it was asked before: the cache key is connection, schema fingerprint, and normalised question.
 
 ## Open items
@@ -160,13 +169,16 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
 - **The first live-events subscription after an API restart hung once** (2026-10-14 16:10). It could not be reproduced. Check `JobEvents.subscribe` and `streamJob` in the code review.
 - **Not built yet:** a chart-type switcher, example question-and-SQL pairs in the prompt, a circuit breaker per model provider, a key re-wrap job, readiness checks for the queue and the model, data export, partitions and retention, a rate limit on connection tests, browser tests in CI, and editing a connection's login in the app.
 - **The main web bundle is about 695 kB** before compression (measured 2026-10-16). Lazy-loading pages in `app/router.tsx` would split it.
-- **Browser tests not yet run on the web feature layout** (2026-10-16): run `npm run test:browser` when no dev servers are in use.
+- **Browser tests not yet run on the web feature layout or on Sequelize** (2026-10-16): run `npm run test:browser` when no dev servers are in use.
+- **`npm test` exits 1 on sql-guard's coverage threshold** (functions 98.83% against 100%, in `index.ts`), although all 310 tests pass. Found 2026-10-16; it predates the Sequelize move (no sql-guard file or package version changed). Decide whether to cover `index.ts` or exclude it.
+- **`sequelize-typescript` has had no release since 2023.** Check it first when upgrading Sequelize.
 
 ## In progress
 
-| What   | Files | Session started |
-| ------ | ----- | --------------- |
-| (none) |       |                 |
+| What                                                                                                            | Files               | Session started |
+| --------------------------------------------------------------------------------------------------------------- | ------------------- | --------------- |
+| Walkthrough: dev worker and web started (API was already running); no code changes                              | none                | 2026-10-16      |
+| Learning doc `docs/sequelize.md` describing the Sequelize work above (read-only on code; writes only that file) | `docs/sequelize.md` | 2026-10-16      |
 
 ## Session log
 
@@ -183,3 +195,4 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
   - Stage 2a: 9 request DTO classes, a global `ValidationPipe`, and `validation.spec.ts`. `test:int` (95), `test:e2e` (3), and `test:browser` (6) passed, which also covers the earlier two commits, and a live check against the dev API passed.
   - Stage 2b: response classes in `*.responses.ts` for every route, and a padlock test that reads the real `AuthGuard` metadata. Live responses matched the docs. This completes Swagger.
   - Web app grouped by feature (`app/`, `lib/`, `components/`, `features/`), with each feature's requests in its `api.ts` (ADR 0014 "Code layout", `docs/ai-reviews/2026-10-16-web-feature-layout.md`). Type-check, 68 web tests, lint, format, and `vite build` passed; browser tests not run (dev servers in use).
+  - Prisma replaced by Sequelize (ADR 0015, `docs/ai-reviews/2026-10-16-sequelize.md`). Rewritten migrations matched Prisma's schema exactly; `ayd` adopted and its time columns made `TIMESTAMPTZ` with no data change. Unit, `test:int` (97), and `test:e2e` (3) passed; browser tests not run.

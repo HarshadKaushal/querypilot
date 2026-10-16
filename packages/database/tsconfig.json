@@ -2,7 +2,10 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    // With ES2022 class fields, a model's `email!: string` would become a real property that
+    // hides the getter Sequelize puts on the prototype, so every value would read undefined.
+    "useDefineForClassFields": false
   },
   "include": ["src/**/*.ts"]
 }

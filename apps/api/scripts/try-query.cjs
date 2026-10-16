@@ -42,7 +42,8 @@ async function main() {
     },
   );
   const core = require('@ayd/core');
-  const prisma = context.get(core.PrismaService);
+  // The models are bound to the app's own database connection once the context is up.
+  const { User } = require('@ayd/database');
   const connections = context.get(core.ConnectionService);
   const schemas = context.get(core.SchemaService);
   const guard = context.get(core.SqlGuardService);
@@ -50,14 +51,12 @@ async function main() {
 
   const userId = randomUUID();
   try {
-    await prisma.user.create({
-      data: {
-        id: userId,
-        googleSubject: `try-query:${userId}`,
-        email: `${userId}@try-query.local`,
-        name: 'try-query',
-        lastLoginAt: new Date(),
-      },
+    await User.create({
+      id: userId,
+      googleSubject: `try-query:${userId}`,
+      email: `${userId}@try-query.local`,
+      name: 'try-query',
+      lastLoginAt: new Date(),
     });
     const connection = await connections.create(
       userId,
@@ -102,7 +101,7 @@ async function main() {
     const cut = result.truncated ? `, cut by the ${result.truncated} cap` : '';
     console.log(`${result.rowCount} row(s) in ${result.durationMs} ms${cut}.`);
   } finally {
-    await prisma.user.deleteMany({ where: { id: userId } });
+    await User.destroy({ where: { id: userId } });
     await context.close();
   }
 }

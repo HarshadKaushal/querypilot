@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { Prisma, PrismaClient } from '@ayd/database';
+import { AuditLog } from '@ayd/database';
+import type { Transaction } from 'sequelize';
 
 /**
  * One audit_log row. Metadata holds ids and outcomes only: never passwords, tokens, emails,
@@ -12,18 +13,22 @@ export interface AuditEntry {
   ip: string | null;
 }
 
-/** The single writer for audit rows, used by every Prisma repository. */
+/**
+ * The single writer for audit rows, used by every Sequelize repository. Pass `transaction`
+ * to write the row in the same transaction as the change it records.
+ */
 export async function writeAuditLog(
-  db: Pick<PrismaClient, 'auditLog'>,
   entry: AuditEntry,
+  transaction?: Transaction,
 ): Promise<void> {
-  await db.auditLog.create({
-    data: {
+  await AuditLog.create(
+    {
       id: randomUUID(),
       userId: entry.userId,
       eventType: entry.eventType,
-      metadata: entry.metadata as Prisma.InputJsonObject,
+      metadata: entry.metadata,
       ip: entry.ip,
     },
-  });
+    { transaction },
+  );
 }

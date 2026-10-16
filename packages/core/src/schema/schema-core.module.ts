@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConnectionsCoreModule } from '../connections/connections-core.module';
 import { UserDatabaseModule } from '../user-database/user-database.module';
-import { PrismaSchemaRepository } from './prisma-schema.repository';
+import { SequelizeSchemaRepository } from './sequelize-schema.repository';
 import { SCHEMA_REPOSITORY } from './schema.repository';
 import { SchemaService } from './schema.service';
 
@@ -10,8 +10,8 @@ import { SchemaService } from './schema.service';
   imports: [ConnectionsCoreModule, UserDatabaseModule],
   providers: [
     SchemaService,
-    PrismaSchemaRepository,
-    { provide: SCHEMA_REPOSITORY, useExisting: PrismaSchemaRepository },
+    SequelizeSchemaRepository,
+    { provide: SCHEMA_REPOSITORY, useExisting: SequelizeSchemaRepository },
   ],
   exports: [SchemaService],
 })

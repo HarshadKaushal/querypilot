@@ -50,7 +50,7 @@ export class MemoryConnectionRepository implements ConnectionRepository {
       return false;
     }
     this.rows.splice(index, 1);
-    // Audited with the delete, as the Prisma repository does in one transaction.
+    // Audited with the delete, as the Sequelize repository does in one transaction.
     await this.writeAudit({
       userId,
       eventType: 'connection.deleted',

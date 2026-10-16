@@ -1,4 +1,5 @@
 import type { SealedCredentials } from '@ayd/crypto';
+import type { ConnectionStatus, SslMode } from '@ayd/database';
 import type { AuditEntry } from '../audit/audit-log';
 
 export interface PublicConnection {
@@ -25,8 +26,8 @@ export interface NewConnection extends SealedCredentials {
   host: string;
   port: number;
   databaseName: string;
-  sslMode: string;
-  status: string;
+  sslMode: SslMode;
+  status: ConnectionStatus;
   lastTestedAt: Date;
   sendSampleRowsToLlm: boolean;
 }
@@ -38,7 +39,7 @@ export interface ConnectionRepository {
   update(
     userId: string,
     id: string,
-    patch: Partial<NewConnection> & { status?: string; lastTestedAt?: Date | null },
+    patch: Partial<NewConnection> & { lastTestedAt?: Date | null },
     options?: {
       /** Also delete the schema snapshots and allowlist, in the same transaction. */
       resetSchema?: boolean;
