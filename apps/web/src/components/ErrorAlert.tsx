@@ -1,16 +1,7 @@
 import { Alert, Text } from '@mantine/core';
 import type { ReactNode } from 'react';
-import { ApiError } from '../api/client';
-import type { JobError } from '../api/types';
-
-function isJobError(value: unknown): value is JobError {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof (value as JobError).code === 'string' &&
-    typeof (value as JobError).message === 'string'
-  );
-}
+import { ApiError } from '../lib/api-client';
+import { isJobError } from '../lib/jobs';
 
 /**
  * A failed request or job, shown with the API's own message (already written for users).

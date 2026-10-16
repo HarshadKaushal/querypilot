@@ -1,5 +1,5 @@
 import { Group, Loader, Text } from '@mantine/core';
-import type { JobStage, JobView } from '../api/types';
+import type { JobStage, JobView } from '../lib/api-types';
 
 const STAGES: Record<JobStage, string> = {
   checking_access: 'Checking that the login can only read',

@@ -2,7 +2,7 @@
 
 The shared starting point for every Claude session on this repository, including several running at once. **Read this first, then update it** (see "Keeping this file current"). The code is the source of truth; this file says where things stand and what was decided, so a new session does not have to rediscover it.
 
-Last updated: 2026-10-16, after stage 2b, response schemas (base `901978c`).
+Last updated: 2026-10-16, after the web app's feature layout (base `fc89f70`).
 
 ## Keeping this file current
 
@@ -48,7 +48,7 @@ Last updated: 2026-10-16, after stage 2b, response schemas (base `901978c`).
 | --------------------- | --------------------------------------------------------------------------------------------------------------- |
 | `apps/api`            | HTTP API: auth, validation, ownership, limits, app-database work, queues jobs, streams progress (SSE)           |
 | `apps/worker`         | Takes jobs from Redis. The only process that opens customer databases or calls the model                        |
-| `apps/web`            | React app (sign-in, connect wizard, ask, history, usage, settings)                                              |
+| `apps/web`            | React app by feature: `app/`, `lib/`, `components/`, `features/<name>/` (requests in each `api.ts`)             |
 | `packages/core`       | Shared Nest modules: connections, schema, executor, jobs, ask pipeline (`src/ask/`), LLM layer, limits, history |
 | `packages/sql-guard`  | SQL guard (`guard.ts`, rules in `analyzer.ts`)                                                                  |
 | `packages/ssrf-guard` | Host and address checks                                                                                         |
@@ -145,7 +145,7 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
 **Against the brief** (estimates from 2026-10-14):
 
 1. Evaluation dataset and report, about 3 to 4 h.
-2. Swagger docs: **done** (stages 1, 2a, and 2b; `docs/ai-reviews/2026-10-16-response-schemas.md`). A possible follow-up: generate the web app's `apps/web/src/api/types.ts` from `/docs/openapi.json` instead of copying it by hand.
+2. Swagger docs: **done** (stages 1, 2a, and 2b; `docs/ai-reviews/2026-10-16-response-schemas.md`). A possible follow-up: generate the web app's `apps/web/src/lib/api-types.ts` from `/docs/openapi.json` instead of copying it by hand.
 3. Deployment instructions, about 2 to 3 h; a real cloud deployment is Phase 12.
 4. DTO validation with class-validator: done for every request body (stage 2a, `docs/ai-reviews/2026-10-16-request-validation.md`). The history `limit` and `cursor` query is still clamped by hand, on purpose.
 
@@ -159,7 +159,8 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
 - **One API unit test failed once** (1 of 94, 2026-10-16, right after the package builds), then passed 3 runs in a row. It is not known which test. If it fails again, save the full Jest output.
 - **The first live-events subscription after an API restart hung once** (2026-10-14 16:10). It could not be reproduced. Check `JobEvents.subscribe` and `streamJob` in the code review.
 - **Not built yet:** a chart-type switcher, example question-and-SQL pairs in the prompt, a circuit breaker per model provider, a key re-wrap job, readiness checks for the queue and the model, data export, partitions and retention, a rate limit on connection tests, browser tests in CI, and editing a connection's login in the app.
-- **The main web bundle is about 680 kB** before compression.
+- **The main web bundle is about 695 kB** before compression (measured 2026-10-16). Lazy-loading pages in `app/router.tsx` would split it.
+- **Browser tests not yet run on the web feature layout** (2026-10-16): run `npm run test:browser` when no dev servers are in use.
 
 ## In progress
 
@@ -181,3 +182,4 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
   - Swagger stage 1: `@nestjs/swagger` 12.0.2, Swagger UI at `/docs` outside production, all 32 routes documented, and `openapi.spec.ts`.
   - Stage 2a: 9 request DTO classes, a global `ValidationPipe`, and `validation.spec.ts`. `test:int` (95), `test:e2e` (3), and `test:browser` (6) passed, which also covers the earlier two commits, and a live check against the dev API passed.
   - Stage 2b: response classes in `*.responses.ts` for every route, and a padlock test that reads the real `AuthGuard` metadata. Live responses matched the docs. This completes Swagger.
+  - Web app grouped by feature (`app/`, `lib/`, `components/`, `features/`), with each feature's requests in its `api.ts` (ADR 0014 "Code layout", `docs/ai-reviews/2026-10-16-web-feature-layout.md`). Type-check, 68 web tests, lint, format, and `vite build` passed; browser tests not run (dev servers in use).

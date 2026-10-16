@@ -5,10 +5,10 @@ import { render } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { MemoryRouter } from 'react-router';
 import { vi } from 'vitest';
-import type { ApiClient } from '../api/client';
-import type { JobView, PublicUser } from '../api/types';
-import { AuthContext, type AuthContextValue, type AuthState } from '../auth/auth-context';
-import { theme } from '../theme';
+import type { ApiClient } from '../lib/api-client';
+import type { JobView, PublicUser } from '../lib/api-types';
+import { AuthContext, type AuthContextValue, type AuthState } from '../features/auth';
+import { theme } from '../app/theme';
 
 export const USER: PublicUser = {
   id: 'u1',
