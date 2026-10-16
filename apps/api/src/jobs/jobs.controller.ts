@@ -1,5 +1,4 @@
-import { ConnectionService, invalidRequest, JobEvents, JobQueue } from '@ayd/core';
-import { MAX_SQL_LENGTH } from '@ayd/sql-guard';
+import { ConnectionService, JobEvents, JobQueue } from '@ayd/core';
 import {
   Body,
   Controller,
@@ -15,7 +14,6 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
-  ApiBody,
   ApiOperation,
   ApiProduces,
   ApiResponse,
@@ -26,9 +24,7 @@ import { AuthGuard, type PublicUser, CurrentUser } from '../auth';
 import { ApiErrors } from '../common/openapi';
 import { SubmissionLimits } from '../limits/submission-limits';
 import { JOB_STREAM_TIMING, streamJob, type JobStreamTiming } from './job-stream';
-
-/** A question is a sentence or two; this leaves room without inviting pasted documents. */
-export const MAX_QUESTION_LENGTH = 2000;
+import { AskQuestionDto, RunSqlDto } from './jobs.dto';
 
 /** Lets tests shorten the stream's intervals. */
 export const JOB_STREAM_TIMING_TOKEN = Symbol('JOB_STREAM_TIMING');
@@ -59,29 +55,15 @@ export class JobsController {
     description:
       'The worker checks the SQL with the SQL guard against the allowlist, then runs it read-only.',
   })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      required: ['sql'],
-      properties: { sql: { type: 'string', maxLength: MAX_SQL_LENGTH } },
-      example: { sql: 'SELECT count(*) FROM orders' },
-    },
-  })
   @ApiResponse({ status: 202, description: 'The queued query.run job.' })
   @ApiErrors(400, 404, 429)
   @HttpCode(202)
   async submitQuery(
     @CurrentUser() user: PublicUser,
     @Param('id') connectionId: string,
-    @Body() body: { sql?: unknown } | undefined,
+    // Checked by the ValidationPipe before this runs: a non-blank string within the limit.
+    @Body() { sql }: RunSqlDto,
   ) {
-    const sql = body?.sql;
-    if (typeof sql !== 'string' || sql.trim().length === 0) {
-      throw invalidRequest('Send the SQL to run as a non-empty "sql" string.');
-    }
-    if (sql.length > MAX_SQL_LENGTH) {
-      throw invalidRequest(`The SQL is longer than ${MAX_SQL_LENGTH} characters.`);
-    }
     // NOT_FOUND now, rather than a queued job that fails, for a connection that is not yours.
     await this.connections.get(user.id, connectionId);
     await this.limits.checkRate(user.id);
@@ -99,31 +81,15 @@ export class JobsController {
     description:
       'The worker asks the model for SQL, checks it with the guard, runs it, and adds a chart and a summary. Counts against the daily question quota.',
   })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      required: ['question'],
-      properties: { question: { type: 'string', maxLength: MAX_QUESTION_LENGTH } },
-      example: { question: 'How many orders were placed each month?' },
-    },
-  })
   @ApiResponse({ status: 202, description: 'The queued question.ask job.' })
   @ApiErrors(400, 404, 429)
   @HttpCode(202)
   async ask(
     @CurrentUser() user: PublicUser,
     @Param('id') connectionId: string,
-    @Body() body: { question?: unknown } | undefined,
+    // Already trimmed and checked by the ValidationPipe.
+    @Body() { question }: AskQuestionDto,
   ) {
-    const question = typeof body?.question === 'string' ? body.question.trim() : '';
-    if (question.length === 0) {
-      throw invalidRequest('Send the question as a non-empty "question" string.');
-    }
-    if (question.length > MAX_QUESTION_LENGTH) {
-      throw invalidRequest(
-        `The question is longer than ${MAX_QUESTION_LENGTH} characters.`,
-      );
-    }
     await this.connections.get(user.id, connectionId);
     await this.limits.checkRate(user.id);
     await this.limits.takeQuestion(user.id);

@@ -1,14 +1,9 @@
 import { Body, Controller, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiBody,
-  ApiOperation,
-  ApiResponse,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthGuard, type PublicUser, CurrentUser } from '../auth';
 import { ApiErrors } from '../common/openapi';
 import { SqlGuardService } from '@ayd/core';
+import { CheckSqlDto } from './check-sql.dto';
 
 @ApiTags('sql guard')
 @ApiBearerAuth()
@@ -25,14 +20,6 @@ export class SqlGuardController {
     description:
       'Never opens your database. Shows the SQL that would run: names qualified, `*` expanded, LIMIT capped.',
   })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      required: ['sql'],
-      properties: { sql: { type: 'string' } },
-      example: { sql: 'SELECT * FROM orders' },
-    },
-  })
   @ApiResponse({
     status: 200,
     description:
@@ -43,8 +30,8 @@ export class SqlGuardController {
   check(
     @CurrentUser() user: PublicUser,
     @Param('id') id: string,
-    @Body() body: { sql?: unknown } | undefined,
+    @Body() { sql }: CheckSqlDto,
   ) {
-    return this.guard.check(user.id, id, body?.sql);
+    return this.guard.check(user.id, id, sql);
   }
 }

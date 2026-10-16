@@ -192,7 +192,7 @@ A fix after 9b gave `watchJob` a 45-second silence limit: an API restart during 
 
 ## How to extend this
 
-Add a phase only after this phase's checks pass: `npm test`, `npm run lint`, `npm run format:check`, and a ready health response from `npm run up`. New application tables go in a new Prisma migration. New client-visible failures go through `AppException` and an existing or newly documented error code in `@ayd/shared`. Use `notFound()` for a missing or foreign id (the two must look the same) and `invalidRequest()` for bad input; both live in `packages/core/src/errors/app.exception.ts`. Audit rows go through `writeAuditLog` in `packages/core/src/audit/audit-log.ts`, with ids and outcomes in the metadata and never secrets. When an audit row records a delete or change, write it in the same transaction as that change, and only when something changed (as `PrismaConnectionRepository.delete` and `PrismaQueryHistory.delete` do). Log errors with `safeErrorDetail`, which strips connection URLs. A new controller that needs a signed-in user adds `@UseGuards(AuthGuard)` and reads the user with `@CurrentUser()`, both imported from `'../auth'` rather than from files inside that folder. Give it `@ApiTags`, `@ApiBearerAuth()` when it is protected, and an `@ApiOperation({ summary })` on every route, with `ApiErrors(...)` from `apps/api/src/common/openapi.ts` for the usual failures; `openapi.spec.ts` fails until every route has a summary and a tag.
+Add a phase only after this phase's checks pass: `npm test`, `npm run lint`, `npm run format:check`, and a ready health response from `npm run up`. New application tables go in a new Prisma migration. New client-visible failures go through `AppException` and an existing or newly documented error code in `@ayd/shared`. Use `notFound()` for a missing or foreign id (the two must look the same) and `invalidRequest()` for bad input; both live in `packages/core/src/errors/app.exception.ts`. Audit rows go through `writeAuditLog` in `packages/core/src/audit/audit-log.ts`, with ids and outcomes in the metadata and never secrets. When an audit row records a delete or change, write it in the same transaction as that change, and only when something changed (as `PrismaConnectionRepository.delete` and `PrismaQueryHistory.delete` do). Log errors with `safeErrorDetail`, which strips connection URLs. A new controller that needs a signed-in user adds `@UseGuards(AuthGuard)` and reads the user with `@CurrentUser()`, both imported from `'../auth'` rather than from files inside that folder. Give it `@ApiTags`, `@ApiBearerAuth()` when it is protected, and an `@ApiOperation({ summary })` on every route, with `ApiErrors(...)` from `apps/api/src/common/openapi.ts` for the usual failures; `openapi.spec.ts` fails until every route has a summary and a tag. A route that takes a body declares it as a DTO class in a `*.dto.ts` file beside the controller, with `@ApiProperty` and class-validator decorators; `openapi.spec.ts` fails on a hand-written body schema.
 
 **API docs (Swagger, stage 1, 2026-10-16).** `@nestjs/swagger` builds an OpenAPI 3 document from the controllers' routes and decorators. `apps/api/src/common/openapi.ts`:
 
@@ -200,4 +200,31 @@ Add a phase only after this phase's checks pass: `npm test`, `npm run lint`, `np
 - `setupApiDocs` serves Swagger UI at `/docs`, and the document at `/docs/openapi.json` and `.yaml`. It refuses in production, because the page maps every route for an attacker.
 - `ApiErrors(400, 401, 404, 429)` documents the usual failures with that envelope.
 
-TypeScript interfaces disappear when the code is compiled, and the request bodies are interfaces or `unknown`, so Swagger cannot see their shape. Bodies are therefore described with hand-written schemas and examples in `@ApiBody`. Stage 2 replaces them with DTO classes that carry both `@ApiProperty` and class-validator rules (brief item 4), so one class documents and validates each body.
+TypeScript interfaces disappear when the code is compiled, so Swagger cannot see them. In stage 1 the bodies were therefore described with hand-written schemas in `@ApiBody`; stage 2a replaced those with DTO classes.
+
+**Request validation (stage 2a, 2026-10-16).** Each request body is a DTO class whose fields carry `@ApiProperty` (for the docs) and class-validator rules (for the check):
+
+- `DevLoginDto`;
+- `CreateConnectionDto`, and `UpdateConnectionDto`, built from it with `PartialType`;
+- `RunSqlDto` and `AskQuestionDto`;
+- `CheckSqlDto`;
+- `UpdateAllowlistDto`, with nested table and column DTOs.
+
+`createValidationPipe()` in `apps/api/src/common/validation.ts` is installed globally by `main.ts` and by the test app. It works like this:
+
+- **`whitelist`:** fields a DTO does not declare are dropped.
+- **`transform`:** the controller receives the DTO instance, with `@Transform` applied (the question is trimmed).
+- **`stopAtFirstError`:** one message per field.
+- **Failures:** they become the API's own `invalidRequest()`, so the code is still `VALIDATION_ERROR`, with the first message. A nested problem gets its path, such as `tables.0.columns.0.name must be a string`.
+
+Two details:
+
+- **Decorators run from the bottom up,** so the basic type check sits closest to the property. Otherwise a number would be reported as "too long".
+- **The DTOs check types and shape only.** Business rules stay in the core services, because the worker calls those too:
+  - the lengths and the port range;
+  - the SSL mode (which must still answer `SSL_REQUIRED`);
+  - the allowlist against the snapshot.
+
+  A connection field sent as `null` in a `PATCH` counts as not sent, as before, because `ConnectionService` keeps the saved value for `null`.
+
+The guard runs before the pipe, so a request without a token gets 401 even when its body is also bad.

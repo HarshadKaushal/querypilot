@@ -9,24 +9,13 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiBody,
-  ApiOperation,
-  ApiResponse,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { AuthGuard, type PublicUser, CurrentUser } from '../auth';
 import { ApiErrors } from '../common/openapi';
 import { requestMeta } from '../common/request-meta';
 import { ConnectionService, JobQueue, SchemaService } from '@ayd/core';
-
-const DESCRIPTION = {
-  type: 'string',
-  nullable: true,
-  description: 'Shown to the model.',
-};
+import { UpdateAllowlistDto } from './allowlist.dto';
 
 @ApiTags('schema and allowlist')
 @ApiBearerAuth()
@@ -81,53 +70,14 @@ export class SchemaController {
     description:
       'Lists every table (and its columns) the AI may see; anything left out is hidden. `version` is the schema version from GET allowlist. Only the columns listed under a table are allowed.',
   })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      required: ['version', 'tables'],
-      properties: {
-        version: { type: 'integer' },
-        tables: {
-          type: 'array',
-          items: {
-            type: 'object',
-            required: ['schema', 'name'],
-            properties: {
-              schema: { type: 'string' },
-              name: { type: 'string' },
-              description: DESCRIPTION,
-              columns: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  required: ['name'],
-                  properties: { name: { type: 'string' }, description: DESCRIPTION },
-                },
-              },
-            },
-          },
-        },
-      },
-      example: {
-        version: 1,
-        tables: [
-          {
-            schema: 'public',
-            name: 'orders',
-            description: 'One row per order',
-            columns: [{ name: 'id' }, { name: 'created_at' }],
-          },
-        ],
-      },
-    },
-  })
   @ApiResponse({ status: 200, description: 'The saved allowlist.' })
   @ApiErrors(400, 404)
   updateAllowlist(
     @CurrentUser() user: PublicUser,
     @Param('id') id: string,
     @Req() request: Request,
-    @Body() body: unknown,
+    // The pipe checks the shape; SchemaService checks it against the latest snapshot.
+    @Body() body: UpdateAllowlistDto,
   ) {
     return this.schemas.updateAllowlist(user.id, id, body, requestMeta(request).ip);
   }

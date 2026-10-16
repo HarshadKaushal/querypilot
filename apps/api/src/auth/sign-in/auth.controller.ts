@@ -27,6 +27,7 @@ import type { AppEnv } from '../../config/env';
 import { requestMeta } from '../../common/request-meta';
 import { AuthRateLimitGuard } from '../../limits/auth-rate-limit.guard';
 import { AuthService } from './auth.service';
+import { DevLoginDto } from './dev-login.dto';
 import {
   OAUTH_COOKIE,
   REFRESH_COOKIE,
@@ -35,11 +36,6 @@ import {
   readCookie,
   refreshCookieOptions,
 } from './cookies';
-
-interface DevLoginBody {
-  email?: unknown;
-  name?: unknown;
-}
 
 @ApiTags('auth')
 @Controller('v1/auth')
@@ -121,17 +117,8 @@ export class AuthController {
     description:
       'Creates the user on first use, sets the refresh cookie, and returns `accessToken`. Paste that token into **Authorize** to try the other routes. Answers 404 when `DEV_LOGIN_ENABLED` is off.',
   })
-  @ApiBody({
-    required: false,
-    schema: {
-      type: 'object',
-      properties: {
-        email: { type: 'string', description: 'Default: dev@localhost' },
-        name: { type: 'string', description: 'Default: Local developer' },
-      },
-      example: { email: 'swagger@localhost', name: 'Swagger tester' },
-    },
-  })
+  // No body at all is fine: it signs in as dev@localhost.
+  @ApiBody({ type: DevLoginDto, required: false })
   @ApiResponse({ status: 200, description: 'Signed in: accessToken, expiresIn, user.' })
   @ApiErrors(400, 404, 429)
   @UseGuards(AuthRateLimitGuard)
@@ -139,11 +126,11 @@ export class AuthController {
   async devLogin(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
-    @Body() body: DevLoginBody,
+    @Body() body: DevLoginDto,
   ) {
     const session = await this.auth.devLogin({
-      email: typeof body?.email === 'string' ? body.email : undefined,
-      name: typeof body?.name === 'string' ? body.name : undefined,
+      email: body.email,
+      name: body.name,
       meta: requestMeta(request),
     });
     this.setRefreshCookie(response, session.refreshToken);

@@ -5,6 +5,7 @@ import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { DOCS_PATH, setupApiDocs } from './common/openapi';
+import { createValidationPipe } from './common/validation';
 import { APP_ENV } from './config/app-config.module';
 import type { AppEnv } from './config/env';
 
@@ -24,6 +25,7 @@ async function bootstrap(): Promise<void> {
   const logger = app.get(Logger);
   app.useLogger(logger);
   app.useGlobalFilters(app.get(AllExceptionsFilter));
+  app.useGlobalPipes(createValidationPipe());
   app.enableShutdownHooks();
 
   const env = app.get<AppEnv>(APP_ENV);

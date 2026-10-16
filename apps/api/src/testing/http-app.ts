@@ -14,6 +14,7 @@ import { AUTH_REPOSITORY } from '../auth/storage/auth.repository';
 import { TokenService } from '../auth/tokens/token.service';
 import { MemoryAuthRepository } from './memory-auth.repository';
 import { AllExceptionsFilter } from '../common/filters/all-exceptions.filter';
+import { createValidationPipe } from '../common/validation';
 import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env';
 import { AuthRateLimitGuard } from '../limits/auth-rate-limit.guard';
@@ -30,8 +31,8 @@ const NO_GOOGLE: GoogleIdentityProvider = {
 
 /**
  * A Nest app for HTTP tests: the real auth stack (dev login, guard, tokens) backed by an
- * in-memory user store, the real limits over in-memory counters, the real error filter, and
- * a fixed request id. Pass the controllers and providers under test; a provider passed for
+ * in-memory user store, the real limits over in-memory counters, the real error filter and
+ * validation pipe, and a fixed request id. Pass the controllers and providers under test; a provider passed for
  * RateLimiter or DailyQuota replaces the default.
  */
 export async function createHttpApp(options: {
@@ -68,6 +69,8 @@ export async function createHttpApp(options: {
   app.useGlobalFilters(
     new AllExceptionsFilter({ error: () => undefined } as unknown as Logger),
   );
+  // The same request validation as main.ts.
+  app.useGlobalPipes(createValidationPipe());
   await app.init();
   return app;
 }

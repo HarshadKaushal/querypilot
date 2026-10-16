@@ -107,14 +107,32 @@ describe('API docs (OpenAPI)', () => {
     });
   });
 
-  it('shows an example body for asking a question', () => {
+  it('describes every request body with a DTO class, not a hand-written schema', () => {
     const document = buildOpenApiDocument(app);
-    const body = document.paths['/v1/connections/{id}/questions']?.post?.requestBody;
-    expect(body).toMatchObject({
+    const inline = operations(document)
+      .filter(([, op]) => op.requestBody)
+      .filter(([, op]) => {
+        const body = op.requestBody as { content?: Record<string, { schema?: object }> };
+        const schema = body.content?.['application/json']?.schema;
+        return !(schema && '$ref' in schema);
+      })
+      .map(([name]) => name);
+    expect(inline).toEqual([]);
+  });
+
+  it('shows the question DTO with its example and limit', () => {
+    const document = buildOpenApiDocument(app);
+    expect(
+      document.paths['/v1/connections/{id}/questions']?.post?.requestBody,
+    ).toMatchObject({
       content: {
-        'application/json': {
-          schema: { example: { question: expect.any(String) } },
-        },
+        'application/json': { schema: { $ref: '#/components/schemas/AskQuestionDto' } },
+      },
+    });
+    expect(document.components?.schemas?.AskQuestionDto).toMatchObject({
+      required: ['question'],
+      properties: {
+        question: { type: 'string', maxLength: 2000, example: expect.any(String) },
       },
     });
   });

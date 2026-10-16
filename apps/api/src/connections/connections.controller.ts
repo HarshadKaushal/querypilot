@@ -11,56 +11,13 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiBody,
-  ApiOperation,
-  ApiResponse,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { AuthGuard, CurrentUser, type PublicUser } from '../auth';
 import { ApiErrors } from '../common/openapi';
 import { requestMeta } from '../common/request-meta';
-import { type ConnectionInput, ConnectionService, JobQueue } from '@ayd/core';
-
-/** For the API docs: a connection to the sample database from `npm run up:deps`. */
-const CONNECTION_EXAMPLE = {
-  label: 'Sample shop',
-  host: '127.0.0.1',
-  port: 5433,
-  databaseName: 'sample',
-  username: 'sample_ro',
-  password: 'sample_ro_password',
-  sslMode: 'require',
-  sendSampleRowsToLlm: false,
-};
-
-const CONNECTION_FIELDS = {
-  label: { type: 'string' },
-  host: { type: 'string' },
-  port: { type: 'integer' },
-  databaseName: { type: 'string' },
-  username: { type: 'string', description: 'A read-only login.' },
-  password: { type: 'string', description: 'Encrypted at rest, never returned.' },
-  sslMode: {
-    type: 'string',
-    enum: ['require', 'verify-full'],
-    description: 'Plaintext modes are refused (SSL_REQUIRED).',
-  },
-  sendSampleRowsToLlm: { type: 'boolean' },
-};
-
-interface ConnectionBody {
-  label?: unknown;
-  host?: unknown;
-  port?: unknown;
-  databaseName?: unknown;
-  username?: unknown;
-  password?: unknown;
-  sslMode?: unknown;
-  sendSampleRowsToLlm?: unknown;
-}
+import { ConnectionService, JobQueue } from '@ayd/core';
+import { CreateConnectionDto, UpdateConnectionDto } from './connection.dto';
 
 @ApiTags('connections')
 @ApiBearerAuth()
@@ -84,26 +41,21 @@ export class ConnectionsController {
     description:
       'Queues a read-only check. The connection is saved only if the check passes; follow the returned job with `GET /v1/jobs/{id}`.',
   })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      required: Object.keys(CONNECTION_EXAMPLE),
-      properties: CONNECTION_FIELDS,
-      example: CONNECTION_EXAMPLE,
-    },
-  })
   @ApiResponse({ status: 202, description: 'The queued connection.create job.' })
   @ApiErrors(400, 429)
   @HttpCode(202)
   create(
     @CurrentUser() user: PublicUser,
     @Req() request: Request,
-    @Body() body: ConnectionBody,
+    @Body() body: CreateConnectionDto,
   ) {
     return this.jobs.add('connection.create', {
       userId: user.id,
       ip: requestMeta(request).ip,
-      pending: this.connections.prepareCreate(readCreate(body)),
+      pending: this.connections.prepareCreate({
+        ...body,
+        sendSampleRowsToLlm: body.sendSampleRowsToLlm ?? false,
+      }),
     });
   }
 
@@ -152,13 +104,6 @@ export class ConnectionsController {
     description:
       'Send only the fields to change. A new label or sample-rows setting is saved at once (200). A new host, port, database, login, or SSL mode is checked first (202 with a job).',
   })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: CONNECTION_FIELDS,
-      example: { label: 'Sample shop (renamed)' },
-    },
-  })
   @ApiResponse({ status: 200, description: 'Saved at once: the connection.' })
   @ApiResponse({ status: 202, description: 'Checked first: the connection.update job.' })
   @ApiErrors(400, 404, 429)
@@ -167,10 +112,10 @@ export class ConnectionsController {
     @Param('id') id: string,
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
-    @Body() body: ConnectionBody,
+    @Body() body: UpdateConnectionDto,
   ) {
     const ip = requestMeta(request).ip;
-    const plan = await this.connections.prepareUpdate(user.id, id, readPatch(body), ip);
+    const plan = await this.connections.prepareUpdate(user.id, id, body, ip);
     if (!plan.check) {
       return plan.connection;
     }
@@ -195,32 +140,4 @@ export class ConnectionsController {
   ): Promise<void> {
     await this.connections.delete(user.id, id, requestMeta(request).ip);
   }
-}
-
-function readCreate(body: ConnectionBody): ConnectionInput {
-  return {
-    label: typeof body?.label === 'string' ? body.label : '',
-    host: typeof body?.host === 'string' ? body.host : '',
-    port: typeof body?.port === 'number' ? body.port : Number.NaN,
-    databaseName: typeof body?.databaseName === 'string' ? body.databaseName : '',
-    username: typeof body?.username === 'string' ? body.username : '',
-    password: typeof body?.password === 'string' ? body.password : '',
-    sslMode: typeof body?.sslMode === 'string' ? body.sslMode : '',
-    sendSampleRowsToLlm: body?.sendSampleRowsToLlm === true,
-  };
-}
-
-function readPatch(body: ConnectionBody): Partial<ConnectionInput> {
-  const patch: Partial<ConnectionInput> = {};
-  if (typeof body?.label === 'string') patch.label = body.label;
-  if (typeof body?.host === 'string') patch.host = body.host;
-  if (typeof body?.port === 'number') patch.port = body.port;
-  if (typeof body?.databaseName === 'string') patch.databaseName = body.databaseName;
-  if (typeof body?.username === 'string') patch.username = body.username;
-  if (typeof body?.password === 'string') patch.password = body.password;
-  if (typeof body?.sslMode === 'string') patch.sslMode = body.sslMode;
-  if (typeof body?.sendSampleRowsToLlm === 'boolean') {
-    patch.sendSampleRowsToLlm = body.sendSampleRowsToLlm;
-  }
-  return patch;
 }
