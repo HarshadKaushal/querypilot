@@ -1,4 +1,5 @@
 import { Controller, Get, Inject } from '@nestjs/common';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env';
 
@@ -23,11 +24,17 @@ export const SETUP_SQL = [
   'REVOKE CREATE ON SCHEMA public FROM PUBLIC;',
 ].join('\n');
 
+@ApiTags('meta')
 @Controller('v1/meta')
 export class EgressController {
   constructor(@Inject(APP_ENV) private readonly env: AppEnv) {}
 
   @Get('egress')
+  @ApiOperation({
+    summary: 'Setup help: the address to allow, and SQL for a read-only login',
+    description: 'Public: no sign-in needed.',
+  })
+  @ApiResponse({ status: 200, description: 'egressIp, setupSql, and firewall advice.' })
   egress(): { egressIp: string; setupSql: string; firewall: string } {
     return {
       egressIp: this.env.EGRESS_IP,

@@ -13,8 +13,17 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiProduces,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { AuthGuard, type PublicUser, CurrentUser } from '../auth';
+import { ApiErrors } from '../common/openapi';
 import { SubmissionLimits } from '../limits/submission-limits';
 import { JOB_STREAM_TIMING, streamJob, type JobStreamTiming } from './job-stream';
 
@@ -24,6 +33,9 @@ export const MAX_QUESTION_LENGTH = 2000;
 /** Lets tests shorten the stream's intervals. */
 export const JOB_STREAM_TIMING_TOKEN = Symbol('JOB_STREAM_TIMING');
 
+@ApiTags('questions and jobs')
+@ApiBearerAuth()
+@ApiErrors(401)
 @Controller('v1')
 @UseGuards(AuthGuard)
 export class JobsController {
@@ -42,6 +54,21 @@ export class JobsController {
    * it with the SQL guard and runs it; GET /v1/jobs/:id reports the outcome.
    */
   @Post('connections/:id/queries')
+  @ApiOperation({
+    summary: 'Run your own SQL (queued)',
+    description:
+      'The worker checks the SQL with the SQL guard against the allowlist, then runs it read-only.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['sql'],
+      properties: { sql: { type: 'string', maxLength: MAX_SQL_LENGTH } },
+      example: { sql: 'SELECT count(*) FROM orders' },
+    },
+  })
+  @ApiResponse({ status: 202, description: 'The queued query.run job.' })
+  @ApiErrors(400, 404, 429)
   @HttpCode(202)
   async submitQuery(
     @CurrentUser() user: PublicUser,
@@ -67,6 +94,21 @@ export class JobsController {
    * ambiguous or unanswerable question stops before anything runs.
    */
   @Post('connections/:id/questions')
+  @ApiOperation({
+    summary: 'Ask a question in English (queued)',
+    description:
+      'The worker asks the model for SQL, checks it with the guard, runs it, and adds a chart and a summary. Counts against the daily question quota.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['question'],
+      properties: { question: { type: 'string', maxLength: MAX_QUESTION_LENGTH } },
+      example: { question: 'How many orders were placed each month?' },
+    },
+  })
+  @ApiResponse({ status: 202, description: 'The queued question.ask job.' })
+  @ApiErrors(400, 404, 429)
   @HttpCode(202)
   async ask(
     @CurrentUser() user: PublicUser,
@@ -100,6 +142,9 @@ export class JobsController {
 
   /** A job's state, and its result or error once finished. Only the owner can read it. */
   @Get('jobs/:id')
+  @ApiOperation({ summary: "A job's state, and its result or error once finished" })
+  @ApiResponse({ status: 200, description: 'The job.' })
+  @ApiErrors(404)
   get(@CurrentUser() user: PublicUser, @Param('id') id: string) {
     return this.jobs.get(id, user.id);
   }
@@ -110,6 +155,14 @@ export class JobsController {
    * the URL would end up in logs, so the browser's EventSource cannot be used.
    */
   @Get('jobs/:id/events')
+  @ApiOperation({
+    summary: 'Live updates for a job (Server-Sent Events)',
+    description:
+      'A `job` event with the full job on every change, until it finishes. Swagger UI waits for the stream to end, so use `GET /v1/jobs/{id}` here instead.',
+  })
+  @ApiProduces('text/event-stream')
+  @ApiResponse({ status: 200, description: 'An event stream.' })
+  @ApiErrors(404)
   async stream(
     @CurrentUser() user: PublicUser,
     @Param('id') id: string,
@@ -128,6 +181,13 @@ export class JobsController {
    * job cannot be cancelled and comes back unchanged with 200.
    */
   @Post('jobs/:id/cancel')
+  @ApiOperation({ summary: 'Ask the worker to stop a job' })
+  @ApiResponse({
+    status: 202,
+    description: 'Cancel requested: the job, marked cancelRequested.',
+  })
+  @ApiResponse({ status: 200, description: 'Already finished: the job, unchanged.' })
+  @ApiErrors(404)
   async cancel(
     @CurrentUser() user: PublicUser,
     @Param('id') id: string,

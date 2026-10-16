@@ -1,11 +1,16 @@
 import { USAGE_COUNTERS, utcDay, type UsageCounters } from '@ayd/core';
 import { Controller, Get, Inject, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthGuard, type PublicUser, CurrentUser } from '../auth';
+import { ApiErrors } from '../common/openapi';
 import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env';
 import { SubmissionLimits } from '../limits/submission-limits';
 
 /** Today's usage against the limits (blueprint 12, Usage). The day is UTC. */
+@ApiTags('usage')
+@ApiBearerAuth()
+@ApiErrors(401)
 @Controller('v1/usage')
 @UseGuards(AuthGuard)
 export class UsageController {
@@ -16,6 +21,8 @@ export class UsageController {
   ) {}
 
   @Get()
+  @ApiOperation({ summary: "Today's usage against your limits (UTC day)" })
+  @ApiResponse({ status: 200, description: 'Questions used, limits, rows, and tokens.' })
   async today(@CurrentUser() user: PublicUser) {
     const day = utcDay();
     const [counted, asked] = await Promise.all([

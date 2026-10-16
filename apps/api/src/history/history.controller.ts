@@ -17,8 +17,16 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { Request } from 'express';
 import { AuthGuard, type PublicUser, CurrentUser } from '../auth';
+import { ApiErrors } from '../common/openapi';
 import { requestMeta } from '../common/request-meta';
 import { SubmissionLimits } from '../limits/submission-limits';
 
@@ -29,6 +37,9 @@ const MAX_PAGE = 50;
  * The signed-in user's past questions and SQL (blueprint 8.4): what was asked, the SQL that
  * ran, the outcome, and the cost. Never result rows: re-run to see rows again.
  */
+@ApiTags('history')
+@ApiBearerAuth()
+@ApiErrors(401)
 @Controller('v1/history')
 @UseGuards(AuthGuard)
 export class HistoryController {
@@ -41,6 +52,18 @@ export class HistoryController {
 
   /** Newest first. Pass the returned nextCursor as `cursor` for the next page. */
   @Get()
+  @ApiOperation({ summary: 'Your past questions and SQL, newest first (no result rows)' })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    schema: { type: 'integer', minimum: 1, maximum: MAX_PAGE, default: DEFAULT_PAGE },
+  })
+  @ApiQuery({
+    name: 'cursor',
+    required: false,
+    description: 'The nextCursor from the previous page.',
+  })
+  @ApiResponse({ status: 200, description: 'One page of entries, and nextCursor.' })
   list(
     @CurrentUser() user: PublicUser,
     @Query('limit') limit?: string,
@@ -54,6 +77,9 @@ export class HistoryController {
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'One history entry' })
+  @ApiResponse({ status: 200, description: 'The entry.' })
+  @ApiErrors(404)
   get(@CurrentUser() user: PublicUser, @Param('id') id: string) {
     return this.history.get(user.id, id);
   }
@@ -63,6 +89,12 @@ export class HistoryController {
    * checks it with the guard again, so a schema change since then is caught.
    */
   @Post(':id/rerun')
+  @ApiOperation({
+    summary: "Run an entry's SQL again (queued, no model call)",
+    description: 'Answers 404 when nothing ran for that entry.',
+  })
+  @ApiResponse({ status: 202, description: 'The queued query.run job.' })
+  @ApiErrors(404, 429)
   @HttpCode(202)
   async rerun(@CurrentUser() user: PublicUser, @Param('id') id: string) {
     const entry = await this.history.get(user.id, id);
@@ -80,6 +112,9 @@ export class HistoryController {
   }
 
   @Delete(':id')
+  @ApiOperation({ summary: 'Delete one history entry' })
+  @ApiResponse({ status: 204, description: 'Deleted.' })
+  @ApiErrors(404)
   @HttpCode(204)
   async delete(
     @CurrentUser() user: PublicUser,
@@ -93,6 +128,8 @@ export class HistoryController {
   }
 
   @Delete()
+  @ApiOperation({ summary: 'Delete all of your history' })
+  @ApiResponse({ status: 204, description: 'Deleted.' })
   @HttpCode(204)
   async deleteAll(
     @CurrentUser() user: PublicUser,

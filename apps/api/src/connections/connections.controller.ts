@@ -11,10 +11,45 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { AuthGuard, CurrentUser, type PublicUser } from '../auth';
+import { ApiErrors } from '../common/openapi';
 import { requestMeta } from '../common/request-meta';
 import { type ConnectionInput, ConnectionService, JobQueue } from '@ayd/core';
+
+/** For the API docs: a connection to the sample database from `npm run up:deps`. */
+const CONNECTION_EXAMPLE = {
+  label: 'Sample shop',
+  host: '127.0.0.1',
+  port: 5433,
+  databaseName: 'sample',
+  username: 'sample_ro',
+  password: 'sample_ro_password',
+  sslMode: 'require',
+  sendSampleRowsToLlm: false,
+};
+
+const CONNECTION_FIELDS = {
+  label: { type: 'string' },
+  host: { type: 'string' },
+  port: { type: 'integer' },
+  databaseName: { type: 'string' },
+  username: { type: 'string', description: 'A read-only login.' },
+  password: { type: 'string', description: 'Encrypted at rest, never returned.' },
+  sslMode: {
+    type: 'string',
+    enum: ['require', 'verify-full'],
+    description: 'Plaintext modes are refused (SSL_REQUIRED).',
+  },
+  sendSampleRowsToLlm: { type: 'boolean' },
+};
 
 interface ConnectionBody {
   label?: unknown;
@@ -27,6 +62,9 @@ interface ConnectionBody {
   sendSampleRowsToLlm?: unknown;
 }
 
+@ApiTags('connections')
+@ApiBearerAuth()
+@ApiErrors(401)
 @Controller('v1/connections')
 @UseGuards(AuthGuard)
 export class ConnectionsController {
@@ -41,6 +79,21 @@ export class ConnectionsController {
    * result is the saved connection.
    */
   @Post()
+  @ApiOperation({
+    summary: 'Add a database connection',
+    description:
+      'Queues a read-only check. The connection is saved only if the check passes; follow the returned job with `GET /v1/jobs/{id}`.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: Object.keys(CONNECTION_EXAMPLE),
+      properties: CONNECTION_FIELDS,
+      example: CONNECTION_EXAMPLE,
+    },
+  })
+  @ApiResponse({ status: 202, description: 'The queued connection.create job.' })
+  @ApiErrors(400, 429)
   @HttpCode(202)
   create(
     @CurrentUser() user: PublicUser,
@@ -55,17 +108,25 @@ export class ConnectionsController {
   }
 
   @Get()
+  @ApiOperation({ summary: 'List your connections (never the login or password)' })
+  @ApiResponse({ status: 200, description: 'Your connections.' })
   list(@CurrentUser() user: PublicUser) {
     return this.connections.list(user.id);
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'Get one connection' })
+  @ApiResponse({ status: 200, description: 'The connection.' })
+  @ApiErrors(404)
   get(@CurrentUser() user: PublicUser, @Param('id') id: string) {
     return this.connections.get(user.id, id);
   }
 
   /** Queues a fresh read-only check of a saved connection. */
   @Post(':id/test')
+  @ApiOperation({ summary: 'Check a saved connection again (queued)' })
+  @ApiResponse({ status: 202, description: 'The queued connection.test job.' })
+  @ApiErrors(404, 429)
   @HttpCode(202)
   async test(
     @CurrentUser() user: PublicUser,
@@ -86,6 +147,21 @@ export class ConnectionsController {
    * job, and the change is saved only if the check passes.
    */
   @Patch(':id')
+  @ApiOperation({
+    summary: 'Change a connection',
+    description:
+      'Send only the fields to change. A new label or sample-rows setting is saved at once (200). A new host, port, database, login, or SSL mode is checked first (202 with a job).',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: CONNECTION_FIELDS,
+      example: { label: 'Sample shop (renamed)' },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Saved at once: the connection.' })
+  @ApiResponse({ status: 202, description: 'Checked first: the connection.update job.' })
+  @ApiErrors(400, 404, 429)
   async update(
     @CurrentUser() user: PublicUser,
     @Param('id') id: string,
@@ -108,6 +184,9 @@ export class ConnectionsController {
   }
 
   @Delete(':id')
+  @ApiOperation({ summary: 'Delete a connection, its schema, and its allowlist' })
+  @ApiResponse({ status: 204, description: 'Deleted.' })
+  @ApiErrors(404)
   @HttpCode(204)
   async delete(
     @CurrentUser() user: PublicUser,

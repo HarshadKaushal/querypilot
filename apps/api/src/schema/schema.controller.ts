@@ -9,11 +9,28 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { Request } from 'express';
 import { AuthGuard, type PublicUser, CurrentUser } from '../auth';
+import { ApiErrors } from '../common/openapi';
 import { requestMeta } from '../common/request-meta';
 import { ConnectionService, JobQueue, SchemaService } from '@ayd/core';
 
+const DESCRIPTION = {
+  type: 'string',
+  nullable: true,
+  description: 'Shown to the model.',
+};
+
+@ApiTags('schema and allowlist')
+@ApiBearerAuth()
+@ApiErrors(401)
 @Controller('v1/connections/:id')
 @UseGuards(AuthGuard)
 export class SchemaController {
@@ -25,6 +42,9 @@ export class SchemaController {
 
   /** Queues a read of the database's schema. The job's result is the refresh summary. */
   @Post('schema/refresh')
+  @ApiOperation({ summary: "Read the database's tables and columns again (queued)" })
+  @ApiResponse({ status: 202, description: 'The queued schema.refresh job.' })
+  @ApiErrors(404, 429)
   @HttpCode(202)
   async refresh(
     @CurrentUser() user: PublicUser,
@@ -40,16 +60,69 @@ export class SchemaController {
   }
 
   @Get('schema')
+  @ApiOperation({ summary: 'The latest schema snapshot: every table and column found' })
+  @ApiResponse({ status: 200, description: 'The snapshot.' })
+  @ApiErrors(404)
   schema(@CurrentUser() user: PublicUser, @Param('id') id: string) {
     return this.schemas.schema(user.id, id);
   }
 
   @Get('allowlist')
+  @ApiOperation({ summary: 'Which tables and columns the AI may see' })
+  @ApiResponse({ status: 200, description: 'The allowlist, with the schema version.' })
+  @ApiErrors(404)
   allowlist(@CurrentUser() user: PublicUser, @Param('id') id: string) {
     return this.schemas.allowlist(user.id, id);
   }
 
   @Put('allowlist')
+  @ApiOperation({
+    summary: 'Replace the allowlist',
+    description:
+      'Lists every table (and its columns) the AI may see; anything left out is hidden. `version` is the schema version from GET allowlist. Only the columns listed under a table are allowed.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['version', 'tables'],
+      properties: {
+        version: { type: 'integer' },
+        tables: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['schema', 'name'],
+            properties: {
+              schema: { type: 'string' },
+              name: { type: 'string' },
+              description: DESCRIPTION,
+              columns: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  required: ['name'],
+                  properties: { name: { type: 'string' }, description: DESCRIPTION },
+                },
+              },
+            },
+          },
+        },
+      },
+      example: {
+        version: 1,
+        tables: [
+          {
+            schema: 'public',
+            name: 'orders',
+            description: 'One row per order',
+            columns: [{ name: 'id' }, { name: 'created_at' }],
+          },
+        ],
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'The saved allowlist.' })
+  @ApiErrors(400, 404)
   updateAllowlist(
     @CurrentUser() user: PublicUser,
     @Param('id') id: string,

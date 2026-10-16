@@ -12,7 +12,16 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AppException } from '@ayd/core';
+import {
+  ApiBody,
+  ApiCookieAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { Request, Response } from 'express';
+import { ApiErrors } from '../../common/openapi';
 import { APP_ENV } from '../../config/app-config.module';
 import type { AppEnv } from '../../config/env';
 import { requestMeta } from '../../common/request-meta';
@@ -32,6 +41,7 @@ interface DevLoginBody {
   name?: unknown;
 }
 
+@ApiTags('auth')
 @Controller('v1/auth')
 export class AuthController {
   constructor(
@@ -41,6 +51,12 @@ export class AuthController {
 
   /** A browser link, so a failure goes to the web app's sign-in page, not a JSON page. */
   @Get('google/start')
+  @ApiOperation({
+    summary: 'Start Google sign-in',
+    description:
+      'Open this URL in the browser; "Try it out" cannot follow it. Redirects to Google, or to the web app sign-in page with `?error=<code>` when Google sign-in is not configured.',
+  })
+  @ApiResponse({ status: 302, description: 'Redirect to Google or to the sign-in page.' })
   @Redirect()
   start(@Res({ passthrough: true }) response: Response): {
     url: string;
@@ -64,6 +80,15 @@ export class AuthController {
    * here. A sign-in that fails for a known reason goes to the sign-in page with its code.
    */
   @Get('google/callback')
+  @ApiOperation({
+    summary: 'Google sign-in callback',
+    description:
+      'Google sends the browser here. Sets the refresh cookie and redirects to the web app, or to its sign-in page with `?error=<code>`. Not for calling by hand.',
+  })
+  @ApiQuery({ name: 'code', required: false, description: 'From Google.' })
+  @ApiQuery({ name: 'state', required: false, description: 'From Google.' })
+  @ApiResponse({ status: 302, description: 'Redirect to the web app.' })
+  @ApiErrors(429)
   @UseGuards(AuthRateLimitGuard)
   async callback(
     @Req() request: Request,
@@ -91,6 +116,24 @@ export class AuthController {
   }
 
   @Post('dev/login')
+  @ApiOperation({
+    summary: 'Sign in without Google (development only)',
+    description:
+      'Creates the user on first use, sets the refresh cookie, and returns `accessToken`. Paste that token into **Authorize** to try the other routes. Answers 404 when `DEV_LOGIN_ENABLED` is off.',
+  })
+  @ApiBody({
+    required: false,
+    schema: {
+      type: 'object',
+      properties: {
+        email: { type: 'string', description: 'Default: dev@localhost' },
+        name: { type: 'string', description: 'Default: Local developer' },
+      },
+      example: { email: 'swagger@localhost', name: 'Swagger tester' },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Signed in: accessToken, expiresIn, user.' })
+  @ApiErrors(400, 404, 429)
   @UseGuards(AuthRateLimitGuard)
   @HttpCode(200)
   async devLogin(
@@ -108,6 +151,14 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @ApiCookieAuth()
+  @ApiOperation({
+    summary: 'Get a new access token',
+    description:
+      'Uses the refresh cookie once and sets a new one. Sending an already used cookie signs out every session from that sign-in.',
+  })
+  @ApiResponse({ status: 200, description: 'A new accessToken, expiresIn, and user.' })
+  @ApiErrors(401, 429)
   @UseGuards(AuthRateLimitGuard)
   @HttpCode(200)
   async refresh(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
@@ -120,6 +171,9 @@ export class AuthController {
   }
 
   @Post('logout')
+  @ApiCookieAuth()
+  @ApiOperation({ summary: 'Sign out: revoke the refresh cookie and clear it' })
+  @ApiResponse({ status: 204, description: 'Signed out (also when already signed out).' })
   @HttpCode(204)
   async logout(
     @Req() request: Request,

@@ -2,7 +2,7 @@
 
 The shared starting point for every Claude session on this repository, including several running at once. **Read this first, then update it** (see "Keeping this file current"). The code is the source of truth; this file says where things stand and what was decided, so a new session does not have to rediscover it.
 
-Last updated: 2026-10-16, after the auth folder reorganisation (base `f15230d`).
+Last updated: 2026-10-16, after Swagger stage 1 (base `281aa4e`).
 
 ## Keeping this file current
 
@@ -18,7 +18,7 @@ Last updated: 2026-10-16, after the auth folder reorganisation (base `f15230d`).
 ## Snapshot
 
 - **Phases 0 to 9 of the blueprint are done.** Phases 10 (observability and hardening), 11 (evaluation and load tests), and 12 (deployment) are not started.
-- **Against the assignment brief,** four items are open: Swagger docs, DTO validation with class-validator, the evaluation dataset with results, and deployment instructions (see "Open items").
+- **Against the assignment brief,** four items are open: Swagger docs (stage 1 done, schemas still to come), DTO validation with class-validator, the evaluation dataset with results, and deployment instructions (see "Open items").
 - **All work is committed locally on `main`;** nothing is pushed. The user reviews commits afterwards.
 
 ## The project in brief
@@ -78,14 +78,14 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
 
 ## Tests and checks
 
-| Command                                                 | What                                            | Last result                                                                                          |
-| ------------------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `npm test`                                              | Unit tests, no Docker                           | API 94, web 68, worker 6, core 291 (+2 provider tests since), guard 310, ssrf 25, crypto 4, shared 4 |
-| `npm run test:int`                                      | Real Postgres and Redis                         | 95                                                                                                   |
-| `npm run test:e2e`                                      | API end to end                                  | 3                                                                                                    |
-| `npm run test:browser`                                  | Playwright demo flow and axe, desktop and phone | 6                                                                                                    |
-| `npm run test:browser:live`                             | One real-Gemini question (opt-in)               | 1                                                                                                    |
-| `npm run lint`, `npm run format:check`, `npm run build` |                                                 | pass (one known lint warning: TanStack Virtual and the React Compiler)                               |
+| Command                                                 | What                                            | Last result                                                                                           |
+| ------------------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `npm test`                                              | Unit tests, no Docker                           | API 100, web 68, worker 6, core 291 (+2 provider tests since), guard 310, ssrf 25, crypto 4, shared 4 |
+| `npm run test:int`                                      | Real Postgres and Redis                         | 95                                                                                                    |
+| `npm run test:e2e`                                      | API end to end                                  | 3                                                                                                     |
+| `npm run test:browser`                                  | Playwright demo flow and axe, desktop and phone | 6                                                                                                     |
+| `npm run test:browser:live`                             | One real-Gemini question (opt-in)               | 1                                                                                                     |
+| `npm run lint`, `npm run format:check`, `npm run build` |                                                 | pass (one known lint warning: TanStack Virtual and the React Compiler)                                |
 
 `test:int`, `test:browser`, and `build` rebuild packages: see the parallel-session rules above.
 
@@ -119,6 +119,10 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
   - Local only for now; a CI job later.
 - **Development setup:** the dev API stays listening on all interfaces (with dev login on); the user chose not to change it.
 - **Docs:** `docs/extra.md` lists what the project does beyond the brief.
+- **API docs (Swagger), in two stages:**
+  - Stage 1 (done 2026-10-16): `/docs` with tags, summaries, status codes, and example bodies.
+  - Stage 2, together with class-validator (brief item 4): DTO classes that both document and validate.
+  - The docs are not served in production.
 
 ## Pitfalls (things that cost time)
 
@@ -135,9 +139,9 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
 **Against the brief** (estimates from 2026-10-14):
 
 1. Evaluation dataset and report, about 3 to 4 h.
-2. Swagger docs, about 1.5 to 2 h, or about 1 h extra if done with item 4.
+2. Swagger docs: stage 1 done (`/docs`, see `docs/ai-reviews/2026-10-16-swagger-stage-1.md`). Stage 2, the request and response schemas, comes with item 4.
 3. Deployment instructions, about 2 to 3 h; a real cloud deployment is Phase 12.
-4. DTO validation with class-validator, about 2 to 3 h.
+4. DTO validation with class-validator, plus Swagger stage 2, about 3 to 4 h. Each DTO class gets `@ApiProperty` and the validation rules, and replaces the hand-written `@ApiBody` schemas.
 
 **Planned:**
 
@@ -147,8 +151,7 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
 **Loose ends:**
 
 - **One API unit test failed once** (1 of 94, 2026-10-16, right after the package builds), then passed 3 runs in a row. It is not known which test. If it fails again, save the full Jest output.
-- **`test:int` and `test:e2e` were not run after the auth folder move** (Docker was off). Run them the next time Docker is up.
-
+- **`test:int` and `test:e2e` were not run after the auth folder move or Swagger stage 1** (Docker was off). Run them the next time Docker is up, and try `/docs` against the real API.
 - **The first live-events subscription after an API restart hung once** (2026-10-14 16:10). It could not be reproduced. Check `JobEvents.subscribe` and `streamJob` in the code review.
 - **Not built yet:** a chart-type switcher, example question-and-SQL pairs in the prompt, a circuit breaker per model provider, a key re-wrap job, readiness checks for the queue and the model, data export, partitions and retention, a rate limit on connection tests, browser tests in CI, and editing a connection's login in the app.
 - **The main web bundle is about 680 kB** before compression.
@@ -170,3 +173,4 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
 - **2026-10-16:**
   - This context file added, with a `CLAUDE.md` rule to keep it current.
   - `apps/api/src/auth/` grouped into `protect-routes/`, `sign-in/`, `tokens/`, and `storage/`, behind an `index.ts` (no logic change; see `docs/ai-reviews/2026-10-16-auth-folder-layout.md`).
+  - Swagger stage 1: `@nestjs/swagger` 12.0.2, Swagger UI at `/docs` outside production, all 32 routes documented, and `openapi.spec.ts`.

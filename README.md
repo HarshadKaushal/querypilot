@@ -71,6 +71,16 @@ npm run migrate --workspace=@ayd/database
 
 The schema lives in `packages/database`. The container entrypoint runs that migrate command on its own, so `npm run up` does not need this step.
 
+### API docs (Swagger)
+
+Outside production, the API serves interactive docs at http://localhost:3000/docs, generated from the controllers. The raw OpenAPI document is at `/docs/openapi.json` (and `/docs/openapi.yaml`). To call a protected route from the page:
+
+1. Open `POST /v1/auth/dev/login`, press **Try it out**, then **Execute**.
+2. Copy `accessToken` from the response.
+3. Press **Authorize** at the top, paste the token, and close the dialog.
+
+Protected routes then send it. The token lasts 15 minutes. Request bodies are shown as examples; full request and response schemas arrive with DTO validation.
+
 ## Check that it is up
 
 Liveness (process only):
