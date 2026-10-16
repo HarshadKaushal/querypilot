@@ -366,7 +366,17 @@ Before running commands:
 
 When useful, inspect Git status and existing changes before editing files so that my work is preserved.
 
-## 17. Final Principle
+## 17. Shared Session Context
+
+`docs/CONTEXT.md` is the shared starting point for every session, including several sessions running at the same time.
+
+- Read `docs/CONTEXT.md` at the start of every session, before planning or editing.
+- Before starting a task, claim it in its "In progress" table (what, which files, date); remove the row once the work is committed or dropped.
+- Update `docs/CONTEXT.md` after every commit and before a session ends: the snapshot, status, open items, any decision I made, any pitfall that cost time, and one line in the session log.
+- Keep it short and link to the ADRs, `docs/implementation.md`, and the AI review files for detail. When it disagrees with the code, the code is right; correct the file.
+- Follow its rules for parallel sessions: do not build or run tests while another session is using the dev servers, commit one session at a time, and do not stop processes another session started.
+
+## 18. Final Principle
 
 **The objective is not merely to produce working code. The objective is to help me understand the code well enough to explain, debug, test, and eventually build the application myself.**
 

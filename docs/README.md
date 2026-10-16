@@ -2,16 +2,17 @@
 
 Read these in order when you are new to the repository.
 
-| Document                                             | Read it for                                                                                 |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| [blueprint.md](blueprint.md)                         | The product and the phase plan. This is the source of scope.                                |
-| [../README.md](../README.md)                         | How to install, run, and call the API.                                                      |
-| [design-philosophy.md](design-philosophy.md)         | Why the system is a pass-through and why phases are gated.                                  |
-| [features.md](features.md)                           | What is done, partial, or still pending.                                                    |
-| [extra.md](extra.md)                                 | What the project does beyond the assignment brief, and where it is stricter.                |
-| [implementation.md](implementation.md)               | How the current code was built and which trade-offs were taken.                             |
-| [business-domain.md](business-domain.md)             | Business rules. **Enforced** means the code does it. **Assumed** means it is not built yet. |
-| [testing.md](testing.md)                             | Where tests go, how they are named, and which command runs them.                            |
-| [dependency-advisories.md](dependency-advisories.md) | npm audit findings accepted on purpose, why, and when to revisit them.                      |
-| [adr/](adr/)                                         | Short records of decisions that are expensive to reverse.                                   |
-| [ai-reviews/](ai-reviews/)                           | One review per commit: AI usage, accepted and rejected suggestions, and decisions.          |
+| Document                                             | Read it for                                                                                     |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| [CONTEXT.md](CONTEXT.md)                             | Where things stand now, decisions, pitfalls, and work in progress. Read first in every session. |
+| [blueprint.md](blueprint.md)                         | The product and the phase plan. This is the source of scope.                                    |
+| [../README.md](../README.md)                         | How to install, run, and call the API.                                                          |
+| [design-philosophy.md](design-philosophy.md)         | Why the system is a pass-through and why phases are gated.                                      |
+| [features.md](features.md)                           | What is done, partial, or still pending.                                                        |
+| [extra.md](extra.md)                                 | What the project does beyond the assignment brief, and where it is stricter.                    |
+| [implementation.md](implementation.md)               | How the current code was built and which trade-offs were taken.                                 |
+| [business-domain.md](business-domain.md)             | Business rules. **Enforced** means the code does it. **Assumed** means it is not built yet.     |
+| [testing.md](testing.md)                             | Where tests go, how they are named, and which command runs them.                                |
+| [dependency-advisories.md](dependency-advisories.md) | npm audit findings accepted on purpose, why, and when to revisit them.                          |
+| [adr/](adr/)                                         | Short records of decisions that are expensive to reverse.                                       |
+| [ai-reviews/](ai-reviews/)                           | One review per commit: AI usage, accepted and rejected suggestions, and decisions.              |
