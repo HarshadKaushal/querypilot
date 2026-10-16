@@ -2,7 +2,7 @@
 
 The shared starting point for every Claude session on this repository, including several running at once. **Read this first, then update it** (see "Keeping this file current"). The code is the source of truth; this file says where things stand and what was decided, so a new session does not have to rediscover it.
 
-Last updated: 2026-10-16, after stage 2a, request validation (base `9713c2a`).
+Last updated: 2026-10-16, after stage 2b, response schemas (base `901978c`).
 
 ## Keeping this file current
 
@@ -18,7 +18,7 @@ Last updated: 2026-10-16, after stage 2a, request validation (base `9713c2a`).
 ## Snapshot
 
 - **Phases 0 to 9 of the blueprint are done.** Phases 10 (observability and hardening), 11 (evaluation and load tests), and 12 (deployment) are not started.
-- **Against the assignment brief,** two items are open, the evaluation dataset with results and deployment instructions. Two more are nearly done: Swagger docs (only response schemas left) and DTO validation (request bodies done). See "Open items".
+- **Against the assignment brief,** two items are open, the evaluation dataset with results and deployment instructions. Swagger docs and DTO validation are done. See "Open items".
 - **All work is committed locally on `main`;** nothing is pushed. The user reviews commits afterwards.
 
 ## The project in brief
@@ -80,7 +80,7 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
 
 | Command                                                 | What                                            | Last result                                                                                           |
 | ------------------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `npm test`                                              | Unit tests, no Docker                           | API 110, web 68, worker 6, core 291 (+2 provider tests since), guard 310, ssrf 25, crypto 4, shared 4 |
+| `npm test`                                              | Unit tests, no Docker                           | API 112, web 68, worker 6, core 291 (+2 provider tests since), guard 310, ssrf 25, crypto 4, shared 4 |
 | `npm run test:int`                                      | Real Postgres and Redis                         | 95                                                                                                    |
 | `npm run test:e2e`                                      | API end to end                                  | 3                                                                                                     |
 | `npm run test:browser`                                  | Playwright demo flow and axe, desktop and phone | 6                                                                                                     |
@@ -119,9 +119,10 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
   - Local only for now; a CI job later.
 - **Development setup:** the dev API stays listening on all interfaces (with dev login on); the user chose not to change it.
 - **Docs:** `docs/extra.md` lists what the project does beyond the brief.
+- **API docs file names:** `*.dto.ts` holds what a client sends (validated); `*.responses.ts` holds what it gets back (docs only).
 - **API docs (Swagger), in two stages:**
   - Stage 1 (done 2026-10-16): `/docs` with tags, summaries, status codes, and example bodies.
-  - Stage 2, together with class-validator (brief item 4): DTO classes that both document and validate. 2a (request bodies) is done; 2b (response schemas) is next.
+  - Stage 2, together with class-validator (brief item 4): DTO classes that both document and validate. 2a (request bodies) and 2b (response schemas) are done.
   - The docs are not served in production.
 - **Request validation (2026-10-16):**
   - A failure gives a specific message, still with code `VALIDATION_ERROR`.
@@ -144,7 +145,7 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
 **Against the brief** (estimates from 2026-10-14):
 
 1. Evaluation dataset and report, about 3 to 4 h.
-2. Swagger docs: stages 1 and 2a are done. Left is **2b**, response schemas: documentation-only classes for what each route returns, about 1 to 1.5 h.
+2. Swagger docs: **done** (stages 1, 2a, and 2b; `docs/ai-reviews/2026-10-16-response-schemas.md`). A possible follow-up: generate the web app's `apps/web/src/api/types.ts` from `/docs/openapi.json` instead of copying it by hand.
 3. Deployment instructions, about 2 to 3 h; a real cloud deployment is Phase 12.
 4. DTO validation with class-validator: done for every request body (stage 2a, `docs/ai-reviews/2026-10-16-request-validation.md`). The history `limit` and `cursor` query is still clamped by hand, on purpose.
 
@@ -179,3 +180,4 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
   - `apps/api/src/auth/` grouped into `protect-routes/`, `sign-in/`, `tokens/`, and `storage/`, behind an `index.ts` (no logic change; see `docs/ai-reviews/2026-10-16-auth-folder-layout.md`).
   - Swagger stage 1: `@nestjs/swagger` 12.0.2, Swagger UI at `/docs` outside production, all 32 routes documented, and `openapi.spec.ts`.
   - Stage 2a: 9 request DTO classes, a global `ValidationPipe`, and `validation.spec.ts`. `test:int` (95), `test:e2e` (3), and `test:browser` (6) passed, which also covers the earlier two commits, and a live check against the dev API passed.
+  - Stage 2b: response classes in `*.responses.ts` for every route, and a padlock test that reads the real `AuthGuard` metadata. Live responses matched the docs. This completes Swagger.

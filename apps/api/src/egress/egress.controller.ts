@@ -2,6 +2,7 @@ import { Controller, Get, Inject } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env';
+import { EgressDto } from './egress.responses';
 
 // Shown to the customer, who runs it in their own database as an admin. The platform never
 // runs it. The placeholders in <angle brackets> are theirs to fill in.
@@ -34,8 +35,8 @@ export class EgressController {
     summary: 'Setup help: the address to allow, and SQL for a read-only login',
     description: 'Public: no sign-in needed.',
   })
-  @ApiResponse({ status: 200, description: 'egressIp, setupSql, and firewall advice.' })
-  egress(): { egressIp: string; setupSql: string; firewall: string } {
+  @ApiResponse({ status: 200, description: 'Setup help.', type: EgressDto })
+  egress(): EgressDto {
     return {
       egressIp: this.env.EGRESS_IP,
       setupSql: SETUP_SQL,

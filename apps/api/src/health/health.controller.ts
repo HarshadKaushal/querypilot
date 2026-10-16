@@ -1,6 +1,7 @@
 import { Controller, Get, HttpCode, Res } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
+import { HealthReportDto, LiveDto } from './health.responses';
 import { HealthService } from './health.service';
 
 @ApiTags('health')
@@ -10,16 +11,24 @@ export class HealthController {
 
   @Get('live')
   @ApiOperation({ summary: 'Is the process up? (no dependencies checked)' })
-  @ApiResponse({ status: 200, description: 'status: ok.' })
+  @ApiResponse({ status: 200, description: 'Up.', type: LiveDto })
   @HttpCode(200)
-  live(): { status: 'ok' } {
+  live(): LiveDto {
     return this.health.live();
   }
 
   @Get('ready')
   @ApiOperation({ summary: 'Can it serve requests? Checks the database and Redis' })
-  @ApiResponse({ status: 200, description: 'Ready, with each check.' })
-  @ApiResponse({ status: 503, description: 'Not ready, with the failing check.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Ready, with each check.',
+    type: HealthReportDto,
+  })
+  @ApiResponse({
+    status: 503,
+    description: 'Not ready: the same report, with the failing check down.',
+    type: HealthReportDto,
+  })
   async ready(@Res({ passthrough: true }) response: Response) {
     const report = await this.health.ready();
     response.status(report.status === 'ok' ? 200 : 503);

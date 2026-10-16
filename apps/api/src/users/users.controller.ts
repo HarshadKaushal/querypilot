@@ -4,6 +4,7 @@ import type { Request } from 'express';
 import { AuthService, CurrentUser, AuthGuard, type PublicUser } from '../auth';
 import { ApiErrors } from '../common/openapi';
 import { requestMeta } from '../common/request-meta';
+import { CurrentUserDto } from './users.responses';
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -15,8 +16,8 @@ export class UsersController {
 
   @Get('me')
   @ApiOperation({ summary: 'The signed-in user' })
-  @ApiResponse({ status: 200, description: 'id, email, name, avatarUrl, planTier.' })
-  me(@CurrentUser() user: PublicUser): { user: PublicUser } {
+  @ApiResponse({ status: 200, description: 'The user.', type: CurrentUserDto })
+  me(@CurrentUser() user: PublicUser): CurrentUserDto {
     return { user };
   }
 

@@ -1,12 +1,11 @@
 import type { INestApplication, Type } from '@nestjs/common';
-import type { OpenAPIObject, OperationObject } from '@nestjs/swagger';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
+import type { OpenAPIObject, OperationObject, ResponseObject } from '@nestjs/swagger';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../app.module';
+import { AuthGuard } from '../auth';
 import { buildOpenApiDocument, setupApiDocs } from './openapi';
-
-/** Routes anyone may call: sign-in, health checks, and setup help. */
-const PUBLIC_TAGS = ['auth', 'health', 'meta'];
 
 const METHODS = ['get', 'post', 'put', 'patch', 'delete'] as const;
 
@@ -43,6 +42,37 @@ function routeCount(controllers: Type<unknown>[]): number {
     );
     return count + handlers.length;
   }, 0);
+}
+
+/**
+ * Whether AuthGuard really protects a route, read from what @UseGuards stored on the
+ * controller class or the method. The docs' operationId is "<Controller>_<method>".
+ */
+function guardedByAuth(controllers: Type<unknown>[], operationId: string): boolean {
+  const [controllerName, method] = operationId.split('_');
+  const controller = controllers.find((candidate) => candidate.name === controllerName);
+  if (!controller || !method) {
+    throw new Error(`No controller method for operation ${operationId}`);
+  }
+  const handler = (controller.prototype as Record<string, object>)[method];
+  const guards = [
+    ...((Reflect.getMetadata(GUARDS_METADATA, controller) as unknown[]) ?? []),
+    ...((handler && (Reflect.getMetadata(GUARDS_METADATA, handler) as unknown[])) ?? []),
+  ];
+  return guards.includes(AuthGuard);
+}
+
+/** Every "$ref" string anywhere inside a value. */
+function refsIn(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap(refsIn);
+  }
+  if (typeof value !== 'object' || value === null) {
+    return [];
+  }
+  return Object.entries(value).flatMap(([key, child]) =>
+    key === '$ref' && typeof child === 'string' ? [child] : refsIn(child),
+  );
 }
 
 /** Every operation in the document, as "METHOD /path" with its details. */
@@ -82,16 +112,40 @@ describe('API docs (OpenAPI)', () => {
     expect(undocumented).toEqual([]);
   });
 
-  it('asks for the bearer token on every route except the public ones', () => {
+  it('shows the padlock exactly on the routes AuthGuard protects', () => {
     const document = buildOpenApiDocument(app);
+    const controllers = controllersOf(AppModule);
     const wrong = operations(document)
       .filter(([, op]) => {
-        const isPublic = op.tags?.some((tag) => PUBLIC_TAGS.includes(tag)) ?? false;
-        const bearer = op.security?.some((scheme) => 'bearer' in scheme) ?? false;
-        return isPublic === bearer;
+        const padlock = op.security?.some((scheme) => 'bearer' in scheme) ?? false;
+        return padlock !== guardedByAuth(controllers, op.operationId ?? '');
       })
       .map(([name]) => name);
     expect(wrong).toEqual([]);
+  });
+
+  it('gives every success response with a body a schema', () => {
+    const document = buildOpenApiDocument(app);
+    const missing = operations(document).flatMap(([name, op]) =>
+      Object.entries(op.responses)
+        .filter(([status]) => status.startsWith('2') && status !== '204')
+        .filter(([, response]) => {
+          const content = (response as ResponseObject).content ?? {};
+          // JSON for every route, except the job events stream, which is text.
+          return !(content['application/json'] ?? content['text/event-stream'])?.schema;
+        })
+        .map(([status]) => `${name} ${status}`),
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it('points every $ref at a schema the document defines', () => {
+    const document = buildOpenApiDocument(app);
+    const defined = new Set(Object.keys(document.components?.schemas ?? {}));
+    const dangling = [...new Set(refsIn(document))].filter(
+      (ref) => !defined.has(ref.replace('#/components/schemas/', '')),
+    );
+    expect(dangling).toEqual([]);
   });
 
   it('describes failures with the shared error envelope', () => {

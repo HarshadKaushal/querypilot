@@ -17,7 +17,9 @@ import { AuthGuard, CurrentUser, type PublicUser } from '../auth';
 import { ApiErrors } from '../common/openapi';
 import { requestMeta } from '../common/request-meta';
 import { ConnectionService, JobQueue } from '@ayd/core';
+import { JobViewDto } from '../jobs/jobs.responses';
 import { CreateConnectionDto, UpdateConnectionDto } from './connection.dto';
+import { ConnectionDto } from './connection.responses';
 
 @ApiTags('connections')
 @ApiBearerAuth()
@@ -41,7 +43,11 @@ export class ConnectionsController {
     description:
       'Queues a read-only check. The connection is saved only if the check passes; follow the returned job with `GET /v1/jobs/{id}`.',
   })
-  @ApiResponse({ status: 202, description: 'The queued connection.create job.' })
+  @ApiResponse({
+    status: 202,
+    description: 'The queued connection.create job.',
+    type: JobViewDto,
+  })
   @ApiErrors(400, 429)
   @HttpCode(202)
   create(
@@ -61,14 +67,14 @@ export class ConnectionsController {
 
   @Get()
   @ApiOperation({ summary: 'List your connections (never the login or password)' })
-  @ApiResponse({ status: 200, description: 'Your connections.' })
+  @ApiResponse({ status: 200, description: 'Your connections.', type: [ConnectionDto] })
   list(@CurrentUser() user: PublicUser) {
     return this.connections.list(user.id);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get one connection' })
-  @ApiResponse({ status: 200, description: 'The connection.' })
+  @ApiResponse({ status: 200, description: 'The connection.', type: ConnectionDto })
   @ApiErrors(404)
   get(@CurrentUser() user: PublicUser, @Param('id') id: string) {
     return this.connections.get(user.id, id);
@@ -77,7 +83,11 @@ export class ConnectionsController {
   /** Queues a fresh read-only check of a saved connection. */
   @Post(':id/test')
   @ApiOperation({ summary: 'Check a saved connection again (queued)' })
-  @ApiResponse({ status: 202, description: 'The queued connection.test job.' })
+  @ApiResponse({
+    status: 202,
+    description: 'The queued connection.test job.',
+    type: JobViewDto,
+  })
   @ApiErrors(404, 429)
   @HttpCode(202)
   async test(
@@ -104,8 +114,16 @@ export class ConnectionsController {
     description:
       'Send only the fields to change. A new label or sample-rows setting is saved at once (200). A new host, port, database, login, or SSL mode is checked first (202 with a job).',
   })
-  @ApiResponse({ status: 200, description: 'Saved at once: the connection.' })
-  @ApiResponse({ status: 202, description: 'Checked first: the connection.update job.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Saved at once: the connection.',
+    type: ConnectionDto,
+  })
+  @ApiResponse({
+    status: 202,
+    description: 'Checked first: the connection.update job.',
+    type: JobViewDto,
+  })
   @ApiErrors(400, 404, 429)
   async update(
     @CurrentUser() user: PublicUser,

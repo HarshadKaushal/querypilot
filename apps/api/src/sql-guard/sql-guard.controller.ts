@@ -4,6 +4,7 @@ import { AuthGuard, type PublicUser, CurrentUser } from '../auth';
 import { ApiErrors } from '../common/openapi';
 import { SqlGuardService } from '@ayd/core';
 import { CheckSqlDto } from './check-sql.dto';
+import { SqlCheckResultDto } from './sql-guard.responses';
 
 @ApiTags('sql guard')
 @ApiBearerAuth()
@@ -24,6 +25,7 @@ export class SqlGuardController {
     status: 200,
     description:
       'allowed: true with the rewritten SQL, or allowed: false with a code and reason.',
+    type: SqlCheckResultDto,
   })
   @ApiErrors(400, 404)
   @HttpCode(200)

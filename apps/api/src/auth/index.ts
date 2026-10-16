@@ -10,5 +10,7 @@ export { AuthModule } from './auth.module';
 export { AuthGuard } from './protect-routes/auth.guard';
 export { CurrentUser } from './protect-routes/current-user.decorator';
 export type { PublicUser } from './user';
+// For the API docs of routes that return a user.
+export { PublicUserDto } from './user';
 // For account deletion in the users controller.
 export { AuthService } from './sign-in/auth.service';

@@ -28,7 +28,9 @@ import type { Request } from 'express';
 import { AuthGuard, type PublicUser, CurrentUser } from '../auth';
 import { ApiErrors } from '../common/openapi';
 import { requestMeta } from '../common/request-meta';
+import { JobViewDto } from '../jobs/jobs.responses';
 import { SubmissionLimits } from '../limits/submission-limits';
+import { HistoryEntryDto, HistoryPageDto } from './history.responses';
 
 const DEFAULT_PAGE = 20;
 const MAX_PAGE = 50;
@@ -63,7 +65,7 @@ export class HistoryController {
     required: false,
     description: 'The nextCursor from the previous page.',
   })
-  @ApiResponse({ status: 200, description: 'One page of entries, and nextCursor.' })
+  @ApiResponse({ status: 200, description: 'One page of entries.', type: HistoryPageDto })
   list(
     @CurrentUser() user: PublicUser,
     @Query('limit') limit?: string,
@@ -78,7 +80,7 @@ export class HistoryController {
 
   @Get(':id')
   @ApiOperation({ summary: 'One history entry' })
-  @ApiResponse({ status: 200, description: 'The entry.' })
+  @ApiResponse({ status: 200, description: 'The entry.', type: HistoryEntryDto })
   @ApiErrors(404)
   get(@CurrentUser() user: PublicUser, @Param('id') id: string) {
     return this.history.get(user.id, id);
@@ -93,7 +95,11 @@ export class HistoryController {
     summary: "Run an entry's SQL again (queued, no model call)",
     description: 'Answers 404 when nothing ran for that entry.',
   })
-  @ApiResponse({ status: 202, description: 'The queued query.run job.' })
+  @ApiResponse({
+    status: 202,
+    description: 'The queued query.run job.',
+    type: JobViewDto,
+  })
   @ApiErrors(404, 429)
   @HttpCode(202)
   async rerun(@CurrentUser() user: PublicUser, @Param('id') id: string) {

@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiExtraModels,
   ApiOperation,
   ApiProduces,
   ApiResponse,
@@ -25,6 +26,7 @@ import { ApiErrors } from '../common/openapi';
 import { SubmissionLimits } from '../limits/submission-limits';
 import { JOB_STREAM_TIMING, streamJob, type JobStreamTiming } from './job-stream';
 import { AskQuestionDto, RunSqlDto } from './jobs.dto';
+import { JOB_RESULT_MODELS, JobViewDto } from './jobs.responses';
 
 /** Lets tests shorten the stream's intervals. */
 export const JOB_STREAM_TIMING_TOKEN = Symbol('JOB_STREAM_TIMING');
@@ -32,6 +34,9 @@ export const JOB_STREAM_TIMING_TOKEN = Symbol('JOB_STREAM_TIMING');
 @ApiTags('questions and jobs')
 @ApiBearerAuth()
 @ApiErrors(401)
+// The job result types appear only inside JobViewDto's `oneOf`, so they are registered
+// here; otherwise the docs would point at schemas that do not exist.
+@ApiExtraModels(...JOB_RESULT_MODELS)
 @Controller('v1')
 @UseGuards(AuthGuard)
 export class JobsController {
@@ -55,7 +60,11 @@ export class JobsController {
     description:
       'The worker checks the SQL with the SQL guard against the allowlist, then runs it read-only.',
   })
-  @ApiResponse({ status: 202, description: 'The queued query.run job.' })
+  @ApiResponse({
+    status: 202,
+    description: 'The queued query.run job.',
+    type: JobViewDto,
+  })
   @ApiErrors(400, 404, 429)
   @HttpCode(202)
   async submitQuery(
@@ -81,7 +90,11 @@ export class JobsController {
     description:
       'The worker asks the model for SQL, checks it with the guard, runs it, and adds a chart and a summary. Counts against the daily question quota.',
   })
-  @ApiResponse({ status: 202, description: 'The queued question.ask job.' })
+  @ApiResponse({
+    status: 202,
+    description: 'The queued question.ask job.',
+    type: JobViewDto,
+  })
   @ApiErrors(400, 404, 429)
   @HttpCode(202)
   async ask(
@@ -109,7 +122,7 @@ export class JobsController {
   /** A job's state, and its result or error once finished. Only the owner can read it. */
   @Get('jobs/:id')
   @ApiOperation({ summary: "A job's state, and its result or error once finished" })
-  @ApiResponse({ status: 200, description: 'The job.' })
+  @ApiResponse({ status: 200, description: 'The job.', type: JobViewDto })
   @ApiErrors(404)
   get(@CurrentUser() user: PublicUser, @Param('id') id: string) {
     return this.jobs.get(id, user.id);
@@ -127,7 +140,20 @@ export class JobsController {
       'A `job` event with the full job on every change, until it finishes. Swagger UI waits for the stream to end, so use `GET /v1/jobs/{id}` here instead.',
   })
   @ApiProduces('text/event-stream')
-  @ApiResponse({ status: 200, description: 'An event stream.' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'An event stream. Each `job` event carries a JobViewDto as JSON data; `: keep-alive` comment lines arrive while nothing changes.',
+    content: {
+      'text/event-stream': {
+        schema: {
+          type: 'string',
+          example:
+            'event: job\ndata: {"id":"42","kind":"query.run","state":"running"}\n\n',
+        },
+      },
+    },
+  })
   @ApiErrors(404)
   async stream(
     @CurrentUser() user: PublicUser,
@@ -151,8 +177,13 @@ export class JobsController {
   @ApiResponse({
     status: 202,
     description: 'Cancel requested: the job, marked cancelRequested.',
+    type: JobViewDto,
   })
-  @ApiResponse({ status: 200, description: 'Already finished: the job, unchanged.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Already finished: the job, unchanged.',
+    type: JobViewDto,
+  })
   @ApiErrors(404)
   async cancel(
     @CurrentUser() user: PublicUser,

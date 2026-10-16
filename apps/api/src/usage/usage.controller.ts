@@ -6,6 +6,7 @@ import { ApiErrors } from '../common/openapi';
 import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env';
 import { SubmissionLimits } from '../limits/submission-limits';
+import { UsageTodayDto } from './usage.responses';
 
 /** Today's usage against the limits (blueprint 12, Usage). The day is UTC. */
 @ApiTags('usage')
@@ -22,8 +23,8 @@ export class UsageController {
 
   @Get()
   @ApiOperation({ summary: "Today's usage against your limits (UTC day)" })
-  @ApiResponse({ status: 200, description: 'Questions used, limits, rows, and tokens.' })
-  async today(@CurrentUser() user: PublicUser) {
+  @ApiResponse({ status: 200, description: "Today's usage.", type: UsageTodayDto })
+  async today(@CurrentUser() user: PublicUser): Promise<UsageTodayDto> {
     const day = utcDay();
     const [counted, asked] = await Promise.all([
       this.usage.get(user.id, day),

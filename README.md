@@ -79,7 +79,7 @@ Outside production, the API serves interactive docs at http://localhost:3000/doc
 2. Copy `accessToken` from the response.
 3. Press **Authorize** at the top, paste the token, and close the dialog.
 
-Protected routes then send it. The token lasts 15 minutes. Request bodies are shown from their DTO classes (the "Schemas" section at the bottom), and those same classes validate every request: a body with a wrong type answers 400 `VALIDATION_ERROR` naming the field, and fields a DTO does not declare are dropped. Response bodies are described in words for now.
+Protected routes then send it. The token lasts 15 minutes. Request bodies are shown from their DTO classes (the "Schemas" section at the bottom), and those same classes validate every request: a body with a wrong type answers 400 `VALIDATION_ERROR` naming the field, and fields a DTO does not declare are dropped. Every response is documented too, with its fields and examples; a job's `result` depends on its `kind`, as its description says.
 
 ## Check that it is up
 

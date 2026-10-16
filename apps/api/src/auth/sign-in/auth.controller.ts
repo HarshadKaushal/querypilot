@@ -26,7 +26,8 @@ import { APP_ENV } from '../../config/app-config.module';
 import type { AppEnv } from '../../config/env';
 import { requestMeta } from '../../common/request-meta';
 import { AuthRateLimitGuard } from '../../limits/auth-rate-limit.guard';
-import { AuthService } from './auth.service';
+import { SessionDto } from './auth.responses';
+import { AuthService, type SessionResult } from './auth.service';
 import { DevLoginDto } from './dev-login.dto';
 import {
   OAUTH_COOKIE,
@@ -119,7 +120,7 @@ export class AuthController {
   })
   // No body at all is fine: it signs in as dev@localhost.
   @ApiBody({ type: DevLoginDto, required: false })
-  @ApiResponse({ status: 200, description: 'Signed in: accessToken, expiresIn, user.' })
+  @ApiResponse({ status: 200, description: 'Signed in.', type: SessionDto })
   @ApiErrors(400, 404, 429)
   @UseGuards(AuthRateLimitGuard)
   @HttpCode(200)
@@ -144,7 +145,7 @@ export class AuthController {
     description:
       'Uses the refresh cookie once and sets a new one. Sending an already used cookie signs out every session from that sign-in.',
   })
-  @ApiResponse({ status: 200, description: 'A new accessToken, expiresIn, and user.' })
+  @ApiResponse({ status: 200, description: 'A new access token.', type: SessionDto })
   @ApiErrors(401, 429)
   @UseGuards(AuthRateLimitGuard)
   @HttpCode(200)
@@ -184,17 +185,8 @@ export class AuthController {
     response.cookie(REFRESH_COOKIE, refreshToken, refreshCookieOptions(this.env));
   }
 
-  private sessionBody(session: {
-    accessToken: string;
-    expiresIn: number;
-    user: {
-      id: string;
-      email: string;
-      name: string;
-      avatarUrl: string | null;
-      planTier: string;
-    };
-  }) {
+  /** The session without its refresh token, which travels only in the cookie. */
+  private sessionBody(session: SessionResult): SessionDto {
     return {
       accessToken: session.accessToken,
       expiresIn: session.expiresIn,
