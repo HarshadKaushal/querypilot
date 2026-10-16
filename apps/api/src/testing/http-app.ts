@@ -3,13 +3,16 @@ import { MemoryDailyQuota, MemoryRateLimiter } from '@ayd/core/testing';
 import type { INestApplication, Provider, Type } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PinoLogger, type Logger } from 'nestjs-pino';
-import { AuthController } from '../auth/auth.controller';
-import { AuthGuard } from '../auth/auth.guard';
-import { AUTH_REPOSITORY } from '../auth/auth.repository';
-import { AuthService } from '../auth/auth.service';
-import { GOOGLE_CLIENT, type GoogleIdentityProvider } from '../auth/google.client';
+import { AuthGuard } from '../auth/protect-routes/auth.guard';
+import { AuthController } from '../auth/sign-in/auth.controller';
+import { AuthService } from '../auth/sign-in/auth.service';
+import {
+  GOOGLE_CLIENT,
+  type GoogleIdentityProvider,
+} from '../auth/sign-in/google.client';
+import { AUTH_REPOSITORY } from '../auth/storage/auth.repository';
+import { TokenService } from '../auth/tokens/token.service';
 import { MemoryAuthRepository } from './memory-auth.repository';
-import { TokenService } from '../auth/token.service';
 import { AllExceptionsFilter } from '../common/filters/all-exceptions.filter';
 import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env';

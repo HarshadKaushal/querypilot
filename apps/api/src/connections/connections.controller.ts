@@ -12,10 +12,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { AuthGuard } from '../auth/auth.guard';
-import { CurrentUser } from '../auth/current-user.decorator';
-import type { PublicUser } from '../auth/auth.repository';
-import { requestMeta } from '../auth/cookies';
+import { AuthGuard, CurrentUser, type PublicUser } from '../auth';
+import { requestMeta } from '../common/request-meta';
 import { type ConnectionInput, ConnectionService, JobQueue } from '@ayd/core';
 
 interface ConnectionBody {

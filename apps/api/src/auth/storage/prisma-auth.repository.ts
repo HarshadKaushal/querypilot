@@ -1,13 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { type AuditEntry, PrismaService, writeAuditLog } from '@ayd/core';
-import {
-  toPublicUser,
-  type AuthRepository,
-  type GoogleProfileInput,
-  type NewRefreshToken,
-  type PublicUser,
-  type StoredRefresh,
+import { toPublicUser, type PublicUser } from '../user';
+import type {
+  AuthRepository,
+  GoogleProfileInput,
+  NewRefreshToken,
+  StoredRefresh,
 } from './auth.repository';
 
 @Injectable()

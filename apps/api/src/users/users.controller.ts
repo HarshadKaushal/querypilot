@@ -1,10 +1,7 @@
 import { Controller, Delete, Get, HttpCode, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
-import { AuthService } from '../auth/auth.service';
-import { CurrentUser } from '../auth/current-user.decorator';
-import { AuthGuard } from '../auth/auth.guard';
-import type { PublicUser } from '../auth/auth.repository';
-import { requestMeta } from '../auth/cookies';
+import { AuthService, CurrentUser, AuthGuard, type PublicUser } from '../auth';
+import { requestMeta } from '../common/request-meta';
 
 @Controller('v1/users')
 @UseGuards(AuthGuard)

@@ -1,6 +1,6 @@
 import { ConnectionsCoreModule, JobQueueModule, SchemaCoreModule } from '@ayd/core';
 import { Module } from '@nestjs/common';
-import { AuthModule } from '../auth/auth.module';
+import { AuthModule } from '../auth';
 import { SchemaController } from './schema.controller';
 
 @Module({

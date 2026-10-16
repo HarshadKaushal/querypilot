@@ -1,8 +1,8 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { createHttpApp } from '../testing/http-app';
-import { testEnv } from '../testing/test-env';
-import { UsersController } from '../users/users.controller';
+import { createHttpApp } from '../../testing/http-app';
+import { testEnv } from '../../testing/test-env';
+import { UsersController } from '../../users/users.controller';
 import type { GoogleIdentityProvider } from './google.client';
 
 // Google sign-in configured, with a fake client below.

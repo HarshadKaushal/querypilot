@@ -1,9 +1,9 @@
-import type { AppEnv } from '../config/env';
-import { testEnv } from '../testing/test-env';
-import { MemoryAuthRepository } from '../testing/memory-auth.repository';
+import type { AppEnv } from '../../config/env';
+import { testEnv } from '../../testing/test-env';
+import { MemoryAuthRepository } from '../../testing/memory-auth.repository';
 import type { GoogleIdentityProvider, GoogleProfile } from './google.client';
 import { AuthService } from './auth.service';
-import { TokenService } from './token.service';
+import { TokenService } from '../tokens/token.service';
 
 const meta = { ip: '127.0.0.1', deviceInfo: 'jest' };
 

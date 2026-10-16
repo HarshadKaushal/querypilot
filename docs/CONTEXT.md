@@ -2,7 +2,7 @@
 
 The shared starting point for every Claude session on this repository, including several running at once. **Read this first, then update it** (see "Keeping this file current"). The code is the source of truth; this file says where things stand and what was decided, so a new session does not have to rediscover it.
 
-Last updated: 2026-10-16, at commit `9fc040a`.
+Last updated: 2026-10-16, after the auth folder reorganisation (base `f15230d`).
 
 ## Keeping this file current
 
@@ -126,6 +126,7 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
 - **On Windows, stopping `npm` leaves child processes running** and holding ports. Find them with `Get-CimInstance Win32_Process`, check the start time and command line, then stop them by id.
 - **Shell escaping:** backticks, `$`, and `\n` inside heredocs or `node -e` get mangled. Write scripts to the scratchpad with the Write tool, or use the Edit tool.
 - **Integration tests hang if Docker Desktop has stopped.** Check `docker ps` first.
+- **After moving or renaming source files, the old build output stays in `dist`.** `tsc` never deletes files. Remove the stale ones, or code might load an outdated copy.
 - **When testing by hand, use throwaway dev-login users and delete them afterwards** (`DELETE /v1/users/me`).
 - **A first question may be "answered from a saved query"** if it was asked before: the cache key is connection, schema fingerprint, and normalised question.
 
@@ -145,6 +146,9 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
 
 **Loose ends:**
 
+- **One API unit test failed once** (1 of 94, 2026-10-16, right after the package builds), then passed 3 runs in a row. It is not known which test. If it fails again, save the full Jest output.
+- **`test:int` and `test:e2e` were not run after the auth folder move** (Docker was off). Run them the next time Docker is up.
+
 - **The first live-events subscription after an API restart hung once** (2026-10-14 16:10). It could not be reproduced. Check `JobEvents.subscribe` and `streamJob` in the code review.
 - **Not built yet:** a chart-type switcher, example question-and-SQL pairs in the prompt, a circuit breaker per model provider, a key re-wrap job, readiness checks for the queue and the model, data export, partitions and retention, a rate limit on connection tests, browser tests in CI, and editing a connection's login in the app.
 - **The main web bundle is about 680 kB** before compression.
@@ -163,4 +167,6 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
   - Fixes: the silent-stream reconnect, and the model deadline.
   - The brief comparison and `docs/extra.md`.
   - A demo rehearsal with Google sign-in and DBeaver.
-- **2026-10-16:** this context file added, with a `CLAUDE.md` rule to keep it current.
+- **2026-10-16:**
+  - This context file added, with a `CLAUDE.md` rule to keep it current.
+  - `apps/api/src/auth/` grouped into `protect-routes/`, `sign-in/`, `tokens/`, and `storage/`, behind an `index.ts` (no logic change; see `docs/ai-reviews/2026-10-16-auth-folder-layout.md`).

@@ -1,12 +1,5 @@
 import type { AuditEntry } from '@ayd/core';
-
-export interface PublicUser {
-  id: string;
-  email: string;
-  name: string;
-  avatarUrl: string | null;
-  planTier: string;
-}
+import type { PublicUser } from '../user';
 
 export interface StoredRefresh {
   id: string;
@@ -52,14 +45,3 @@ export interface AuthRepository {
 }
 
 export const AUTH_REPOSITORY = Symbol('AUTH_REPOSITORY');
-
-/** Picks the fields a client may see from a stored user. */
-export function toPublicUser(user: PublicUser): PublicUser {
-  return {
-    id: user.id,
-    email: user.email,
-    name: user.name,
-    avatarUrl: user.avatarUrl,
-    planTier: user.planTier,
-  };
-}

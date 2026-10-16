@@ -10,10 +10,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { AuthGuard } from '../auth/auth.guard';
-import type { PublicUser } from '../auth/auth.repository';
-import { requestMeta } from '../auth/cookies';
-import { CurrentUser } from '../auth/current-user.decorator';
+import { AuthGuard, type PublicUser, CurrentUser } from '../auth';
+import { requestMeta } from '../common/request-meta';
 import { ConnectionService, JobQueue, SchemaService } from '@ayd/core';
 
 @Controller('v1/connections/:id')

@@ -72,6 +72,16 @@ Login is not rate limited yet. That belongs with the quota phase. CSRF tokens fo
 
 Access tokens are signed in-process. The `jose` package is used only to verify Google ID tokens, because that check needs Google's JWKS. Tests do not load that package.
 
+**Layout (reorganised 2026-10-16, no logic change).** `apps/api/src/auth/` is grouped by job:
+
+- `index.ts`: the only file other folders import from (`AuthModule`, `AuthGuard`, `CurrentUser`, `PublicUser`, and `AuthService` for account deletion).
+- `protect-routes/`: the guard and `@CurrentUser()`.
+- `sign-in/`: the `/v1/auth/*` controller, `AuthService`, cookies, and the Google client.
+- `tokens/`: `TokenService`.
+- `storage/`: the `AuthRepository` interface and its Prisma version.
+
+`PublicUser` and `toPublicUser` are in `auth/user.ts`. `requestMeta`, which several controllers use for audit rows, is in `apps/api/src/common/request-meta.ts`.
+
 ## Phase 2: connections, encryption, and SSRF
 
 Connection passwords are sealed before they touch Prisma. `@ayd/crypto` generates a data key, encrypts the username and the password separately with AES-256-GCM, and wraps the data key with the master key named by `CRYPTO_MASTER_KEY_VERSION`. A later rotation calls `rewrapCredentials`, which unwraps the data key and wraps that same key again. The password ciphertext stays put. Parser failures say `invalid master key ring` and do not include the key bytes.
@@ -182,4 +192,4 @@ A fix after 9b gave `watchJob` a 45-second silence limit: an API restart during 
 
 ## How to extend this
 
-Add a phase only after this phase's checks pass: `npm test`, `npm run lint`, `npm run format:check`, and a ready health response from `npm run up`. New application tables go in a new Prisma migration. New client-visible failures go through `AppException` and an existing or newly documented error code in `@ayd/shared`. Use `notFound()` for a missing or foreign id (the two must look the same) and `invalidRequest()` for bad input; both live in `packages/core/src/errors/app.exception.ts`. Audit rows go through `writeAuditLog` in `packages/core/src/audit/audit-log.ts`, with ids and outcomes in the metadata and never secrets. When an audit row records a delete or change, write it in the same transaction as that change, and only when something changed (as `PrismaConnectionRepository.delete` and `PrismaQueryHistory.delete` do). Log errors with `safeErrorDetail`, which strips connection URLs.
+Add a phase only after this phase's checks pass: `npm test`, `npm run lint`, `npm run format:check`, and a ready health response from `npm run up`. New application tables go in a new Prisma migration. New client-visible failures go through `AppException` and an existing or newly documented error code in `@ayd/shared`. Use `notFound()` for a missing or foreign id (the two must look the same) and `invalidRequest()` for bad input; both live in `packages/core/src/errors/app.exception.ts`. Audit rows go through `writeAuditLog` in `packages/core/src/audit/audit-log.ts`, with ids and outcomes in the metadata and never secrets. When an audit row records a delete or change, write it in the same transaction as that change, and only when something changed (as `PrismaConnectionRepository.delete` and `PrismaQueryHistory.delete` do). Log errors with `safeErrorDetail`, which strips connection URLs. A new controller that needs a signed-in user adds `@UseGuards(AuthGuard)` and reads the user with `@CurrentUser()`, both imported from `'../auth'` rather than from files inside that folder.

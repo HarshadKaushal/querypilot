@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { APP_ENV } from '../config/app-config.module';
-import type { AppEnv } from '../config/env';
+import { APP_ENV } from '../../config/app-config.module';
+import type { AppEnv } from '../../config/env';
 
 export interface GoogleProfile {
   subject: string;

@@ -6,26 +6,23 @@ import {
   notFound,
   UNAUTHENTICATED_MESSAGE,
 } from '@ayd/core';
-import { APP_ENV } from '../config/app-config.module';
-import type { AppEnv } from '../config/env';
-import { AUTH_REPOSITORY, type AuthRepository, type PublicUser } from './auth.repository';
+import type { RequestMeta } from '../../common/request-meta';
+import { APP_ENV } from '../../config/app-config.module';
+import type { AppEnv } from '../../config/env';
+import { AUTH_REPOSITORY, type AuthRepository } from '../storage/auth.repository';
+import { TokenService } from '../tokens/token.service';
+import type { PublicUser } from '../user';
 import {
   codeChallenge,
   GOOGLE_CLIENT,
   type GoogleIdentityProvider,
 } from './google.client';
-import { TokenService } from './token.service';
 
 export interface SessionResult {
   accessToken: string;
   expiresIn: number;
   refreshToken: string;
   user: PublicUser;
-}
-
-export interface RequestMeta {
-  ip: string | null;
-  deviceInfo: string | null;
 }
 
 @Injectable()

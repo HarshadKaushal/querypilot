@@ -13,9 +13,10 @@ import {
 } from '@nestjs/common';
 import { AppException } from '@ayd/core';
 import type { Request, Response } from 'express';
-import { APP_ENV } from '../config/app-config.module';
-import type { AppEnv } from '../config/env';
-import { AuthRateLimitGuard } from '../limits/auth-rate-limit.guard';
+import { APP_ENV } from '../../config/app-config.module';
+import type { AppEnv } from '../../config/env';
+import { requestMeta } from '../../common/request-meta';
+import { AuthRateLimitGuard } from '../../limits/auth-rate-limit.guard';
 import { AuthService } from './auth.service';
 import {
   OAUTH_COOKIE,
@@ -24,7 +25,6 @@ import {
   oauthCookieOptions,
   readCookie,
   refreshCookieOptions,
-  requestMeta,
 } from './cookies';
 
 interface DevLoginBody {

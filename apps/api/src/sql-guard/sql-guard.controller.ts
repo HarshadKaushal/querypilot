@@ -1,7 +1,5 @@
 import { Body, Controller, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
-import { AuthGuard } from '../auth/auth.guard';
-import type { PublicUser } from '../auth/auth.repository';
-import { CurrentUser } from '../auth/current-user.decorator';
+import { AuthGuard, type PublicUser, CurrentUser } from '../auth';
 import { SqlGuardService } from '@ayd/core';
 
 @Controller('v1/connections/:id/sql')

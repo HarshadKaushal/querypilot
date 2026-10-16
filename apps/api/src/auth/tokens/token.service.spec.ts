@@ -1,5 +1,5 @@
-import type { AppEnv } from '../config/env';
-import { testEnv } from '../testing/test-env';
+import type { AppEnv } from '../../config/env';
+import { testEnv } from '../../testing/test-env';
 import { TokenService } from './token.service';
 
 function env(): AppEnv {

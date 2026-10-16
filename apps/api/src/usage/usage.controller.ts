@@ -1,8 +1,6 @@
 import { USAGE_COUNTERS, utcDay, type UsageCounters } from '@ayd/core';
 import { Controller, Get, Inject, UseGuards } from '@nestjs/common';
-import { AuthGuard } from '../auth/auth.guard';
-import type { PublicUser } from '../auth/auth.repository';
-import { CurrentUser } from '../auth/current-user.decorator';
+import { AuthGuard, type PublicUser, CurrentUser } from '../auth';
 import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env';
 import { SubmissionLimits } from '../limits/submission-limits';

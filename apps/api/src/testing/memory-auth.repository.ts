@@ -1,13 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { AuditEntry } from '@ayd/core';
-import {
-  toPublicUser,
-  type AuthRepository,
-  type GoogleProfileInput,
-  type NewRefreshToken,
-  type PublicUser,
-  type StoredRefresh,
-} from '../auth/auth.repository';
+import type {
+  AuthRepository,
+  GoogleProfileInput,
+  NewRefreshToken,
+  StoredRefresh,
+} from '../auth/storage/auth.repository';
+import { toPublicUser, type PublicUser } from '../auth/user';
 
 interface MemoryUser extends PublicUser {
   googleSubject: string;

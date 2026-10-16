@@ -1,6 +1,6 @@
 import { PrismaUsageCounters, USAGE_COUNTERS } from '@ayd/core';
 import { Module } from '@nestjs/common';
-import { AuthModule } from '../auth/auth.module';
+import { AuthModule } from '../auth';
 import { LimitsModule } from '../limits/limits.module';
 import { UsageController } from './usage.controller';
 

@@ -1,5 +1,5 @@
-import type { CookieOptions, Request } from 'express';
-import type { AppEnv } from '../config/env';
+import type { CookieOptions } from 'express';
+import type { AppEnv } from '../../config/env';
 
 export const REFRESH_COOKIE = 'ayd_refresh';
 export const OAUTH_COOKIE = 'ayd_oauth';
@@ -42,15 +42,4 @@ export function clearRefreshCookieOptions(env: AppEnv): CookieOptions {
 
 export function oauthCookieOptions(env: AppEnv): CookieOptions {
   return { ...baseCookie(env, '/v1/auth/google'), maxAge: 10 * 60 * 1000 };
-}
-
-export function requestMeta(request: Request): {
-  ip: string | null;
-  deviceInfo: string | null;
-} {
-  const agent = request.header('user-agent');
-  return {
-    ip: request.ip ? request.ip.slice(0, 64) : null,
-    deviceInfo: agent ? agent.slice(0, 200) : null,
-  };
 }

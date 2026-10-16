@@ -2,13 +2,13 @@ import { Module } from '@nestjs/common';
 import { APP_ENV } from '../config/app-config.module';
 import { LimitsModule } from '../limits/limits.module';
 import type { AppEnv } from '../config/env';
-import { AUTH_REPOSITORY } from './auth.repository';
-import { AuthController } from './auth.controller';
-import { AuthGuard } from './auth.guard';
-import { AuthService } from './auth.service';
-import { GOOGLE_CLIENT, GoogleOAuthClient } from './google.client';
-import { PrismaAuthRepository } from './prisma-auth.repository';
-import { TokenService } from './token.service';
+import { AuthGuard } from './protect-routes/auth.guard';
+import { AuthController } from './sign-in/auth.controller';
+import { AuthService } from './sign-in/auth.service';
+import { GOOGLE_CLIENT, GoogleOAuthClient } from './sign-in/google.client';
+import { AUTH_REPOSITORY } from './storage/auth.repository';
+import { PrismaAuthRepository } from './storage/prisma-auth.repository';
+import { TokenService } from './tokens/token.service';
 
 @Module({
   imports: [LimitsModule],

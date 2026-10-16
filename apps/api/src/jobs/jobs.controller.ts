@@ -14,9 +14,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { AuthGuard } from '../auth/auth.guard';
-import type { PublicUser } from '../auth/auth.repository';
-import { CurrentUser } from '../auth/current-user.decorator';
+import { AuthGuard, type PublicUser, CurrentUser } from '../auth';
 import { SubmissionLimits } from '../limits/submission-limits';
 import { JOB_STREAM_TIMING, streamJob, type JobStreamTiming } from './job-stream';
 

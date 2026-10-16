@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import type { Request } from 'express';
-import type { PublicUser } from './auth.repository';
-import { AuthService } from './auth.service';
+import { AuthService } from '../sign-in/auth.service';
+import type { PublicUser } from '../user';
 
 export interface AuthenticatedRequest extends Request {
   user: PublicUser;

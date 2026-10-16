@@ -2,7 +2,7 @@ import { PrismaModule, RedisModule } from '@ayd/core';
 import { Module } from '@nestjs/common';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { AppConfigModule } from './config/app-config.module';
-import { AuthModule } from './auth/auth.module';
+import { AuthModule } from './auth';
 import { ConnectionsModule } from './connections/connections.module';
 import { EgressModule } from './egress/egress.module';
 import { HealthModule } from './health/health.module';
