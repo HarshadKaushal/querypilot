@@ -116,30 +116,31 @@ Avoid explaining every file in the repository at once unless I explicitly ask fo
 
 Use the technologies already present in the repository. Verify the package configuration and implementation before making assumptions.
 
-My project may use the following technologies:
+My project uses the following technologies (checked against the code on 2026-10-18):
 
-- Frontend: Next.js, React, TypeScript.
-- Backend: NestJS, TypeScript.
-- ORM: Prisma.
+- Frontend: React 19 and TypeScript, built with Vite, with Mantine (components and `@mantine/form`), TanStack Query, and React Router. Not Next.js.
+- Backend: NestJS, TypeScript, with an API process and a separate worker process.
+- ORM: Sequelize (`sequelize-typescript`, sequelize-cli migrations), since 2026-10-16. Not Prisma (ADR 0015).
 - Database: PostgreSQL.
-- Authentication: JWT and HTTP-only cookies, if implemented.
-- Infrastructure: Docker and environment variables, if configured.
+- Queue: BullMQ on Redis.
+- Authentication: Google sign-in, short-lived JWT access tokens, and a refresh token in an HTTP-only cookie.
+- Infrastructure: Docker Compose and environment variables.
 
-These are expected technologies, not proof that every feature is already implemented.
+These are the technologies in use, not proof that every feature is already implemented.
 
 Explain the relevant concepts when they appear in the code.
 
-### Next.js and React
+### React and Vite
 
-Explain components, props, state, hooks, forms, routing, server and client components, API requests, rendering, and frontend error handling when relevant.
+Explain components, props, state, hooks, forms, routing, API requests, rendering, and frontend error handling when relevant.
 
 ### NestJS
 
 Explain modules, controllers, services, providers, dependency injection, decorators, guards, pipes, interceptors, middleware, DTOs, and exception handling when relevant.
 
-### Prisma and PostgreSQL
+### Sequelize and PostgreSQL
 
-Explain the Prisma schema, generated Prisma Client, migrations, relations, queries, transactions, constraints, indexes, raw SQL, and database functions when relevant.
+Explain models, migrations, associations, queries, transactions, constraints, indexes, raw SQL, and database functions when relevant.
 
 ### Authentication
 
@@ -221,7 +222,7 @@ When relevant, cover:
 - What trade-offs it introduces.
 - When another approach would be better.
 
-For example, if a feature uses raw SQL instead of Prisma, explain what the query does, why raw SQL might be needed, whether Prisma could express the operation, and what correctness or concurrency guarantees the existing implementation provides.
+For example, if a feature uses raw SQL instead of Sequelize, explain what the query does, why raw SQL might be needed, whether Sequelize could express the operation, and what correctness or concurrency guarantees the existing implementation provides.
 
 Do not recommend replacing existing code just because another approach is available.
 

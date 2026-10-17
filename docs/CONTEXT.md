@@ -2,7 +2,7 @@
 
 The shared starting point for every Claude session on this repository, including several running at once. **Read this first, then update it** (see "Keeping this file current"). The code is the source of truth; this file says where things stand and what was decided, so a new session does not have to rediscover it.
 
-Last updated: 2026-10-16, after the move from Prisma to Sequelize (base `17bd754`).
+Last updated: 2026-10-18, after the readability cleanup (4 commits, base `cfe5b9d`).
 
 ## Keeping this file current
 
@@ -21,6 +21,7 @@ Last updated: 2026-10-16, after the move from Prisma to Sequelize (base `17bd754
 - **Against the assignment brief,** two items are open, the evaluation dataset with results and deployment instructions. Swagger docs and DTO validation are done. See "Open items".
 - **The application database uses Sequelize** (since 2026-10-16, ADR 0015), not Prisma. The development database `ayd` is migrated.
 - **All work is committed locally on `main`;** nothing is pushed. The user reviews commits afterwards.
+- **Onboarding docs exist (2026-10-18):** `docs/request-flow.md` (one question through every file), `docs/conventions.md`, and a README in every app and package. Keep them in step with the code, like the other docs.
 
 ## The project in brief
 
@@ -57,7 +58,7 @@ Last updated: 2026-10-16, after the move from Prisma to Sequelize (base `17bd754
 | `packages/database`   | Sequelize `src/models/`, `src/types/`, `src/enums/`, and sequelize-cli `migrations/` (`npm run migrate`)                 |
 | `packages/shared`     | Error codes and envelope, request id                                                                                     |
 | `e2e/`                | Playwright browser tests (own API on 3100, web on 5174, queue `ayd-e2e`)                                                 |
-| `docs/`               | Blueprint, ADRs 0001 to 0015, features, implementation, testing, `extra.md`, AI reviews                                  |
+| `docs/`               | Request flow, conventions, blueprint, ADRs 0001 to 0015, features, implementation, testing, `extra.md`, AI reviews       |
 
 Imports starting `@ayd/` are these packages. They are linked through `node_modules`, and run from each package's built `dist`.
 
@@ -169,17 +170,16 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
 - **The first live-events subscription after an API restart hung once** (2026-10-14 16:10). It could not be reproduced. Check `JobEvents.subscribe` and `streamJob` in the code review.
 - **Not built yet:** a chart-type switcher, example question-and-SQL pairs in the prompt, a circuit breaker per model provider, a key re-wrap job, readiness checks for the queue and the model, data export, partitions and retention, a rate limit on connection tests, browser tests in CI, and editing a connection's login in the app.
 - **The main web bundle is about 715 kB** before compression (measured 2026-10-18, after `@mantine/form`; 695 kB on 2026-10-16). Lazy-loading pages in `app/router.tsx` would split it.
-- **Browser tests not yet run on the web feature layout or on Sequelize** (2026-10-16): run `npm run test:browser` when no dev servers are in use.
+- **Browser tests not yet run on the web feature layout, on Sequelize, or on the 2026-10-18 cleanup**, and `test:int` not run on the cleanup: run `npm run test:int` and `npm run test:browser` when Docker is up and no dev servers are in use. The browser demo flow fills in the connect wizard, which now uses `@mantine/form`.
 - **`npm test` exits 1 on sql-guard's coverage threshold** (functions 98.83% against 100%, in `index.ts`), although all 310 tests pass. Found 2026-10-16; it predates the Sequelize move (no sql-guard file or package version changed). Decide whether to cover `index.ts` or exclude it.
 - **`sequelize-typescript` has had no release since 2023.** Check it first when upgrading Sequelize.
 
 ## In progress
 
-| What                                                                                                                                                                                           | Files                                                                              | Session started |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | --------------- |
-| Walkthrough: dev worker and web started (API was already running); no code changes                                                                                                             | none                                                                               | 2026-10-16      |
-| Learning doc `docs/sequelize.md` describing the Sequelize work above (read-only on code; writes only that file)                                                                                | `docs/sequelize.md`                                                                | 2026-10-16      |
-| Readability cleanup in 4 commits: comments and constants; core refactors (`AskJobRunner`, `job-errors.ts`, `streamJob`); web `useJobRunner` and `@mantine/form` in the wizard; onboarding docs | core `ask/` and `jobs/`, api `auth/` and `jobs/`, web `lib/` and `features/`, docs | 2026-10-18      |
+| What                                                                                                            | Files               | Session started |
+| --------------------------------------------------------------------------------------------------------------- | ------------------- | --------------- |
+| Walkthrough: dev worker and web started (API was already running); no code changes                              | none                | 2026-10-16      |
+| Learning doc `docs/sequelize.md` describing the Sequelize work above (read-only on code; writes only that file) | `docs/sequelize.md` | 2026-10-16      |
 
 ## Session log
 
@@ -201,3 +201,5 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
   - Readability cleanup, commit 1 of 4: a "what this is for" comment on the auth, controller, package, and model files; wrong or stale comments fixed; and magic numbers named (new `user-database/sqlstate.ts`). No behaviour change (`docs/ai-reviews/2026-10-18-comments-and-constants.md`). The build, lint, and unit tests passed; the API suite needed one rerun (the health spec).
   - Commit 2 of 4: `AskJobRunner.answer()` split into named steps with a typed `RetryState`; new `jobs/job-errors.ts` and `jobs/run-checked-sql.ts` shared by both SQL jobs; `AskCommon` in `AskResult`; `streamJob` steps commented and its deadline made a `setTimeout` (`docs/ai-reviews/2026-10-18-ask-runner-readability.md`). Unit tests passed; `test:int` waits for Docker.
   - Commit 3 of 4: `lib/use-job-runner.ts` replaces five copies of the job-progress code; `lib/notify.ts` replaces four error toasts; the connect wizard uses `useForm` from `@mantine/form` 9.7.2, which is a new dependency (`docs/ai-reviews/2026-10-18-web-job-runner-and-form.md`). 72 web tests, the type-check, lint, and `vite build` passed; browser tests wait for Docker.
+  - Commit 4 of 4: new `docs/request-flow.md`, `docs/conventions.md`, and a README in each app and package. The root README, `features.md`, `implementation.md`, `docs/README.md`, and the stack in `CLAUDE.md` (now Vite and Sequelize) were brought up to date (`docs/ai-reviews/2026-10-18-onboarding-docs.md`).
+  - **Not yet run for the cleanup:** `npm run test:int` and `npm run test:browser`, because Docker Desktop was not running.

@@ -1,8 +1,15 @@
 # Implementation Documentation
 
-Phase 0 of Ask Your Database. The product blueprint is the source of the phase list. This note records how the foundation was built and why.
+How Ask Your Database was built, phase by phase, and why. The product blueprint is the source of the phase list.
 
-## Approach
+Each section was written when its phase was finished, so it describes the code as it was then. Later sections, and the code itself, say what is true today.
+
+- For how one request flows through the current code, read [request-flow.md](request-flow.md).
+- For the rules to follow when changing it, read [conventions.md](conventions.md) and [How to extend this](#how-to-extend-this) at the end.
+
+## Phase 0: foundation
+
+### Approach
 
 The repository is an npm workspace monorepo. The API and the worker are separate NestJS processes that share only published workspace packages. Phase 0 puts the error envelope and request-id rules in `@ayd/shared` so later HTTP handlers do not invent a second error shape.
 
@@ -12,9 +19,9 @@ Work stayed inside the Phase 0 acceptance line:
 - CI runs lint, format check, unit tests, and build
 - readiness reports the application database and Redis
 
-Domain modules (auth, connections, SQL guard, executor, ask pipeline, history, UI) were not started.
+Domain modules (auth, connections, SQL guard, executor, ask pipeline, history, UI) were left for later phases.
 
-## Technical decisions
+### Technical decisions
 
 | Topic                  | Choice                                                                                                | Why                                                                                                                                                                                                                                       |
 | ---------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -23,7 +30,7 @@ Domain modules (auth, connections, SQL guard, executor, ask pipeline, history, U
 | Worker                 | Nest application context                                                                              | Same framework, separate entry point. It loads config, logging, the database, Redis, and the job runners from `@ayd/core`, and runs every job that opens a user database.                                                                 |
 | App database access    | Sequelize 6 with `sequelize-typescript` and `@nestjs/sequelize` (ADR 0015; Prisma 7 until 2026-10-16) | sequelize-cli migrations in `packages/database/migrations`, models in `src/models`. Reaches Postgres through the pg driver, with a 5-second connect timeout. The migrate script loads the root `.env`.                                    |
 | Baseline migration     | `SELECT 1`                                                                                            | Creates migration history without tables that belong to later phases. The next phase adds its own migration.                                                                                                                              |
-| Cache and queue broker | Redis 8 via ioredis 6                                                                                 | Present now so health can report it. BullMQ arrives with the queue phase.                                                                                                                                                                 |
+| Cache and queue broker | Redis 8 via ioredis 6                                                                                 | Present from Phase 0 so health could report it. BullMQ has used it for the job queue since Phase 6.                                                                                                                                       |
 | Config                 | Zod parse of the environment                                                                          | Invalid fields are named. Values are not printed, so a bad URL is not logged.                                                                                                                                                             |
 | Logs                   | pino JSON                                                                                             | `message`, level, and `service` on every line. Authorization, cookie, password, secret, and token paths are redacted. Database URLs are stripped from error text before it is logged.                                                     |
 | Request id             | `x-request-id`                                                                                        | Accepted when it matches a short safe pattern. Otherwise generated. pino stores it as the request id and writes it on the response.                                                                                                       |
@@ -34,23 +41,23 @@ Domain modules (auth, connections, SQL guard, executor, ask pipeline, history, U
 | Module format          | CommonJS output, `module: node20` (the web app is ES modules, bundled by Vite; ADR 0014)              | NestJS 12 ships only as ES modules. Node 24 can `require()` an ES module, and TypeScript's `node20` mode allows it, so the code stays CommonJS. Jest needs `--experimental-vm-modules` for the same thing, which `scripts/jest.cjs` adds. |
 | CI                     | GitHub Actions                                                                                        | Lint, Prettier, unit tests, and compile. It does not start Docker.                                                                                                                                                                        |
 
-## Milestones
+### Milestones
 
 1. Workspace, TypeScript, ESLint, and Prettier.
 2. Shared error and request-id contract, with unit tests.
-3. API config, JSON logging, exception filter, Prisma, Redis, and health.
+3. API config, JSON logging, exception filter, Prisma (replaced by Sequelize on 2026-10-16), Redis, and health.
 4. Worker process that refuses to start when Redis is unreachable.
 5. Compose stack: application Postgres, sample Postgres, Redis, API, worker.
 6. CI workflow and the documentation set in `docs/`.
 
-## Challenges
+### Challenges
 
 - `prisma.config.ts` required `DATABASE_URL` even for `prisma generate`, which never connects, so the images set it for the build stage. Sequelize has no generate step, so that went with Prisma (ADR 0015).
 - Readiness must prove the dependencies without becoming a way to leak connection errors. Checks log a name and a URL-stripped message, and the HTTP body only says `up` or `down`.
 - The worker and the API both need validated settings, logging, and Redis. They were duplicated until Phase 6, when they moved to `@ayd/core` (ADR 0006), so the worker never imports the API.
 - Host ports are 5434 for the application database, 5433 for the sample database, and 6379 for Redis. 5432 is left free because many local Postgres installs already use it. Inside Compose, the API still reaches the application database at `app-db:5432`.
 
-## Trade-offs
+### Trade-offs
 
 - Unit tests mock Postgres and Redis. CI does not prove the Compose health path. The local acceptance check is `npm run up` and `GET /health/ready`.
 - The worker logs through pino directly. Nest's own logger is disabled there so boot lines stay JSON. The API uses `nestjs-pino`, which also covers request logs.
@@ -112,7 +119,7 @@ The allowlist is explicit rows: one per allowed table and one per allowed column
 
 `PUT /v1/connections/:id/allowlist` replaces the whole list. The body names the snapshot version it was edited against. The repository compares that version again under the same row lock, so a save cannot slip in between a refresh's version change and its allowlist update.
 
-Introspection runs in the API process, like the probe, and a refresh can take seconds on a large schema. It moves to the worker with the executor before the queue phase.
+At this phase introspection ran in the API process, like the probe, and a refresh could take seconds on a large schema. Since Phase 6 it runs in the worker, as a `schema.refresh` job.
 
 The sample database gained `multi-schema.sql`. It is mounted as a second init script, and a volume created earlier can get it with one `psql` command instead of being recreated.
 
@@ -190,15 +197,25 @@ A fix after 9b gave `watchJob` a 45-second silence limit: an API restart during 
 
 **Phase 9 completion** added the browser tests (`e2e/`, Playwright 1.64 with axe): the demo flow and accessibility checks at desktop and phone sizes, against their own API, worker, and web server. The worker gained `LLM_FAKE` and `ScriptedLlmProvider` for them (ADR 0012), and the Vite proxy target can be set with `AYD_API_URL` (checked with Node types in `tsconfig.node.json`). The accessibility checks found contrast below WCAG AA in Mantine's light defaults and a scrollable code block a keyboard could not reach; both were fixed (`src/theme.ts`, focusable code blocks).
 
-**Reorganisation by feature (2026-10-16).** The web app's files moved from `api/`, `auth/`, `layout/`, `pages/`, and `components/` into `app/`, `lib/`, `components/`, and `features/<name>/` (ADR 0014, "Code layout"); the paths in the steps above are the old ones. Requests that pages made inline moved into each feature's `api.ts`, so the connections list query, written out three times before, is now `useConnections()`. Pages no longer import cache keys from other pages; they use `lib/query-keys.ts`. `isJobError`, defined in both `ErrorAlert` and `FailureView`, is now one function in `lib/jobs.ts`. App start-up split into `providers.tsx` and `router.tsx`, and the usage and settings tests into one file per page. Behaviour is unchanged: every request has the same method, URL, and body as before, and the 68 web unit tests pass unchanged apart from their import paths.
+**Reorganisation by feature (2026-10-16).** The web app's files moved from `api/`, `auth/`, `layout/`, `pages/`, and `components/` into `app/`, `lib/`, `components/`, and `features/<name>/` (ADR 0014, "Code layout"). The steps above use the old paths, which map to the new ones as follows:
+
+| Old path                              | New path                                |
+| ------------------------------------- | --------------------------------------- |
+| `src/api/client.ts`, `types.ts`       | `src/lib/api-client.ts`, `api-types.ts` |
+| `src/api/jobs.ts`, `use-abort.ts`     | `src/lib/jobs.ts`, `use-abort.ts`       |
+| `src/auth/session.ts`                 | `src/features/auth/api.ts`              |
+| `src/auth/` (provider, guard)         | `src/features/auth/`                    |
+| `src/pages/<Name>Page.tsx`            | `src/features/<feature>/<Name>Page.tsx` |
+| `src/pages/examples.ts`               | `src/features/ask/examples.ts`          |
+| `src/components/answer/`              | `src/features/ask/components/`          |
+| `src/components/Allowlist*.tsx`       | `src/features/connections/components/`  |
+| `src/main.tsx`, `theme.ts`, `layout/` | `src/app/`                              | Requests that pages made inline moved into each feature's `api.ts`, so the connections list query, written out three times before, is now `useConnections()`. Pages no longer import cache keys from other pages; they use `lib/query-keys.ts`. `isJobError`, defined in both `ErrorAlert` and `FailureView`, is now one function in `lib/jobs.ts`. App start-up split into `providers.tsx` and `router.tsx`, and the usage and settings tests into one file per page. Behaviour is unchanged: every request has the same method, URL, and body as before, and the 68 web unit tests pass unchanged apart from their import paths. |
 
 ## Follow-up: Sequelize (2026-10-16)
 
 The application database moved from Prisma to Sequelize because the brief requires it (ADR 0015). `packages/database` now holds the models, attribute types, enums, and seven sequelize-cli migrations; `@ayd/core` has `DatabaseModule` and `DatabaseService` in place of `PrismaModule` and `PrismaService`; and the seven repositories are `Sequelize…` versions behind the same interfaces, so no service or controller changed. The rewritten migrations build a schema identical to Prisma's (compared with `pg_dump`). `scripts/migrate.cjs` adopts a Prisma-built database by copying its finished migrations into `SequelizeMeta`, and a new migration turns the 18 time columns into `TIMESTAMPTZ(3)`, because Sequelize would otherwise read them as local time. The development database was migrated on 2026-10-16 with the same counts and instants before and after.
 
-## How to extend this
-
-Add a phase only after this phase's checks pass: `npm test`, `npm run lint`, `npm run format:check`, and a ready health response from `npm run up`. New application tables go in a new sequelize-cli migration in `packages/database/migrations` (one transaction per `up`), with a model in `src/models/`, its attribute types in `src/types/`, and any fixed list of values in `src/enums/`; give every `@Column` its type, and pass `{ transaction }` to every query inside `db.transaction(...)` (ADR 0015). New client-visible failures go through `AppException` and an existing or newly documented error code in `@ayd/shared`. Use `notFound()` for a missing or foreign id (the two must look the same) and `invalidRequest()` for bad input; both live in `packages/core/src/errors/app.exception.ts`. Audit rows go through `writeAuditLog` in `packages/core/src/audit/audit-log.ts`, with ids and outcomes in the metadata and never secrets. When an audit row records a delete or change, write it in the same transaction as that change, and only when something changed (as `SequelizeConnectionRepository.delete` and `SequelizeQueryHistory.delete` do). Log errors with `safeErrorDetail`, which strips connection URLs. A new controller that needs a signed-in user adds `@UseGuards(AuthGuard)` and reads the user with `@CurrentUser()`, both imported from `'../auth'` rather than from files inside that folder. Give it `@ApiTags`, `@ApiBearerAuth()` when it is protected, and an `@ApiOperation({ summary })` on every route, with `ApiErrors(...)` from `apps/api/src/common/openapi.ts` for the usual failures; `openapi.spec.ts` fails until every route has a summary and a tag. A route that takes a body declares it as a DTO class in a `*.dto.ts` file beside the controller, with `@ApiProperty` and class-validator decorators; `openapi.spec.ts` fails on a hand-written body schema. What a route returns is a class in a `*.responses.ts` file, linked with `@ApiResponse({ status, type })`; it `implements` the service's interface where there is one, or is the controller method's declared return type, so the compiler keeps it accurate. `openapi.spec.ts` fails when a success response has no schema, when a `$ref` points nowhere (register classes used only inside `oneOf` with `@ApiExtraModels`), or when the padlock and `AuthGuard` disagree. In the web app, a new request goes in the `api.ts` of the feature whose screen makes it, a read as a `use…` hook and a change as a function taking the API client; a new cache key goes in `lib/query-keys.ts`; and anything another feature needs is exported from the feature's `index.ts`.
+## Follow-up: API docs and request validation (2026-10-16)
 
 **API docs (Swagger, stage 1, 2026-10-16).** `@nestjs/swagger` builds an OpenAPI 3 document from the controllers' routes and decorators. `apps/api/src/common/openapi.ts`:
 
@@ -245,3 +262,66 @@ Two details:
   A connection field sent as `null` in a `PATCH` counts as not sent, as before, because `ConnectionService` keeps the saved value for `null`.
 
 The guard runs before the pipe, so a request without a token gets 401 even when its body is also bad.
+
+## Follow-up: readability cleanup (2026-10-18)
+
+Four commits aimed at a new developer reading the code for the first time. Behaviour stayed the same, except for one fixed message (below).
+
+- **Comments and constants.** Files that had no comment saying what they are for got one, matching the existing style. Comments that contradicted the code, or explained it by comparing it with Prisma, were fixed. Numbers that carry meaning got names; for example, the PostgreSQL error codes are in `packages/core/src/user-database/sqlstate.ts`.
+- **The question runner.** `AskJobRunner.answer()` tries one proposal per loop in four named steps (`nextProposal`, the guard check with `onGuardRejected`, running with `onQueryFailed`, and `buildAnswer`), over a typed `RetryState`. `jobs/job-errors.ts` turns failures into `JobError`s (`fromException`, `llmFailure`, `executionFailure`). `jobs/run-checked-sql.ts` runs approved SQL for both SQL-running jobs. `AskResult`'s shared fields are `AskCommon`.
+- **The job stream.** `streamJob` has numbered step comments, and its single deadline is a `setTimeout`.
+- **The web app.**
+  - `lib/use-job-runner.ts` replaces five copies of the start-a-job-and-show-progress code.
+  - `lib/notify.ts` replaces four copies of the error toast.
+  - The connect wizard's form uses `useForm` from `@mantine/form` (ADR 0014, "Forms and jobs in components").
+  - The fixed message: a schema read the API refused after the connection was saved is no longer reported as "The connection was not saved".
+- **Docs.** New [request-flow.md](request-flow.md) and [conventions.md](conventions.md), and a short README in every app and package. This file, `features.md`, and the root README were brought up to date.
+
+## How to extend this
+
+Before adding a phase, check that the current one passes `npm test`, `npm run lint`, `npm run format:check`, and a ready health response from `npm run up`. [conventions.md](conventions.md) explains the patterns behind these lists.
+
+**A new table (`packages/database`, ADR 0015):**
+
+- Write a new sequelize-cli migration in `migrations/`, with one transaction per `up`.
+- Add its model in `src/models/`, its attribute types in `src/types/`, and any fixed list of values in `src/enums/`.
+- Give every `@Column` its type.
+- Pass `{ transaction }` to every query inside `db.transaction(...)`.
+- Time columns are `TIMESTAMPTZ(3)` (`DataType.DATE(3)`).
+
+**A new failure the client can see:**
+
+- Throw an `AppException`, with an existing or newly documented error code in `@ayd/shared`.
+- Use `notFound()` for a missing or foreign id, because the two must look the same.
+- Use `invalidRequest()` for bad input.
+- Both live in `packages/core/src/errors/app.exception.ts`.
+- In a job, turn the failure into a `JobError` with `packages/core/src/jobs/job-errors.ts`.
+
+**Audit and logs:**
+
+- Write audit rows with `writeAuditLog` (`packages/core/src/audit/audit-log.ts`). Put ids and outcomes in the metadata, never secrets.
+- An audit row for a delete or change goes in the same transaction as that change, and only when something changed (as `SequelizeConnectionRepository.delete` and `SequelizeQueryHistory.delete` do).
+- Log errors with `safeErrorDetail`, which strips connection URLs.
+
+**A new API route:**
+
+- **A signed-in user:** add `@UseGuards(AuthGuard)` and read the user with `@CurrentUser()`. Import both from `'../auth'`, never from files inside that folder.
+- **Docs:** give the controller `@ApiTags`, plus `@ApiBearerAuth()` when it is protected. Give every route an `@ApiOperation({ summary })`, and use `ApiErrors(...)` from `apps/api/src/common/openapi.ts` for the usual failures.
+- **A request body:** declare it as a DTO class in a `*.dto.ts` file beside the controller, with `@ApiProperty` and class-validator decorators. Put the type check (`@IsString`) closest to the property.
+- **The response:** a class in a `*.responses.ts` file, linked with `@ApiResponse({ status, type })`. It `implements` the service's interface where there is one, or is the controller method's declared return type.
+- **Work that opens a customer database or calls the model:** do not do it in the API. Queue a job with `JobQueue.add` and answer 202 with the job.
+- **`openapi.spec.ts` fails** when:
+  - a route has no summary or tag;
+  - a body schema is written by hand;
+  - a success response has no schema;
+  - a `$ref` points nowhere (register classes used only inside `oneOf` with `@ApiExtraModels`);
+  - the padlock and `AuthGuard` disagree.
+
+**The web app (ADR 0014):**
+
+- **A request:** put it in the `api.ts` of the feature whose screen makes it. A read is a `use…` hook; a change is a function that takes the API client.
+- **A cache key:** goes in `lib/query-keys.ts`.
+- **Shared code:** anything another feature needs is exported from the feature's `index.ts`.
+- **A worker job:** start it with `useJobRunner()`.
+- **A form:** use `useForm` for several fields with validation, and `useState` for one input.
+- **A failed action:** show it with `notifyError`.

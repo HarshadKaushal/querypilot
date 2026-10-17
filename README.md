@@ -2,7 +2,68 @@
 
 Middleware that lets a signed-in user connect their own PostgreSQL database and ask questions in plain English. The platform proposes SQL, checks it, runs it read-only, and returns a table, a chart, the SQL, and a short summary.
 
-This repository has finished **Phase 8 (history, quotas, and audit)**: the API answers questions in English through worker jobs, keeps history, and enforces limits. **Phase 9 (the web app)** is finished: sign-in, connecting a database, choosing what the AI sees, asking questions, history, usage, and settings, with browser tests and accessibility checks. See [docs/features.md](docs/features.md).
+Phases 0 to 9 are done: sign-in, connecting a database, choosing what the AI sees, asking questions, history, limits, and the web app, with browser tests and accessibility checks. See [docs/features.md](docs/features.md) for what works today.
+
+## How it works
+
+1. **Web app (`apps/web`):** the user asks a question in the browser.
+2. **API (`apps/api`):** it checks the user and their limits, puts a job on a Redis queue, and answers at once with the job.
+3. **Worker (`apps/worker`):** it takes the job and does the work.
+   1. Gemini writes one `SELECT` over the tables the user allowed.
+   2. The SQL guard parses and checks it.
+   3. The worker runs it read-only on the user's database.
+   4. It adds a chart and a summary.
+4. **Back in the browser:** the job's progress and answer stream back to the page.
+
+The worker is the only process that opens a user's database or calls the model. Result rows are shown but never stored.
+
+[docs/request-flow.md](docs/request-flow.md) follows one question through every file, from the button to the answer.
+
+## Quick start
+
+With Node 24.9+, npm 11, and Docker Desktop running:
+
+```powershell
+copy .env.example .env
+npm ci
+npm run up:deps      # Docker: app database :5434, sample database :5433, Redis :6379
+npm run dev          # API on :3000 (applies nothing itself; see migrations below)
+npm run dev:worker   # in a second terminal
+npm run dev:web      # in a third terminal; open http://localhost:5173
+```
+
+Apply migrations once before the first run (see [Run the API on the host](#run-the-api-on-the-host)). In development, the sign-in page offers a dev login, so Google is not needed. Asking in English needs `GEMINI_API_KEY` in `.env`; SQL you write yourself runs without it.
+
+## Where things are
+
+```text
+apps/web              React web app (Vite, Mantine, TanStack Query)
+apps/api              NestJS HTTP API: sign-in, validation, limits; queues jobs
+apps/worker           NestJS worker: takes jobs from the queue and runs them
+packages/core         Nest modules both processes share: the ask pipeline, jobs,
+                      connections, schema, SQL check, executor, model, history, limits
+packages/sql-guard    SQL checks and rewriting, on PostgreSQL's own parser
+packages/database     Sequelize models, types, enums, and migrations
+packages/crypto       Envelope encryption for connection secrets
+packages/ssrf-guard   Host and address checks for user databases
+packages/shared       Error envelope, request id, health report types
+e2e                   Playwright browser tests
+infra/docker          API and worker images
+infra/sample-db       Seed and TLS entrypoint for the sample user database
+docs                  Request flow, conventions, decisions (ADRs), and reviews
+```
+
+Every app and package has a short README of its own.
+
+## Where to start reading
+
+1. [docs/request-flow.md](docs/request-flow.md): one question from the browser to the database and back.
+2. [docs/conventions.md](docs/conventions.md): file names, comment style, how errors and validation work.
+3. The entry points:
+   - `apps/web/src/app/router.tsx`: which page each URL shows.
+   - `apps/api/src/app.module.ts`: every API module.
+   - `packages/core/src/ask/ask-job.runner.ts`: answering a question.
+4. [docs/README.md](docs/README.md): the index of design decisions (ADRs) and the rest of the docs.
 
 ## Prerequisites
 
@@ -20,16 +81,6 @@ npm ci
 ```
 
 `.env` is for processes you run on the host. It is gitignored. The Compose stack passes its own environment into the `api` and `worker` containers and does not read `.env`.
-
-## Run the web app
-
-The web app runs on the host with Vite. Start the API first (either way above), then:
-
-```powershell
-npm run dev:web
-```
-
-Open http://localhost:5173. The dev server passes `/v1` requests to the API on port 3000, so the page and the API share one address and the sign-in cookie works. In development the sign-in page also offers the dev login. Start the worker too (`npm run dev:worker`): connecting a database, testing it, and reading its schema run as worker jobs, and the app shows their progress live. Asking needs `GEMINI_API_KEY` in `.env` for the worker; SQL you write yourself runs without it. Do not run test or build commands while using the app: they rebuild packages the API and worker run from, and both restart. To try the sample database from the host, connect to host `127.0.0.1`, port `5433`, database `sample`, user `sample_ro`, password `sample_ro_password`, SSL `require`. `npm run build --workspace=@ayd/web` type-checks and writes the production files to `apps/web/dist`.
 
 ## Run the full local stack
 
@@ -71,6 +122,16 @@ npm run migrate --workspace=@ayd/database
 
 The schema lives in `packages/database`: Sequelize models in `src/models/` and sequelize-cli migrations in `migrations/` (ADR 0015). The command reads `DATABASE_URL` from the root `.env` when it is not set. `npm run migrate:status --workspace=@ayd/database` lists which migrations have run. On a database that Prisma migrated before 2026-10-16, the first run records Prisma's history for sequelize-cli and then converts the time columns to `TIMESTAMPTZ`; nothing else changes. The container entrypoint runs that migrate command on its own, so `npm run up` does not need this step.
 
+## Run the web app
+
+The web app runs on the host with Vite. Start the API and the worker first (either way above), then:
+
+```powershell
+npm run dev:web
+```
+
+Open http://localhost:5173. The dev server passes `/v1` requests to the API on port 3000, so the page and the API share one address and the sign-in cookie works. In development the sign-in page also offers the dev login. The worker must run too: connecting a database, testing it, reading its schema, and asking all run as worker jobs, and the app shows their progress live. Asking needs `GEMINI_API_KEY` in `.env` for the worker; SQL you write yourself runs without it. Do not run test or build commands while using the app: they rebuild packages the API and worker run from, and both restart. To try the sample database from the host, connect to host `127.0.0.1`, port `5433`, database `sample`, user `sample_ro`, password `sample_ro_password`, SSL `require`. `npm run build --workspace=@ayd/web` type-checks and writes the production files to `apps/web/dist`.
+
 ### API docs (Swagger)
 
 Outside production, the API serves interactive docs at http://localhost:3000/docs, generated from the controllers. The raw OpenAPI document is at `/docs/openapi.json` (and `/docs/openapi.yaml`). To call a protected route from the page:
@@ -79,7 +140,11 @@ Outside production, the API serves interactive docs at http://localhost:3000/doc
 2. Copy `accessToken` from the response.
 3. Press **Authorize** at the top, paste the token, and close the dialog.
 
-Protected routes then send it. The token lasts 15 minutes. Request bodies are shown from their DTO classes (the "Schemas" section at the bottom), and those same classes validate every request: a body with a wrong type answers 400 `VALIDATION_ERROR` naming the field, and fields a DTO does not declare are dropped. Every response is documented too, with its fields and examples; a job's `result` depends on its `kind`, as its description says.
+Protected routes then send it. The token lasts 15 minutes by default (`AUTH_ACCESS_TTL_SECONDS`). Request bodies are shown from their DTO classes (the "Schemas" section at the bottom), and those same classes validate every request: a body with a wrong type answers 400 `VALIDATION_ERROR` naming the field, and fields a DTO does not declare are dropped. Every response is documented too, with its fields and examples; a job's `result` depends on its `kind`, as its description says.
+
+## Try the API by hand
+
+The sections from here to "Local databases" call the API from PowerShell, one feature at a time. They are not needed to use the web app, but they show what each route does.
 
 ## Check that it is up
 
@@ -293,7 +358,7 @@ Invoke-RestMethod http://localhost:3000/v1/users/me -Method Delete -Headers @{ A
 | Application Postgres | 5434      | `ayd`    | `ayd`          | `ayd`                | accounts, sealed connections, audit |
 | Sample Postgres      | 5433      | `sample` | `sample_admin` | `sample_admin`       | owner, local only                   |
 | Sample read-only     | 5433      | `sample` | `sample_ro`    | `sample_ro_password` | `SELECT` only                       |
-| Redis                | 6379      |          |                |                      | queue and cache later               |
+| Redis                | 6379      |          |                |                      | job queue, limits, live job events  |
 
 These passwords are local defaults. They are not production secrets.
 
@@ -318,30 +383,10 @@ npm run build
 
 CI runs lint, format, unit tests, and build on every push. A second job runs integration and API end-to-end tests against Postgres and Redis.
 
-## Layout
-
-```text
-apps/api              NestJS HTTP API
-apps/web              React web app (Vite, Mantine, TanStack Query)
-apps/worker           NestJS worker process: takes jobs from the queue and runs them
-packages/core         Nest modules both processes share: config, logging, database, Redis,
-                      connections, schema, SQL check, executor, and the job queue
-packages/crypto       Envelope encryption for connection secrets
-packages/database     Sequelize models, types, enums, and migrations
-packages/shared       Error envelope, request id, health report types
-packages/ssrf-guard   Host and address checks for user databases
-packages/sql-guard    SQL checks and rewriting, on PostgreSQL's own parser
-infra/docker          API and worker images
-infra/sample-db       Seed and TLS entrypoint for the sample user database
-docs                  Index, blueprint, decisions, and reviews
-```
-
-Start with [docs/README.md](docs/README.md). A later phase adds `eval`.
-
-## Decisions already locked for later phases
+## Decisions that shape the code
 
 - LLM provider: Google Gemini, behind a provider interface. The platform owns the API key.
 - Sign-in: Google OIDC, plus a local-only development login so the app can be used without Google credentials.
 - PostgreSQL only in v1. Read-only. Result rows are not stored.
 
-Those pieces are not in this phase. Do not put a Gemini key or a Google client secret in the repository.
+The full list, with reasons, is in the ADRs (`docs/adr/`). Never put a Gemini key or a Google client secret in the repository; they belong in `.env`, which git ignores.
