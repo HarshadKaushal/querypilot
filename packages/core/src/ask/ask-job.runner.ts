@@ -1,20 +1,24 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { StoredConnection } from '../connections/connection.repository';
 import { ConnectionService } from '../connections/connection.service';
 import { AppException } from '../errors/app.exception';
+import { executionFailure, fromException, llmFailure } from '../jobs/job-errors';
 import {
   NO_JOB_CONTEXT,
+  type AskCommon,
   type AskJobData,
   type AskResult,
   type JobContext,
   type JobError,
   type JobOutcome,
 } from '../jobs/job.types';
-import { fromException } from '../jobs/query-job.runner';
-import { LlmClient } from '../llm/llm-client';
+import { runCheckedSql } from '../jobs/run-checked-sql';
+import { attemptsOf, LlmClient } from '../llm/llm-client';
 import { LlmError, type LlmAttempt } from '../llm/llm.types';
 import { SchemaService, type SchemaView } from '../schema/schema.service';
-import { SqlGuardService } from '../sql-guard/sql-guard.service';
-import { QueryExecutor } from '../user-database/query-executor';
+import { SqlGuardService, type SqlCheckResult } from '../sql-guard/sql-guard.service';
+import type { ExecutionFailure } from '../user-database/query-error';
+import { QueryExecutor, type ExecutionSuccess } from '../user-database/query-executor';
 import {
   buildPrompt,
   selectTables,
@@ -23,7 +27,12 @@ import {
 } from './prompt';
 import { selectChart } from './chart';
 import { computeFacts, type ResultFacts } from './facts';
-import { PROPOSAL_CACHE, questionKey, type ProposalCache } from './proposal-cache';
+import {
+  PROPOSAL_CACHE,
+  questionKey,
+  type CachedProposal,
+  type ProposalCache,
+} from './proposal-cache';
 import {
   buildSummaryPrompt,
   SUMMARY_SAMPLE_ROWS,
@@ -51,6 +60,35 @@ const QUERY_INVALID_FEEDBACK =
 type Pass =
   | { kind: 'done'; outcome: JobOutcome<AskResult> }
   | { kind: 'schema_changed'; error: JobError };
+
+/** After a failed try: stop with this pass, or try again with a new proposal. */
+type Next = Pass | 'retry';
+
+/** Where this question's proposal is cached: the connection, schema, and question. */
+interface CacheKey {
+  connectionId: string;
+  fingerprint: string;
+  question: string;
+}
+
+/** What answer() remembers between tries at one question. The helpers update it. */
+interface RetryState {
+  /** A cached proposal not tried yet. It gets one try; after that the model is asked. */
+  cached: CachedProposal | null;
+  /** Why the last proposal failed, sent to the model with the next request. */
+  feedback?: ProposalFeedback;
+  /** Rewrites asked for after the guard rejected the model's SQL. */
+  guardRetries: number;
+  /** True once the one rewrite after PostgreSQL rejected the model's SQL is used. */
+  queryRetried: boolean;
+}
+
+/** One proposal to try, and where it came from. */
+interface Candidate {
+  proposal: SqlProposal;
+  model: string;
+  fromCache: boolean;
+}
 
 /**
  * Answers a question in English (blueprint section 9, steps 1 to 7): reads the allowlisted
@@ -118,7 +156,11 @@ export class AskJobRunner {
     }
   }
 
-  /** One attempt to answer against this schema: cache first, then the model. */
+  /**
+   * One pass at the question against this schema. Each loop tries one proposal: get it
+   * (cache, then model), check it with the guard, and run it. A failure either ends the
+   * pass or, within the retry limits, loops with a new proposal.
+   */
   private async answer(
     data: AskJobData,
     schema: SchemaView,
@@ -126,167 +168,258 @@ export class AskJobRunner {
     attempts: LlmAttempt[],
     context: JobContext,
   ): Promise<Pass> {
-    const key = questionKey(data.question);
+    const cacheKey: CacheKey = {
+      connectionId: data.connectionId,
+      fingerprint: schema.fingerprint,
+      question: questionKey(data.question),
+    };
     const shown = selectTables(schema.tables, data.question);
-    let cached = await this.cache.find(data.connectionId, schema.fingerprint, key);
-    let feedback: ProposalFeedback | undefined;
-    let guardRetries = 0;
-    let queryRetried = false;
+    const state: RetryState = {
+      cached: await this.cache.find(
+        cacheKey.connectionId,
+        cacheKey.fingerprint,
+        cacheKey.question,
+      ),
+      guardRetries: 0,
+      queryRetried: false,
+    };
 
     for (;;) {
-      let proposal: SqlProposal;
-      let model: string;
-      const fromCache = cached !== null;
-      if (cached) {
-        proposal = {
+      // 1. Get a proposal.
+      const candidate = await this.nextProposal(
+        data.question,
+        shown,
+        state,
+        attempts,
+        context,
+      );
+      const common: AskCommon = {
+        question: data.question,
+        schemaVersion: schema.version,
+        model: candidate.model,
+        llmAttempts: attempts,
+        cached: candidate.fromCache,
+        schemaRefreshed: refreshed,
+      };
+      if (candidate.proposal.status !== 'ok') {
+        return done({ ok: true, result: notAnswerable(candidate.proposal, common) });
+      }
+
+      // 2. Check it with the guard.
+      await context.report('checking_sql');
+      const check = await this.guard.check(
+        data.userId,
+        data.connectionId,
+        candidate.proposal.sql,
+      );
+      if (!check.allowed) {
+        const next = await this.onGuardRejected(check, candidate, state, cacheKey);
+        if (next === 'retry') {
+          continue;
+        }
+        return next;
+      }
+
+      // 3. Run it.
+      const run = await runCheckedSql(
+        { connections: this.connections, executor: this.executor },
+        { userId: data.userId, connectionId: data.connectionId, sql: check.sql },
+        context,
+      );
+      if (!run.ran) {
+        return done({ ok: false, error: run.error });
+      }
+      if (!run.result.ok) {
+        const next = await this.onQueryFailed(run.result, candidate, state, cacheKey);
+        if (next === 'retry') {
+          continue;
+        }
+        return next;
+      }
+
+      // 4. Build the answer.
+      return done(
+        await this.buildAnswer(
+          {
+            question: data.question,
+            candidate,
+            common,
+            check,
+            result: run.result,
+            connection: run.connection,
+            cacheKey,
+          },
+          attempts,
+          context,
+        ),
+      );
+    }
+  }
+
+  /** The cached proposal, the first time round; after that, a new one from the model. */
+  private async nextProposal(
+    question: string,
+    shown: ReturnType<typeof selectTables>,
+    state: RetryState,
+    attempts: LlmAttempt[],
+    context: JobContext,
+  ): Promise<Candidate> {
+    const cached = state.cached;
+    if (cached) {
+      state.cached = null;
+      return {
+        proposal: {
           status: 'ok',
           sql: cached.sql,
           assumptions: cached.assumptions,
           clarifyingQuestion: '',
           explanation: cached.explanation,
-        };
-        model = cached.model;
-        cached = null;
-      } else {
-        await context.report('generating_sql');
-        proposal = await this.propose(data.question, shown, feedback, attempts, context);
-        model = attempts.at(-1)?.model ?? '';
-      }
-      const common = {
-        question: data.question,
-        schemaVersion: schema.version,
-        model,
-        llmAttempts: attempts,
-        cached: fromCache,
-        schemaRefreshed: refreshed,
+        },
+        model: cached.model,
+        fromCache: true,
       };
-      if (proposal.status !== 'ok') {
-        return {
-          kind: 'done',
-          outcome: {
-            ok: true,
-            result:
-              proposal.status === 'ambiguous'
-                ? {
-                    ...common,
-                    status: 'ambiguous',
-                    clarifyingQuestion: proposal.clarifyingQuestion,
-                    assumptions: proposal.assumptions,
-                    explanation: proposal.explanation,
-                  }
-                : {
-                    ...common,
-                    status: 'unanswerable',
-                    explanation: proposal.explanation,
-                  },
-          },
-        };
-      }
+    }
+    await context.report('generating_sql');
+    const proposal = await this.propose(
+      question,
+      shown,
+      state.feedback,
+      attempts,
+      context,
+    );
+    return { proposal, model: attempts.at(-1)?.model ?? '', fromCache: false };
+  }
 
-      await context.report('checking_sql');
-      const check = await this.guard.check(data.userId, data.connectionId, proposal.sql);
-      if (!check.allowed) {
-        if (fromCache) {
-          // A cached proposal the guard no longer accepts: drop it and ask the model.
-          await this.cache.forget(data.connectionId, schema.fingerprint, key);
-          continue;
-        }
-        if (guardRetries < MAX_GUARD_RETRIES) {
-          guardRetries += 1;
-          feedback = { sql: proposal.sql, reason: check.reason };
-          continue;
-        }
-        return done(
-          failed(
-            'SQL_REJECTED',
-            'The assistant could not write a query that passes the safety checks. Try asking in a different way.',
-            false,
-            { guardCode: check.code },
-          ),
-        );
-      }
+  /**
+   * The guard refused the SQL. A cached proposal is dropped and the model asked instead;
+   * the model's own SQL is sent back with the guard's reason, up to MAX_GUARD_RETRIES times.
+   */
+  private async onGuardRejected(
+    check: Extract<SqlCheckResult, { allowed: false }>,
+    candidate: Candidate,
+    state: RetryState,
+    cacheKey: CacheKey,
+  ): Promise<Next> {
+    if (candidate.fromCache) {
+      await this.forgetCached(cacheKey);
+      return 'retry';
+    }
+    if (state.guardRetries < MAX_GUARD_RETRIES) {
+      state.guardRetries += 1;
+      state.feedback = { sql: candidate.proposal.sql, reason: check.reason };
+      return 'retry';
+    }
+    return done(
+      failed(
+        'SQL_REJECTED',
+        'The assistant could not write a query that passes the safety checks. Try asking in a different way.',
+        false,
+        { guardCode: check.code },
+      ),
+    );
+  }
 
-      context.signal?.throwIfAborted();
-      await context.report('connecting');
-      const target = await this.connections.resolveTarget(data.userId, data.connectionId);
-      if (!target.ok) {
-        return done({ ok: false, error: fromException(target.error) });
+  /**
+   * PostgreSQL could not run the SQL. A cached proposal that no longer runs is dropped. A
+   * changed schema ends the pass, so run() can refresh it. An invalid query gets one rewrite
+   * from the model (a cached one goes straight to the model). Anything else is final.
+   */
+  private async onQueryFailed(
+    failure: ExecutionFailure,
+    candidate: Candidate,
+    state: RetryState,
+    cacheKey: CacheKey,
+  ): Promise<Next> {
+    const { code } = failure;
+    if (
+      candidate.fromCache &&
+      (code === 'QUERY_INVALID' || code === 'QUERY_SCHEMA_CHANGED')
+    ) {
+      await this.forgetCached(cacheKey);
+    }
+    if (code === 'QUERY_SCHEMA_CHANGED') {
+      return { kind: 'schema_changed', error: executionFailure(failure) };
+    }
+    if (code === 'QUERY_INVALID') {
+      if (candidate.fromCache) {
+        return 'retry';
       }
-      context.signal?.throwIfAborted();
-      await context.report('running_query');
-      const result = await this.executor.run({
-        connectionId: data.connectionId,
-        target: target.request,
-        sql: check.sql,
-        signal: context.signal,
-      });
-      if (!result.ok) {
-        if (
-          fromCache &&
-          (result.code === 'QUERY_INVALID' || result.code === 'QUERY_SCHEMA_CHANGED')
-        ) {
-          await this.cache.forget(data.connectionId, schema.fingerprint, key);
-        }
-        if (result.code === 'QUERY_SCHEMA_CHANGED') {
-          return {
-            kind: 'schema_changed',
-            error: {
-              code: result.code,
-              message: result.message,
-              retryable: result.retryable,
-            },
-          };
-        }
-        if (result.code === 'QUERY_INVALID' && (fromCache || !queryRetried)) {
-          if (!fromCache) {
-            queryRetried = true;
-            feedback = { sql: proposal.sql, reason: QUERY_INVALID_FEEDBACK };
-          }
-          continue;
-        }
-        return done(failed(result.code, result.message, result.retryable));
+      if (!state.queryRetried) {
+        state.queryRetried = true;
+        state.feedback = { sql: candidate.proposal.sql, reason: QUERY_INVALID_FEEDBACK };
+        return 'retry';
       }
-      if (!fromCache) {
-        // A failure to cache must not fail an answered question.
-        await this.cache
-          .save(data.connectionId, schema.fingerprint, key, {
-            sql: proposal.sql,
-            assumptions: proposal.assumptions,
-            explanation: proposal.explanation,
-            model,
-          })
-          .catch(() => undefined);
-      }
-      const { ok: _ok, ...rows } = result;
-      // Labels (row values) appear in the facts, and so in the summary model's prompt, the
-      // template, and history, only when the connection's owner allowed rows.
-      const rowsAllowed = target.row.sendSampleRowsToLlm;
-      const facts = computeFacts(rows, { labels: rowsAllowed });
-      await context.report('summarizing');
-      const summary = await this.summarize(
-        data.question,
-        facts,
-        // Rows reach the model only when the connection's owner allowed it.
-        rowsAllowed ? rows.rows.slice(0, SUMMARY_SAMPLE_ROWS) : null,
-        attempts,
-        context,
-      );
-      return done({
-        ok: true,
-        result: {
-          ...common,
-          status: 'answered',
-          sql: check.sql,
+    }
+    return done({ ok: false, error: executionFailure(failure) });
+  }
+
+  /**
+   * The answered result: caches a new proposal, computes the facts, adds the chart, and
+   * writes the summary.
+   */
+  private async buildAnswer(
+    answered: {
+      question: string;
+      candidate: Candidate;
+      common: AskCommon;
+      check: Extract<SqlCheckResult, { allowed: true }>;
+      result: ExecutionSuccess;
+      connection: StoredConnection;
+      cacheKey: CacheKey;
+    },
+    attempts: LlmAttempt[],
+    context: JobContext,
+  ): Promise<JobOutcome<AskResult>> {
+    const { question, candidate, common, check, connection, cacheKey } = answered;
+    const { proposal } = candidate;
+    if (!candidate.fromCache) {
+      // A failure to cache must not fail an answered question.
+      await this.cache
+        .save(cacheKey.connectionId, cacheKey.fingerprint, cacheKey.question, {
+          sql: proposal.sql,
           assumptions: proposal.assumptions,
           explanation: proposal.explanation,
-          ...rows,
-          schemaVersion: check.schemaVersion,
-          chart: selectChart(rows),
-          facts,
-          summary,
-        },
-      });
+          model: candidate.model,
+        })
+        .catch(() => undefined);
     }
+    const { ok: _ok, ...rows } = answered.result;
+    // Labels (row values) appear in the facts, and so in the summary model's prompt, the
+    // template, and history, only when the connection's owner allowed rows.
+    const rowsAllowed = connection.sendSampleRowsToLlm;
+    const facts = computeFacts(rows, { labels: rowsAllowed });
+    await context.report('summarizing');
+    const summary = await this.summarize(
+      question,
+      facts,
+      // Rows reach the model only when the connection's owner allowed it.
+      rowsAllowed ? rows.rows.slice(0, SUMMARY_SAMPLE_ROWS) : null,
+      attempts,
+      context,
+    );
+    return {
+      ok: true,
+      result: {
+        ...common,
+        status: 'answered',
+        sql: check.sql,
+        assumptions: proposal.assumptions,
+        explanation: proposal.explanation,
+        ...rows,
+        schemaVersion: check.schemaVersion,
+        chart: selectChart(rows),
+        facts,
+        summary,
+      },
+    };
+  }
+
+  private async forgetCached(cacheKey: CacheKey): Promise<void> {
+    await this.cache.forget(
+      cacheKey.connectionId,
+      cacheKey.fingerprint,
+      cacheKey.question,
+    );
   }
 
   /**
@@ -323,7 +456,7 @@ export class AskJobRunner {
         ? { text, source: 'model' }
         : template;
     } catch (error) {
-      attempts.push(...((error as { attempts?: LlmAttempt[] }).attempts ?? []));
+      attempts.push(...attemptsOf(error));
       if (error instanceof LlmError && error.kind === 'cancelled') {
         context.signal?.throwIfAborted();
       }
@@ -360,8 +493,7 @@ export class AskJobRunner {
       attempts.push(...result.attempts);
       return result.value;
     } catch (error) {
-      const failedAttempts = (error as { attempts?: LlmAttempt[] }).attempts;
-      attempts.push(...(failedAttempts ?? []));
+      attempts.push(...attemptsOf(error));
       if (error instanceof LlmError && error.kind === 'cancelled') {
         // The processor turns the aborted signal into a cancelled outcome.
         context.signal?.throwIfAborted();
@@ -369,6 +501,19 @@ export class AskJobRunner {
       throw error;
     }
   }
+}
+
+/** The result for a question that stops before any SQL runs. */
+function notAnswerable(proposal: SqlProposal, common: AskCommon): AskResult {
+  return proposal.status === 'ambiguous'
+    ? {
+        ...common,
+        status: 'ambiguous',
+        clarifyingQuestion: proposal.clarifyingQuestion,
+        assumptions: proposal.assumptions,
+        explanation: proposal.explanation,
+      }
+    : { ...common, status: 'unanswerable', explanation: proposal.explanation };
 }
 
 /** Totals for the accounting step: model calls, tokens, and time. */
@@ -413,25 +558,5 @@ function failed(
   return {
     ok: false,
     error: { code, message, retryable, ...(detail ? { detail } : {}) },
-  };
-}
-
-/** A model failure as the owner sees it. The provider's own text is never included. */
-export function llmFailure(error: LlmError): JobError {
-  if (error.kind === 'misconfigured') {
-    return {
-      code: 'LLM_NOT_CONFIGURED',
-      message:
-        'The assistant is not set up on this server yet. An administrator needs to add a model API key.',
-      retryable: false,
-    };
-  }
-  return {
-    code: 'LLM_UNAVAILABLE',
-    message:
-      error.kind === 'rate_limited'
-        ? 'The assistant is busy right now. Try again in a minute.'
-        : 'The assistant could not answer right now. Try again shortly.',
-    retryable: true,
   };
 }

@@ -11,7 +11,7 @@ import {
   type JobContext,
   type JobOutcome,
 } from './job.types';
-import { fromException } from './query-job.runner';
+import { fromException } from './job-errors';
 
 /**
  * The jobs that open a user database to manage a connection: check and save a new or

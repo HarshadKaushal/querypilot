@@ -99,58 +99,42 @@ export interface AskUsage {
   fallbackUsed: boolean;
 }
 
+/** The fields every AskResult has, whatever its status. */
+export interface AskCommon {
+  question: string;
+  schemaVersion: number;
+  model: string;
+  llmAttempts: LlmAttempt[];
+  /** True when the SQL came from the proposal cache, not the model. */
+  cached: boolean;
+  /** True when the schema was refreshed to answer (the database had changed). */
+  schemaRefreshed: boolean;
+  /** Added once the job finishes. */
+  usage?: AskUsage;
+}
+
 /** What answering a question produced. Nothing runs unless the status is answered. */
 export type AskResult =
-  | ({
+  | (AskCommon & {
       status: 'answered';
-      question: string;
       /** The SQL that ran, as the guard rewrote it. */
       sql: string;
       assumptions: string[];
       explanation: string;
-      schemaVersion: number;
-      model: string;
-      llmAttempts: LlmAttempt[];
-      /** True when the SQL came from the proposal cache, not the model. */
-      cached: boolean;
-      /** True when the schema was refreshed to answer (the database had changed). */
-      schemaRefreshed: boolean;
-      /** Added once the job finishes. */
-      usage?: AskUsage;
       chart: ChartSpec;
       facts: ResultFacts;
       summary: { text: string; source: 'model' | 'template' };
     } & Omit<ExecutionSuccess, 'ok'>)
-  | {
+  | (AskCommon & {
       status: 'ambiguous';
-      question: string;
       clarifyingQuestion: string;
       assumptions: string[];
       explanation: string;
-      schemaVersion: number;
-      model: string;
-      llmAttempts: LlmAttempt[];
-      /** True when the SQL came from the proposal cache, not the model. */
-      cached: boolean;
-      /** True when the schema was refreshed to answer (the database had changed). */
-      schemaRefreshed: boolean;
-      /** Added once the job finishes. */
-      usage?: AskUsage;
-    }
-  | {
+    })
+  | (AskCommon & {
       status: 'unanswerable';
-      question: string;
       explanation: string;
-      schemaVersion: number;
-      model: string;
-      llmAttempts: LlmAttempt[];
-      /** True when the SQL came from the proposal cache, not the model. */
-      cached: boolean;
-      /** True when the schema was refreshed to answer (the database had changed). */
-      schemaRefreshed: boolean;
-      /** Added once the job finishes. */
-      usage?: AskUsage;
-    };
+    });
 
 export type JobState = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 

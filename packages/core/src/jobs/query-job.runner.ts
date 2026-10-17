@@ -3,14 +3,15 @@ import { ConnectionService } from '../connections/connection.service';
 import { AppException } from '../errors/app.exception';
 import { SqlGuardService } from '../sql-guard/sql-guard.service';
 import { QueryExecutor } from '../user-database/query-executor';
+import { executionFailure, fromException } from './job-errors';
 import {
   NO_JOB_CONTEXT,
   type JobContext,
-  type JobError,
   type JobOutcome,
   type QueryJobData,
   type QueryJobResult,
 } from './job.types';
+import { runCheckedSql } from './run-checked-sql';
 
 /**
  * Runs SQL for its owner: the guard checks it against the latest snapshot and allowlist,
@@ -44,31 +45,18 @@ export class QueryJobRunner {
           },
         };
       }
-      context.signal?.throwIfAborted();
-      await context.report('connecting');
-      const target = await this.connections.resolveTarget(data.userId, data.connectionId);
-      if (!target.ok) {
-        return { ok: false, error: fromException(target.error) };
+      const run = await runCheckedSql(
+        { connections: this.connections, executor: this.executor },
+        { userId: data.userId, connectionId: data.connectionId, sql: check.sql },
+        context,
+      );
+      if (!run.ran) {
+        return { ok: false, error: run.error };
       }
-      context.signal?.throwIfAborted();
-      await context.report('running_query');
-      const result = await this.executor.run({
-        connectionId: data.connectionId,
-        target: target.request,
-        sql: check.sql,
-        signal: context.signal,
-      });
-      if (!result.ok) {
-        return {
-          ok: false,
-          error: {
-            code: result.code,
-            message: result.message,
-            retryable: result.retryable,
-          },
-        };
+      if (!run.result.ok) {
+        return { ok: false, error: executionFailure(run.result) };
       }
-      const { ok: _ok, ...rows } = result;
+      const { ok: _ok, ...rows } = run.result;
       return {
         ok: true,
         result: { ...rows, sql: check.sql, schemaVersion: check.schemaVersion },
@@ -80,10 +68,4 @@ export class QueryJobRunner {
       throw error;
     }
   }
-}
-
-/** An AppException carries a stable code and a message written here, so both pass through. */
-export function fromException(error: AppException): JobError {
-  const body = error.getResponse() as { message: string };
-  return { code: error.code, message: body.message, retryable: false };
 }
