@@ -10,13 +10,12 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { ErrorAlert } from '../../components/ErrorAlert';
-import { ApiError } from '../../lib/api-client';
 import type { PublicConnection } from '../../lib/api-types';
+import { notifyError } from '../../lib/notify';
 import { queryKeys } from '../../lib/query-keys';
 import { useAuth } from '../auth';
 import { deleteConnection, useConnections } from './api';
@@ -37,11 +36,7 @@ export function ConnectionsPage() {
     },
     onError: (error) => {
       setDeleting(null);
-      notifications.show({
-        color: 'red',
-        title: 'The connection was not deleted',
-        message: error instanceof ApiError ? error.message : 'Try again.',
-      });
+      notifyError('The connection was not deleted', error);
     },
   });
 

@@ -14,12 +14,13 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { useRef, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router';
+import { ErrorAlert } from '../../components/ErrorAlert';
 import { JobProgress } from '../../components/JobProgress';
 import { ApiError } from '../../lib/api-client';
-import type { AskResult, JobError, JobView, QueryJobResult } from '../../lib/api-types';
+import type { AskResult, QueryJobResult } from '../../lib/api-types';
 import { cancelJob } from '../../lib/jobs';
 import { queryKeys } from '../../lib/query-keys';
-import { isAbort, useUnmountSignal } from '../../lib/use-abort';
+import { useJobRunner } from '../../lib/use-job-runner';
 import { useAuth } from '../auth';
 import { useConnections } from '../connections';
 import { askQuestion, runSql, useSchema } from './api';
@@ -36,7 +37,8 @@ type Mode = 'question' | 'sql';
 type Outcome =
   | { kind: 'question'; result: AskResult }
   | { kind: 'sql'; result: QueryJobResult }
-  | { kind: 'error'; error: ApiError | JobError | unknown };
+  /** A JobError from a failed job, or an ApiError from a refused request. */
+  | { kind: 'error'; error: unknown };
 
 /**
  * Ask a question in English, or run SQL you wrote (blueprint 8.3). Either way a worker job
@@ -45,16 +47,17 @@ type Outcome =
  */
 export function AskPage() {
   const { api } = useAuth();
-  const signal = useUnmountSignal();
   const [params, setParams] = useSearchParams();
   const [mode, setMode] = useState<Mode>('question');
   const queryClient = useQueryClient();
   // "Ask again" from History opens this page with the question filled in.
   const [text, setText] = useState(() => params.get('q') ?? '');
-  const [running, setRunning] = useState<JobView | null>(null);
-  const [starting, setStarting] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
+  const job = useJobRunner();
+  const running = job.progress;
+  // Sent, but the first progress update has not arrived yet.
+  const starting = job.busy && running === null;
 
   const connections = useConnections();
   const connectionId = params.get('connection') ?? connections.data?.[0]?.id ?? null;
@@ -63,7 +66,7 @@ export function AskPage() {
   const limit = mode === 'question' ? MAX_QUESTION : MAX_SQL;
   const trimmed = text.trim();
   const tooLong = text.length > limit;
-  const busy = starting || running !== null;
+  const busy = job.busy;
 
   async function submit(event?: FormEvent) {
     event?.preventDefault();
@@ -71,39 +74,32 @@ export function AskPage() {
       return;
     }
     setOutcome(null);
-    setStarting(true);
-    try {
-      const options = {
-        signal: signal(),
-        onUpdate: (view: JobView) => {
-          setStarting(false);
-          setRunning(view);
-        },
-      };
-      const done =
-        mode === 'question'
-          ? await askQuestion(api, connectionId, trimmed, options)
-          : await runSql(api, connectionId, trimmed, options);
-      if (done.state === 'succeeded' && done.result) {
+    if (mode === 'question') {
+      const ended = await job.run((options) =>
+        askQuestion(api, connectionId, trimmed, options),
+      );
+      if (ended) {
         setOutcome(
-          mode === 'question'
-            ? { kind: 'question', result: done.result as AskResult }
-            : { kind: 'sql', result: done.result as QueryJobResult },
+          ended.ok
+            ? { kind: 'question', result: ended.result }
+            : { kind: 'error', error: ended.error },
         );
-      } else {
-        setOutcome({ kind: 'error', error: done.error ?? null });
       }
-    } catch (error) {
-      if (!isAbort(error)) {
-        setOutcome({ kind: 'error', error });
+    } else {
+      const ended = await job.run((options) =>
+        runSql(api, connectionId, trimmed, options),
+      );
+      if (ended) {
+        setOutcome(
+          ended.ok
+            ? { kind: 'sql', result: ended.result }
+            : { kind: 'error', error: ended.error },
+        );
       }
-    } finally {
-      setStarting(false);
-      setRunning(null);
-      // A finished job is a new history entry, and may have used a question.
-      void queryClient.invalidateQueries({ queryKey: queryKeys.history });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.usage });
     }
+    // A finished job is a new history entry, and may have used a question.
+    void queryClient.invalidateQueries({ queryKey: queryKeys.history });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.usage });
   }
 
   async function cancel() {
@@ -117,7 +113,9 @@ export function AskPage() {
     return <Loader aria-label="Loading connections" />;
   }
   if (connections.isError) {
-    return <FailureView error={connections.error} connectionId="" />;
+    return (
+      <ErrorAlert error={connections.error} title="Could not load your connections" />
+    );
   }
   if (connections.data.length === 0) {
     return (

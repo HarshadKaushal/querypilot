@@ -16,19 +16,15 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
+import { useForm } from '@mantine/form';
 import { useQueryClient } from '@tanstack/react-query';
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { JobProgress } from '../../components/JobProgress';
-import type {
-  ConnectionInput,
-  JobError,
-  JobView,
-  RefreshSummary,
-} from '../../lib/api-types';
+import type { ConnectionInput, RefreshSummary } from '../../lib/api-types';
 import { queryKeys } from '../../lib/query-keys';
-import { isAbort, useUnmountSignal } from '../../lib/use-abort';
+import { useJobRunner } from '../../lib/use-job-runner';
 import { useAuth } from '../auth';
 import { createConnection, refreshSchema, useEgress } from './api';
 import { AllowlistSection } from './components/AllowlistSection';
@@ -83,78 +79,68 @@ export function ConnectWizardPage() {
   const { api } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const signal = useUnmountSignal();
   const [step, setStep] = useState(0);
-  const [form, setForm] = useState<ConnectionForm>(EMPTY_FORM);
-  const [errors, setErrors] = useState<FieldErrors>({});
-  const [progress, setProgress] = useState<{
-    label: string;
-    view: JobView | null;
-  } | null>(null);
+  // The form's values and per-field errors. validateConnection runs on submit, and a
+  // field's error clears as soon as it is edited.
+  const form = useForm<ConnectionForm>({
+    mode: 'controlled',
+    initialValues: EMPTY_FORM,
+    validate: validateConnection,
+  });
+  const job = useJobRunner();
+  // Which of the two jobs is running, for the progress label.
+  const [stage, setStage] = useState('');
   const [failure, setFailure] = useState<unknown>(null);
   const [connectionId, setConnectionId] = useState<string | null>(null);
   const [summary, setSummary] = useState<RefreshSummary | null>(null);
-  const [readError, setReadError] = useState<JobError | null>(null);
+  const [readError, setReadError] = useState<unknown>(null);
 
   const egress = useEgress();
 
-  function update<K extends keyof ConnectionForm>(field: K, value: ConnectionForm[K]) {
-    setForm((current) => ({ ...current, [field]: value }));
-  }
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    const problems = validateConnection(form);
-    setErrors(problems);
-    if (Object.keys(problems).length > 0) {
-      return;
-    }
+  /** Runs only when every field passed validateConnection. */
+  async function save(values: ConnectionForm) {
     setFailure(null);
-    try {
-      setProgress({ label: 'Saving the connection', view: null });
-      const created = await createConnection(
+    setStage('Saving the connection');
+    const created = await job.run((options) =>
+      createConnection(
         api,
         {
-          ...form,
-          port: Number(form.port),
-          label: form.label.trim(),
-          host: form.host.trim(),
+          ...values,
+          port: Number(values.port),
+          label: values.label.trim(),
+          host: values.host.trim(),
         },
-        {
-          signal: signal(),
-          onUpdate: (view) => setProgress({ label: 'Saving the connection', view }),
-        },
-      );
-      if (created.state !== 'succeeded' || !created.result) {
-        setFailure(created.error ?? null);
-        return;
-      }
-      // Saved: the password is not kept in the page any longer than needed.
-      const id = created.result.id;
-      setForm((current) => ({ ...current, password: '' }));
-      setConnectionId(id);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.connections });
-      const read = await refreshSchema(api, id, {
-        signal: signal(),
-        onUpdate: (view) => setProgress({ label: 'Reading the schema', view }),
-      });
-      if (read.state === 'succeeded' && read.result) {
-        setSummary(read.result);
-      } else {
-        // The connection is saved; the next step offers to read the schema again.
-        setReadError(read.error ?? null);
-      }
-      setStep(2);
-    } catch (error) {
-      if (!isAbort(error)) {
-        setFailure(error);
-      }
-    } finally {
-      setProgress(null);
+        options,
+      ),
+    );
+    if (!created) {
+      return;
     }
+    if (!created.ok) {
+      setFailure(created.error);
+      return;
+    }
+    // Saved: the password is not kept in the page any longer than needed.
+    const id = created.result.id;
+    form.setFieldValue('password', '');
+    setConnectionId(id);
+    void queryClient.invalidateQueries({ queryKey: queryKeys.connections });
+
+    setStage('Reading the schema');
+    const read = await job.run((options) => refreshSchema(api, id, options));
+    if (!read) {
+      return;
+    }
+    if (read.ok) {
+      setSummary(read.result);
+    } else {
+      // The connection is saved; the next step offers to read the schema again.
+      setReadError(read.error);
+    }
+    setStep(2);
   }
 
-  const busy = progress !== null;
+  const busy = job.busy;
 
   return (
     <Stack maw={900}>
@@ -204,57 +190,46 @@ export function ConnectWizardPage() {
         </Stepper.Step>
 
         <Stepper.Step label="Connect" description="Address and login">
-          <form onSubmit={submit} noValidate>
+          <form onSubmit={form.onSubmit(save)} noValidate>
             <Stack mt="md">
+              {/* getInputProps wires value, onChange, and error to the form's field. */}
               <TextInput
                 label="Name"
                 description="Only for you, for example Sales database"
-                value={form.label}
-                onChange={(e) => update('label', e.currentTarget.value)}
-                error={errors.label}
+                {...form.getInputProps('label')}
                 disabled={busy}
               />
               <SimpleGrid cols={{ base: 1, sm: 3 }}>
                 <TextInput
                   label="Host"
                   placeholder="db.example.com"
-                  value={form.host}
-                  onChange={(e) => update('host', e.currentTarget.value)}
-                  error={errors.host}
+                  {...form.getInputProps('host')}
                   disabled={busy}
                   style={{ gridColumn: 'span 2' }}
                 />
                 <NumberInput
                   label="Port"
-                  value={form.port}
-                  onChange={(value) => update('port', value)}
-                  error={errors.port}
+                  {...form.getInputProps('port')}
                   disabled={busy}
                   hideControls
                 />
               </SimpleGrid>
               <TextInput
                 label="Database"
-                value={form.databaseName}
-                onChange={(e) => update('databaseName', e.currentTarget.value)}
-                error={errors.databaseName}
+                {...form.getInputProps('databaseName')}
                 disabled={busy}
               />
               <SimpleGrid cols={{ base: 1, sm: 2 }}>
                 <TextInput
                   label="Username"
                   autoComplete="off"
-                  value={form.username}
-                  onChange={(e) => update('username', e.currentTarget.value)}
-                  error={errors.username}
+                  {...form.getInputProps('username')}
                   disabled={busy}
                 />
                 <PasswordInput
                   label="Password"
                   autoComplete="new-password"
-                  value={form.password}
-                  onChange={(e) => update('password', e.currentTarget.value)}
-                  error={errors.password}
+                  {...form.getInputProps('password')}
                   disabled={busy}
                 />
               </SimpleGrid>
@@ -268,9 +243,14 @@ export function ConnectWizardPage() {
                     label: 'Verify full (encrypted, certificate checked)',
                   },
                 ]}
-                value={form.sslMode}
+                // Not getInputProps: Select hands onChange a string | null, and the form
+                // field only accepts the two allowed modes.
+                value={form.values.sslMode}
                 onChange={(value) =>
-                  update('sslMode', (value ?? 'require') as ConnectionForm['sslMode'])
+                  form.setFieldValue(
+                    'sslMode',
+                    (value ?? 'require') as ConnectionForm['sslMode'],
+                  )
                 }
                 allowDeselect={false}
                 disabled={busy}
@@ -278,14 +258,13 @@ export function ConnectWizardPage() {
               <Checkbox
                 label="Let the AI see up to 20 result rows when it writes the summary"
                 description="Off: it sees only column names, the row count, and numeric totals."
-                checked={form.sendSampleRowsToLlm}
-                onChange={(e) => update('sendSampleRowsToLlm', e.currentTarget.checked)}
+                {...form.getInputProps('sendSampleRowsToLlm', { type: 'checkbox' })}
                 disabled={busy}
               />
               {failure !== null && (
                 <ErrorAlert error={failure} title="The connection was not saved" />
               )}
-              {progress && <JobProgress view={progress.view} label={progress.label} />}
+              {busy && <JobProgress view={job.progress} label={stage} />}
               <Group justify="space-between">
                 <Button variant="default" onClick={() => setStep(0)} disabled={busy}>
                   Back

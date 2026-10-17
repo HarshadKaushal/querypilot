@@ -5,9 +5,9 @@ import { useState } from 'react';
 import { ErrorAlert } from '../../../components/ErrorAlert';
 import { JobProgress } from '../../../components/JobProgress';
 import { ApiError } from '../../../lib/api-client';
-import type { JobError, JobView, RefreshSummary } from '../../../lib/api-types';
+import type { RefreshSummary } from '../../../lib/api-types';
 import { queryKeys } from '../../../lib/query-keys';
-import { isAbort, useUnmountSignal } from '../../../lib/use-abort';
+import { useJobRunner } from '../../../lib/use-job-runner';
 import { useAuth } from '../../auth';
 import { refreshSchema, useAllowlist } from '../api';
 import { AllowlistEditor } from './AllowlistEditor';
@@ -24,13 +24,14 @@ export function AllowlistSection({
 }: {
   connectionId: string;
   initialSummary?: RefreshSummary | null;
-  initialReadError?: JobError | null;
+  /** Why the first read failed: a JobError, or an ApiError if the API refused it. */
+  initialReadError?: unknown;
   onSaved?: () => void;
 }) {
   const { api } = useAuth();
   const queryClient = useQueryClient();
-  const signal = useUnmountSignal();
-  const [reading, setReading] = useState<JobView | null>(null);
+  const job = useJobRunner();
+  const reading = job.busy;
   const [readError, setReadError] = useState<unknown>(initialReadError);
   const [summary, setSummary] = useState<RefreshSummary | null>(initialSummary);
 
@@ -41,25 +42,21 @@ export function AllowlistSection({
   async function readSchema() {
     setReadError(null);
     setSummary(null);
-    try {
-      const done = await refreshSchema(api, connectionId, {
-        signal: signal(),
-        onUpdate: setReading,
-      });
-      if (done.state === 'succeeded' && done.result) {
-        setSummary(done.result);
+    const ended = await job.run(async (options) => {
+      const done = await refreshSchema(api, connectionId, options);
+      if (done.state === 'succeeded') {
+        // Reloaded before the progress clears, so the "not read yet" notice does not
+        // flash while the new allowlist loads.
         await queryClient.invalidateQueries({
           queryKey: queryKeys.allowlist(connectionId),
         });
-      } else {
-        setReadError(done.error ?? null);
       }
-    } catch (error) {
-      if (!isAbort(error)) {
-        setReadError(error);
-      }
-    } finally {
-      setReading(null);
+      return done;
+    });
+    if (ended?.ok) {
+      setSummary(ended.result);
+    } else if (ended) {
+      setReadError(ended.error);
     }
   }
 
@@ -76,13 +73,13 @@ export function AllowlistSection({
             variant="default"
             size="xs"
             onClick={() => void readSchema()}
-            disabled={reading !== null}
+            disabled={reading}
           >
             Read schema again
           </Button>
         )}
       </Group>
-      {reading && <JobProgress view={reading} label="Reading the schema" />}
+      {job.progress && <JobProgress view={job.progress} label="Reading the schema" />}
       {readError !== null && (
         <ErrorAlert error={readError} title="The schema could not be read" />
       )}

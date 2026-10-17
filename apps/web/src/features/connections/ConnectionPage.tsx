@@ -17,9 +17,10 @@ import { Link, useParams } from 'react-router';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { JobProgress } from '../../components/JobProgress';
 import { ApiError } from '../../lib/api-client';
-import type { JobView, PublicConnection } from '../../lib/api-types';
+import type { PublicConnection } from '../../lib/api-types';
+import { notifyError } from '../../lib/notify';
 import { queryKeys } from '../../lib/query-keys';
-import { isAbort, useUnmountSignal } from '../../lib/use-abort';
+import { useJobRunner } from '../../lib/use-job-runner';
 import { useAuth } from '../auth';
 import { setSampleRows, testConnection, useConnection } from './api';
 import { AllowlistSection } from './components/AllowlistSection';
@@ -29,8 +30,7 @@ export function ConnectionPage() {
   const { id = '' } = useParams();
   const { api } = useAuth();
   const queryClient = useQueryClient();
-  const signal = useUnmountSignal();
-  const [testing, setTesting] = useState<JobView | null>(null);
+  const job = useJobRunner();
   const [testError, setTestError] = useState<unknown>(null);
 
   const connection = useConnection(id);
@@ -43,36 +43,23 @@ export function ConnectionPage() {
   const sampleRows = useMutation({
     mutationFn: (allowed: boolean) => setSampleRows(api, id, allowed),
     onSuccess: store,
-    onError: (error) =>
-      notifications.show({
-        color: 'red',
-        title: 'The setting was not saved',
-        message: error instanceof ApiError ? error.message : 'Try again.',
-      }),
+    onError: (error) => notifyError('The setting was not saved', error),
   });
 
   async function test() {
     setTestError(null);
-    try {
-      const done = await testConnection(api, id, {
-        signal: signal(),
-        onUpdate: setTesting,
-      });
-      if (done.state === 'succeeded' && done.result) {
-        store(done.result);
-        notifications.show({ color: 'green', message: 'The connection works.' });
-      } else {
-        setTestError(done.error ?? null);
-        // A failed test marks the connection as failing.
-        void queryClient.invalidateQueries({ queryKey: queryKeys.connection(id) });
-        void queryClient.invalidateQueries({ queryKey: queryKeys.connections });
-      }
-    } catch (error) {
-      if (!isAbort(error)) {
-        setTestError(error);
-      }
-    } finally {
-      setTesting(null);
+    const ended = await job.run((options) => testConnection(api, id, options));
+    if (!ended) {
+      return;
+    }
+    if (ended.ok) {
+      store(ended.result);
+      notifications.show({ color: 'green', message: 'The connection works.' });
+    } else {
+      setTestError(ended.error);
+      // A failed test marks the connection as failing.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.connection(id) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.connections });
     }
   }
 
@@ -127,7 +114,9 @@ export function ConnectionPage() {
             disabled={sampleRows.isPending}
             onChange={(event) => sampleRows.mutate(event.currentTarget.checked)}
           />
-          {testing && <JobProgress view={testing} label="Testing the connection" />}
+          {job.progress && (
+            <JobProgress view={job.progress} label="Testing the connection" />
+          )}
           {testError !== null && (
             <ErrorAlert error={testError} title="The connection test failed" />
           )}
@@ -136,7 +125,7 @@ export function ConnectionPage() {
               variant="default"
               size="xs"
               onClick={() => void test()}
-              disabled={testing !== null}
+              disabled={job.busy}
             >
               Test connection
             </Button>

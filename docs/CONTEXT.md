@@ -40,7 +40,7 @@ Last updated: 2026-10-16, after the move from Prisma to Sequelize (base `17bd754
 | Data           | Sequelize 6 (`sequelize-typescript`, `@nestjs/sequelize`, sequelize-cli), Postgres 18, Redis 8              |
 | Jobs           | BullMQ 6                                                                                                    |
 | Model          | `@google/genai` (Interactions API); models `gemini-3.8-flash`, fallback and summary `gemini-3.5-flash-lite` |
-| Web            | React 19, Vite 8, Mantine 9, TanStack Query, React Router 8                                                 |
+| Web            | React 19, Vite 8, Mantine 9 (with `@mantine/form`), TanStack Query, React Router 8                          |
 | Tests          | Jest (backend), Vitest (web), Playwright with axe (browser)                                                 |
 
 ## Repository map
@@ -168,7 +168,7 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
 - **An intermittent API unit test: `src/health/health.controller.spec.ts`.** It failed on 2026-10-16 (test not identified then) and again on 2026-10-18, both right after the package builds. On 2026-10-18 the suite took 54 s; it passed alone and on a rerun. The guess is Jest's 5 s per-test limit under cold-cache load, but this is unconfirmed. Next time, save the full Jest output.
 - **The first live-events subscription after an API restart hung once** (2026-10-14 16:10). It could not be reproduced. Check `JobEvents.subscribe` and `streamJob` in the code review.
 - **Not built yet:** a chart-type switcher, example question-and-SQL pairs in the prompt, a circuit breaker per model provider, a key re-wrap job, readiness checks for the queue and the model, data export, partitions and retention, a rate limit on connection tests, browser tests in CI, and editing a connection's login in the app.
-- **The main web bundle is about 695 kB** before compression (measured 2026-10-16). Lazy-loading pages in `app/router.tsx` would split it.
+- **The main web bundle is about 715 kB** before compression (measured 2026-10-18, after `@mantine/form`; 695 kB on 2026-10-16). Lazy-loading pages in `app/router.tsx` would split it.
 - **Browser tests not yet run on the web feature layout or on Sequelize** (2026-10-16): run `npm run test:browser` when no dev servers are in use.
 - **`npm test` exits 1 on sql-guard's coverage threshold** (functions 98.83% against 100%, in `index.ts`), although all 310 tests pass. Found 2026-10-16; it predates the Sequelize move (no sql-guard file or package version changed). Decide whether to cover `index.ts` or exclude it.
 - **`sequelize-typescript` has had no release since 2023.** Check it first when upgrading Sequelize.
@@ -200,3 +200,4 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
 - **2026-10-18:**
   - Readability cleanup, commit 1 of 4: a "what this is for" comment on the auth, controller, package, and model files; wrong or stale comments fixed; and magic numbers named (new `user-database/sqlstate.ts`). No behaviour change (`docs/ai-reviews/2026-10-18-comments-and-constants.md`). The build, lint, and unit tests passed; the API suite needed one rerun (the health spec).
   - Commit 2 of 4: `AskJobRunner.answer()` split into named steps with a typed `RetryState`; new `jobs/job-errors.ts` and `jobs/run-checked-sql.ts` shared by both SQL jobs; `AskCommon` in `AskResult`; `streamJob` steps commented and its deadline made a `setTimeout` (`docs/ai-reviews/2026-10-18-ask-runner-readability.md`). Unit tests passed; `test:int` waits for Docker.
+  - Commit 3 of 4: `lib/use-job-runner.ts` replaces five copies of the job-progress code; `lib/notify.ts` replaces four error toasts; the connect wizard uses `useForm` from `@mantine/form` 9.7.2, which is a new dependency (`docs/ai-reviews/2026-10-18-web-job-runner-and-form.md`). 72 web tests, the type-check, lint, and `vite build` passed; browser tests wait for Docker.

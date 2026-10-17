@@ -10,16 +10,15 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { JobProgress } from '../../components/JobProgress';
-import { ApiError } from '../../lib/api-client';
-import type { HistoryEntry, JobView, QueryJobResult } from '../../lib/api-types';
+import type { HistoryEntry, QueryJobResult } from '../../lib/api-types';
+import { notifyError } from '../../lib/notify';
 import { queryKeys } from '../../lib/query-keys';
-import { isAbort, useUnmountSignal } from '../../lib/use-abort';
+import { useJobRunner, type JobRun } from '../../lib/use-job-runner';
 import { FailureView, QueryResultView } from '../ask';
 import { useAuth } from '../auth';
 import { useConnections } from '../connections';
@@ -55,11 +54,7 @@ export function HistoryPage() {
     },
     onError: (error) => {
       setClearing(false);
-      notifications.show({
-        color: 'red',
-        title: 'History was not cleared',
-        message: error instanceof ApiError ? error.message : 'Try again.',
-      });
+      notifyError('History was not cleared', error);
     },
   });
 
@@ -141,43 +136,22 @@ export function HistoryPage() {
 function HistoryCard({ entry, label }: { entry: HistoryEntry; label?: string }) {
   const { api } = useAuth();
   const queryClient = useQueryClient();
-  const signal = useUnmountSignal();
-  const [running, setRunning] = useState<JobView | null>(null);
-  const [rerun, setRerun] = useState<
-    { ok: true; result: QueryJobResult } | { ok: false; error: unknown } | null
-  >(null);
+  const job = useJobRunner();
+  const [rerun, setRerun] = useState<JobRun<QueryJobResult> | null>(null);
 
   const remove = useMutation({
     mutationFn: () => deleteHistoryEntry(api, entry.id),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.history }),
-    onError: (error) =>
-      notifications.show({
-        color: 'red',
-        title: 'The entry was not deleted',
-        message: error instanceof ApiError ? error.message : 'Try again.',
-      }),
+    onError: (error) => notifyError('The entry was not deleted', error),
   });
 
   async function runAgain() {
     setRerun(null);
-    try {
-      const done = await rerunHistoryEntry(api, entry.id, {
-        signal: signal(),
-        onUpdate: setRunning,
-      });
-      setRerun(
-        done.state === 'succeeded' && done.result
-          ? { ok: true, result: done.result }
-          : { ok: false, error: done.error ?? null },
-      );
+    const ended = await job.run((options) => rerunHistoryEntry(api, entry.id, options));
+    if (ended) {
+      setRerun(ended);
       // The re-run is a new job, so it becomes a new entry.
       void queryClient.invalidateQueries({ queryKey: queryKeys.history });
-    } catch (error) {
-      if (!isAbort(error)) {
-        setRerun({ ok: false, error });
-      }
-    } finally {
-      setRunning(null);
     }
   }
 
@@ -236,7 +210,7 @@ function HistoryCard({ entry, label }: { entry: HistoryEntry; label?: string }) 
               size="xs"
               variant="light"
               onClick={() => void runAgain()}
-              disabled={running !== null}
+              disabled={job.busy}
             >
               Run again
             </Button>
@@ -252,7 +226,9 @@ function HistoryCard({ entry, label }: { entry: HistoryEntry; label?: string }) 
             Delete
           </Button>
         </Group>
-        {running && <JobProgress view={running} label="Running the saved SQL again" />}
+        {job.progress && (
+          <JobProgress view={job.progress} label="Running the saved SQL again" />
+        )}
         {rerun?.ok && <QueryResultView result={rerun.result} />}
         {rerun && !rerun.ok && (
           <FailureView error={rerun.error} connectionId={entry.connectionId} />
