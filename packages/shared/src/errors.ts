@@ -1,3 +1,7 @@
+// The error shape shared by the API and its clients. Every failed request, and every failed
+// job, carries one of these stable codes, so a client can branch on the code and show the
+// message, which is always written by us and never copied from a database or the model.
+
 export const ERROR_CODES = [
   'INTERNAL_ERROR',
   'VALIDATION_ERROR',
@@ -32,6 +36,7 @@ export const ERROR_CODES = [
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
+/** The body of every error response: `{ "error": { "code", "message", "requestId" } }`. */
 export interface ErrorEnvelope {
   error: {
     code: ErrorCode;

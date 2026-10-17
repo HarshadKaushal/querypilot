@@ -11,6 +11,11 @@ import type {
   StoredRefresh,
 } from './auth.repository';
 
+/**
+ * Stores users, refresh tokens, and auth audit rows in the app database with Sequelize. It
+ * is the real AuthRepository; unit tests use MemoryAuthRepository (src/testing/) instead.
+ * Only token hashes are stored, never a refresh token itself.
+ */
 @Injectable()
 export class SequelizeAuthRepository implements AuthRepository {
   constructor(private readonly db: DatabaseService) {}

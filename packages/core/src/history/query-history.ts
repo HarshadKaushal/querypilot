@@ -12,6 +12,12 @@ import type {
   QueryJobResult,
 } from '../jobs/job.types';
 
+// Query history (ADR 0013): one row in the `queries` table (model QueryRecord) per finished
+// question or SQL job. It keeps what was asked, the SQL that ran, the outcome, and usage
+// numbers, but never result rows, so history holds no customer data beyond the question.
+// The interface, the pure helper that builds an entry, and the Sequelize implementation
+// are all in this file.
+
 /** One history entry as its owner sees it. Never result rows. */
 export interface HistoryEntry {
   id: string;

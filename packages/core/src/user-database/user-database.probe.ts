@@ -49,6 +49,8 @@ export type IntrospectResult =
   | ProbeFailure
   | { ok: false; code: 'SCHEMA_TOO_LARGE'; message: string };
 
+// Each statement of the read-only check must answer within this; it is a few small queries.
+const PROBE_TIMEOUT_MS = 5000;
 // Introspection reads more than the probe, so it gets a longer statement timeout.
 const INTROSPECTION_TIMEOUT_MS = 15000;
 
@@ -100,7 +102,10 @@ export class UserDatabaseProbe {
     work: (client: PgClientLike) => Promise<T>,
   ): Promise<T | ProbeFailure> {
     const factory = this.clients ?? ((config: ClientConfig) => new Client(config));
-    const client = factory({ ...userDatabaseConfig(request), statement_timeout: 5000 });
+    const client = factory({
+      ...userDatabaseConfig(request),
+      statement_timeout: PROBE_TIMEOUT_MS,
+    });
     try {
       await client.connect();
       return await work(client);

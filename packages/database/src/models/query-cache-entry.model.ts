@@ -14,6 +14,7 @@ import type {
 } from '../types/query-cache-entry.types';
 import { Connection } from './connection.model';
 
+/** A saved SQL proposal for a question, reused while the schema fingerprint is unchanged (ProposalCache). */
 @Table({
   tableName: 'query_cache',
   underscored: true,

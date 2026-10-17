@@ -18,6 +18,14 @@ import { errorEnvelope, type ErrorCode } from '@ayd/shared';
 import { Logger } from 'nestjs-pino';
 import type { Request, Response } from 'express';
 
+/**
+ * The last stop for every error thrown while handling a request. It turns the error into
+ * the one JSON error shape all routes share, `{ error: { code, message, requestId } }`:
+ * - an AppException keeps its code and message, which were written to be shown;
+ * - any other HttpException (Nest's own 404s and 401s, for example) gets a fixed message;
+ * - anything else is a 500 with a fixed message, logged with the request id.
+ * So a stack trace or a database error never reaches the client.
+ */
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   constructor(@Inject(Logger) private readonly logger: Logger) {}

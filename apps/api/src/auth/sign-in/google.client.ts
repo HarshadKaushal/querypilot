@@ -29,7 +29,15 @@ export const GOOGLE_CLIENT = Symbol('GOOGLE_CLIENT');
 const GOOGLE_AUTH = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token';
 const GOOGLE_CERTS = 'https://www.googleapis.com/oauth2/v3/certs';
+// Google signs ID tokens with either form of its issuer name.
+const GOOGLE_ISSUERS = ['https://accounts.google.com', 'accounts.google.com'];
 
+/**
+ * Talks to Google for sign-in (OAuth 2.0 authorization code flow with PKCE): builds the URL
+ * the browser is sent to, then swaps the returned code for an ID token and checks its
+ * signature, issuer, and audience before trusting the profile in it. Tests swap this class
+ * for a fake through the GOOGLE_CLIENT token, so no test calls Google.
+ */
 @Injectable()
 export class GoogleOAuthClient implements GoogleIdentityProvider {
   constructor(@Inject(APP_ENV) private readonly env: AppEnv) {}
@@ -79,7 +87,7 @@ export class GoogleOAuthClient implements GoogleIdentityProvider {
     const { createRemoteJWKSet, jwtVerify } = await import('jose');
     const jwks = createRemoteJWKSet(new URL(GOOGLE_CERTS));
     const { payload } = await jwtVerify(tokenJson.id_token, jwks, {
-      issuer: ['https://accounts.google.com', 'accounts.google.com'],
+      issuer: GOOGLE_ISSUERS,
       audience: this.env.GOOGLE_CLIENT_ID,
     });
     if (typeof payload.sub !== 'string' || typeof payload.email !== 'string') {

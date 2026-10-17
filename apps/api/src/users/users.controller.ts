@@ -6,6 +6,7 @@ import { ApiErrors } from '../common/openapi';
 import { requestMeta } from '../common/request-meta';
 import { CurrentUserDto } from './users.responses';
 
+/** /v1/users/me: read the signed-in user, or delete the account and everything it owns. */
 @ApiTags('users')
 @ApiBearerAuth()
 @ApiErrors(401)

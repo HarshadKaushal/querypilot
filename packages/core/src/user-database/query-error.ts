@@ -1,5 +1,6 @@
 import { errorCode } from '../errors/error-code';
 import { classifyConnectError } from './connect-error';
+import { SQLSTATE } from './sqlstate';
 
 export type ExecutionFailureCode =
   | 'CONNECTION_FAILED'
@@ -50,19 +51,19 @@ export function classifyQueryError(error: unknown, timeoutMs: number): Execution
       connect.message,
     );
   }
-  if (code === '57014') {
+  if (code === SQLSTATE.QUERY_CANCELED) {
     return failure(
       'QUERY_TIMEOUT',
       `The query ran longer than ${Math.round(timeoutMs / 1000)} seconds and was stopped. Try a narrower question.`,
     );
   }
-  if (code === '25006') {
+  if (code === SQLSTATE.READ_ONLY_SQL_TRANSACTION) {
     return failure(
       'QUERY_WRITE_BLOCKED',
       'The query tried to change data, which is never allowed.',
     );
   }
-  if (code === '42501') {
+  if (code === SQLSTATE.INSUFFICIENT_PRIVILEGE) {
     return failure(
       'QUERY_NOT_PERMITTED',
       'The database login is not allowed to read part of this query.',
@@ -71,7 +72,11 @@ export function classifyQueryError(error: unknown, timeoutMs: number): Execution
   // The guard checked names against the saved snapshot, so a column, table, or schema the
   // database no longer has means its structure changed since the last refresh. Retrying
   // with the same snapshot would fail the same way.
-  if (code === '42703' || code === '42P01' || code === '3F000') {
+  if (
+    code === SQLSTATE.UNDEFINED_COLUMN ||
+    code === SQLSTATE.UNDEFINED_TABLE ||
+    code === SQLSTATE.INVALID_SCHEMA_NAME
+  ) {
     return failure(
       'QUERY_SCHEMA_CHANGED',
       "Your database's structure has changed since its schema was last read. Refresh the schema and ask again.",

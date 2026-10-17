@@ -9,6 +9,12 @@ import { createValidationPipe } from './common/validation';
 import { APP_ENV } from './config/app-config.module';
 import type { AppEnv } from './config/env';
 
+// Entry point of the HTTP API (`npm run dev` starts it). It builds the Nest app from
+// AppModule, installs what every request goes through (the logger, the error filter, and
+// request-body validation), serves the Swagger docs outside production, and listens on
+// API_PORT. Work that touches a customer database or the model is queued for the worker.
+
+/** Only the environment check's message is printed; any other error could hold a secret. */
 function startupError(error: unknown): string {
   if (error instanceof Error && error.message.startsWith('Invalid environment:')) {
     return error.message;

@@ -114,6 +114,7 @@ export function selectTables(
     if (chosen.has(name)) {
       return true;
     }
+    // Tables are joined with a blank line, which costs two more characters each.
     const size = renderSchema([table]).length + 2;
     if (used + size > budget) {
       return false;
@@ -143,8 +144,11 @@ export function selectTables(
   };
 }
 
+/** Longest description, of a table or a column, shown to the model. */
+const MAX_DESCRIPTION_CHARS = 200;
+
 function oneLine(text: string): string {
-  return text.replace(/\s+/g, ' ').trim().slice(0, 200);
+  return text.replace(/\s+/g, ' ').trim().slice(0, MAX_DESCRIPTION_CHARS);
 }
 
 /** Lowercase words of three letters or more, with a plural "s" dropped. */
@@ -154,6 +158,13 @@ function terms(text: string): string[] {
     .map((word) => (word.length > 3 && word.endsWith('s') ? word.slice(0, -1) : word));
 }
 
+// How much one question word counts when it matches part of a table. A match on the table's
+// own name is the strongest hint that the question is about it.
+const TABLE_NAME_WEIGHT = 3;
+const COLUMN_NAME_WEIGHT = 1;
+const DESCRIPTION_WEIGHT = 1;
+
+/** How relevant a table looks to the question: weighted word matches. */
 function score(table: AllowedTable, words: Set<string>): number {
   const nameTerms = terms(`${table.schema} ${table.name}`.replace(/_/g, ' '));
   const columnTerms = table.columns.flatMap((column) =>
@@ -166,8 +177,8 @@ function score(table: AllowedTable, words: Set<string>): number {
     ].join(' '),
   );
   let points = 0;
-  for (const term of nameTerms) points += words.has(term) ? 3 : 0;
-  for (const term of columnTerms) points += words.has(term) ? 1 : 0;
-  for (const term of descriptionTerms) points += words.has(term) ? 1 : 0;
+  for (const term of nameTerms) points += words.has(term) ? TABLE_NAME_WEIGHT : 0;
+  for (const term of columnTerms) points += words.has(term) ? COLUMN_NAME_WEIGHT : 0;
+  for (const term of descriptionTerms) points += words.has(term) ? DESCRIPTION_WEIGHT : 0;
   return points;
 }

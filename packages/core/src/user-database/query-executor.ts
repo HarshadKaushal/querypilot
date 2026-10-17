@@ -17,6 +17,7 @@ import {
   failure,
   type ExecutionFailure,
 } from './query-error';
+import { SQLSTATE } from './sqlstate';
 import type { ProbeRequest } from './user-database.probe';
 
 export interface ExecutionRequest {
@@ -49,6 +50,12 @@ export type ExecutionResult = ExecutionSuccess | ExecutionFailure;
 
 const FETCH_BATCH = 100;
 const CURSOR = 'ayd_result';
+// A slot's lease lasts this much longer than the statement timeout, so a query that runs
+// right up to its timeout still holds its slot while it finishes.
+const LEASE_MARGIN_MS = 10_000;
+// Waiting for a slot: first retry after 25 ms, doubling up to 500 ms between tries.
+const FIRST_RETRY_MS = 25;
+const MAX_RETRY_MS = 500;
 
 /**
  * The only code that runs SQL on a user database (blueprint rule 7). Each query runs in a
@@ -111,9 +118,9 @@ export class QueryExecutor {
     token: string,
     signal?: AbortSignal,
   ): Promise<boolean> {
-    const leaseMs = this.env.EXECUTOR_STATEMENT_TIMEOUT_MS + 10000;
+    const leaseMs = this.env.EXECUTOR_STATEMENT_TIMEOUT_MS + LEASE_MARGIN_MS;
     const deadline = Date.now() + this.env.EXECUTOR_QUEUE_WAIT_MS;
-    let delay = 25;
+    let delay = FIRST_RETRY_MS;
     for (;;) {
       signal?.throwIfAborted();
       const acquired = await this.coordination.tryAcquire(
@@ -130,7 +137,7 @@ export class QueryExecutor {
         return false;
       }
       await new Promise((resolve) => setTimeout(resolve, Math.min(delay, remaining)));
-      delay = Math.min(delay * 2, 500);
+      delay = Math.min(delay * 2, MAX_RETRY_MS);
     }
   }
 
@@ -176,9 +183,10 @@ export class QueryExecutor {
           healthy = false;
           request.signal.throwIfAborted();
         }
+        // statement_timeout covers each FETCH on its own; this caps the whole read.
         if (Date.now() - started > timeoutMs) {
           healthy = false;
-          return classifyQueryError({ code: '57014' }, timeoutMs);
+          return classifyQueryError({ code: SQLSTATE.QUERY_CANCELED }, timeoutMs);
         }
         // One row past the cap shows whether the result was cut.
         const want = Math.min(FETCH_BATCH, rowCap + 1 - rows.length);

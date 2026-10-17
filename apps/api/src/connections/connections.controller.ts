@@ -21,6 +21,13 @@ import { JobViewDto } from '../jobs/jobs.responses';
 import { CreateConnectionDto, UpdateConnectionDto } from './connection.dto';
 import { ConnectionDto } from './connection.responses';
 
+/**
+ * /v1/connections: add, list, read, test, edit, and delete the signed-in user's database
+ * connections. Anything that has to open the customer's database (creating, testing, or
+ * changing the login) is queued as a job for the worker and answered with 202 and the job;
+ * the rest is answered here from the app database. A connection that belongs to someone
+ * else is a 404, the same as one that does not exist.
+ */
 @ApiTags('connections')
 @ApiBearerAuth()
 @ApiErrors(401)

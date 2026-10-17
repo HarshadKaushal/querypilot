@@ -38,6 +38,13 @@ import {
   refreshCookieOptions,
 } from './cookies';
 
+/**
+ * The HTTP side of sign-in under /v1/auth: starts and finishes Google sign-in, dev login,
+ * refresh, logout, and the current user. It moves tokens between cookies and the response
+ * body; the rules for sessions are in AuthService. The refresh token travels only in an
+ * HTTP-only cookie scoped to /v1/auth, so page scripts never see it; the access token is
+ * returned in the body and kept in memory by the web app.
+ */
 @ApiTags('auth')
 @Controller('v1/auth')
 export class AuthController {

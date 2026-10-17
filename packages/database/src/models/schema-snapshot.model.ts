@@ -14,6 +14,7 @@ import type {
 } from '../types/schema-snapshot.types';
 import { Connection } from './connection.model';
 
+/** The tables and columns read from a customer database at one refresh, as a versioned JSON document. */
 @Table({
   tableName: 'schema_snapshots',
   underscored: true,

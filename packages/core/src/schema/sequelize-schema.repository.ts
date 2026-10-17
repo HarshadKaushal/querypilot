@@ -15,8 +15,9 @@ import {
   type StoredSnapshot,
 } from './schema.repository';
 
-// A refresh can replace tens of thousands of allowlist rows in one transaction. Prisma
-// stopped a transaction after a timeout (raised here to 30 s); Sequelize sets no limit.
+// Stores schema snapshots and allowlist rows with Sequelize. A refresh can replace tens of
+// thousands of allowlist rows in one transaction; Sequelize puts no time limit on a
+// transaction, so a large refresh is not cut off part way.
 
 /**
  * Locks this user's connection row until the transaction ends and returns where it points,

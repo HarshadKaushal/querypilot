@@ -3,6 +3,11 @@ import { Logger } from 'nestjs-pino';
 import type { DependencyCheck, HealthReport } from '@ayd/shared';
 import { DatabaseService, RedisService, safeErrorDetail } from '@ayd/core';
 
+/**
+ * Health checks for load balancers and monitoring. `live` only says the process is up.
+ * `ready` pings the app database and Redis and reports each one's latency; it is
+ * "degraded" when either is down. Failures are logged without details that could leak.
+ */
 @Injectable()
 export class HealthService {
   constructor(

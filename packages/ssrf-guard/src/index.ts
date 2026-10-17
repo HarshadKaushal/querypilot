@@ -1,5 +1,11 @@
 import { isIP, BlockList } from 'node:net';
 
+// Stops a user from pointing a "database connection" at something inside our own network
+// (server-side request forgery, ADR 0007). The caller resolves the host name first and
+// passes every address it got; one bad address rejects the host. Cloud metadata endpoints,
+// link-local, and unspecified addresses are always refused. Loopback and private ranges
+// are refused unless `allowPrivate` is set, which only local development does.
+
 export type SsrfReason =
   | 'blocked_host'
   | 'empty'
@@ -50,6 +56,11 @@ privateRanges.addSubnet('172.16.0.0', 12, 'ipv4');
 privateRanges.addSubnet('192.168.0.0', 16, 'ipv4');
 privateRanges.addSubnet('fc00::', 7, 'ipv6');
 
+/**
+ * Decides whether a host and its resolved addresses may be connected to. When they may,
+ * `pinnedAddress` is the address to connect to, so a second DNS lookup cannot swap in a
+ * different one (DNS rebinding).
+ */
 export function assessResolution(
   hostname: string,
   addresses: readonly string[],
@@ -108,6 +119,7 @@ function inList(list: BlockList, address: string): boolean {
   return list.check(address, version === 6 ? 'ipv6' : 'ipv4');
 }
 
+/** `::ffff:10.0.0.1` is an IPv4 address written as IPv6; check it as IPv4. */
 function unwrapMapped(address: string): string {
   const lower = address.toLowerCase();
   const prefix = '::ffff:';

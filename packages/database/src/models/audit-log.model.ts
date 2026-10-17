@@ -14,6 +14,7 @@ import type {
 } from '../types/audit-log.types';
 import { User } from './user.model';
 
+/** An append-only record of a security-relevant event (sign-in, deletes, changes), with no secrets. */
 @Table({ tableName: 'audit_log', underscored: true, timestamps: true, updatedAt: false })
 export class AuditLog
   extends Model<AuditLogAttributes, AuditLogCreationAttributes>

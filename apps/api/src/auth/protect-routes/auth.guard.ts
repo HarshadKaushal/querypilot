@@ -7,6 +7,11 @@ export interface AuthenticatedRequest extends Request {
   user: PublicUser;
 }
 
+/**
+ * Protects a route: `@UseGuards(AuthGuard)` lets a request in only with a valid access token
+ * in `Authorization: Bearer <token>`, and puts the signed-in user on `request.user`, where
+ * `@CurrentUser()` reads it. Routes without the guard are public.
+ */
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(private readonly auth: AuthService) {}

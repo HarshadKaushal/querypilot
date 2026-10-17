@@ -14,7 +14,8 @@ import {
 
 /**
  * Runs SQL for its owner: the guard checks it against the latest snapshot and allowlist,
- * then the executor runs the rewritten SQL. Phase 7 puts the model in front of the guard.
+ * then the executor runs the rewritten SQL. This is the "run your own SQL" path; a question
+ * in English goes through AskJobRunner, which asks the model first.
  */
 @Injectable()
 export class QueryJobRunner {

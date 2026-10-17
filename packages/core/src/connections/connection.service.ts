@@ -27,6 +27,20 @@ import {
   type StoredConnection,
 } from './connection.repository';
 
+/**
+ * The longest value each connection field may have. Host names are at most 253 characters
+ * (DNS), and PostgreSQL truncates database names to 63. The web app's connect form
+ * (validateConnection in ConnectWizardPage.tsx) repeats these so mistakes show per field.
+ */
+const MAX_LENGTH = {
+  label: 80,
+  host: 253,
+  databaseName: 63,
+  username: 128,
+  password: 256,
+} as const;
+const MAX_PORT = 65535;
+
 export interface ConnectionInput {
   label: string;
   host: string;
@@ -84,6 +98,15 @@ export class DnsAddressResolver implements AddressResolver {
   }
 }
 
+/**
+ * Owns a user's database connections: validating and storing them, testing them, and
+ * opening them for a query. Its rules:
+ * - credentials are sealed (@ayd/crypto) before they are stored or put in a job;
+ * - every host passes the SSRF guard and is pinned to the address that was checked;
+ * - a login is stored only after UserDatabaseProbe shows it can read and nothing more.
+ * Work that needs the customer's database is split in two halves: `prepare*` runs in the
+ * API (validate and seal), `*Checked` runs in the worker (connect, check, then store).
+ */
 @Injectable()
 export class ConnectionService {
   private readonly keys: ReturnType<typeof parseMasterKeyRing>;
@@ -378,20 +401,17 @@ export class ConnectionService {
     const username = input.username ?? '';
     const password = input.password ?? '';
     const sslMode = input.sslMode?.trim() ?? '';
+    const filledWithin = (value: string, max: number) =>
+      value.length >= 1 && value.length <= max;
     if (
-      label.length < 1 ||
-      label.length > 80 ||
-      host.length < 1 ||
-      host.length > 253 ||
-      databaseName.length < 1 ||
-      databaseName.length > 63 ||
-      username.length < 1 ||
-      username.length > 128 ||
-      password.length < 1 ||
-      password.length > 256 ||
+      !filledWithin(label, MAX_LENGTH.label) ||
+      !filledWithin(host, MAX_LENGTH.host) ||
+      !filledWithin(databaseName, MAX_LENGTH.databaseName) ||
+      !filledWithin(username, MAX_LENGTH.username) ||
+      !filledWithin(password, MAX_LENGTH.password) ||
       !Number.isInteger(input.port) ||
       input.port < 1 ||
-      input.port > 65535
+      input.port > MAX_PORT
     ) {
       throw invalidRequest();
     }
@@ -417,6 +437,7 @@ export class ConnectionService {
     };
   }
 
+  /** Resolves the host, checks every address with the SSRF guard, and returns the one to use. */
   private async pin(host: string): Promise<string> {
     try {
       const addresses = isIP(host) ? [host] : await this.resolver.lookup(host);

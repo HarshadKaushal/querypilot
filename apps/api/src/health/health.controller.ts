@@ -4,6 +4,7 @@ import type { Response } from 'express';
 import { HealthReportDto, LiveDto } from './health.responses';
 import { HealthService } from './health.service';
 
+/** GET /health/live and /health/ready. Public: no sign-in, and outside the /v1 prefix. */
 @ApiTags('health')
 @Controller('health')
 export class HealthController {

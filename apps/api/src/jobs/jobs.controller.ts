@@ -31,6 +31,12 @@ import { JOB_RESULT_MODELS, JobViewDto } from './jobs.responses';
 /** Lets tests shorten the stream's intervals. */
 export const JOB_STREAM_TIMING_TOKEN = Symbol('JOB_STREAM_TIMING');
 
+/**
+ * The routes for asking questions and following jobs. Asking a question or running SQL
+ * checks ownership and limits here, queues a job, and answers 202 with it at once; the worker
+ * does the work. The client then follows the job with GET /v1/jobs/:id or the live stream at
+ * /v1/jobs/:id/events (see job-stream.ts), and can cancel it.
+ */
 @ApiTags('questions and jobs')
 @ApiBearerAuth()
 @ApiErrors(401)

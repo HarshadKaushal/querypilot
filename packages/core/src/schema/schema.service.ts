@@ -58,6 +58,14 @@ const CHANGED = new AppException(
   HttpStatus.CONFLICT,
 );
 
+/**
+ * Owns a connection's schema snapshots and its allowlist (ADR 0008). `refresh` reads the
+ * customer database's tables and columns into a new snapshot; objects it has not seen before
+ * start hidden, so a refresh never shows the AI more than its owner chose. `schema` returns
+ * only the allowed part, which is all the model and the SQL guard ever see.
+ * `updateAllowlist` saves the owner's choices, refusing them if a refresh happened since the
+ * owner loaded the list (SCHEMA_CHANGED).
+ */
 @Injectable()
 export class SchemaService {
   constructor(

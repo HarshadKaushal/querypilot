@@ -165,7 +165,7 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
 
 **Loose ends:**
 
-- **One API unit test failed once** (1 of 94, 2026-10-16, right after the package builds), then passed 3 runs in a row. It is not known which test. If it fails again, save the full Jest output.
+- **An intermittent API unit test: `src/health/health.controller.spec.ts`.** It failed on 2026-10-16 (test not identified then) and again on 2026-10-18, both right after the package builds. On 2026-10-18 the suite took 54 s; it passed alone and on a rerun. The guess is Jest's 5 s per-test limit under cold-cache load, but this is unconfirmed. Next time, save the full Jest output.
 - **The first live-events subscription after an API restart hung once** (2026-10-14 16:10). It could not be reproduced. Check `JobEvents.subscribe` and `streamJob` in the code review.
 - **Not built yet:** a chart-type switcher, example question-and-SQL pairs in the prompt, a circuit breaker per model provider, a key re-wrap job, readiness checks for the queue and the model, data export, partitions and retention, a rate limit on connection tests, browser tests in CI, and editing a connection's login in the app.
 - **The main web bundle is about 695 kB** before compression (measured 2026-10-16). Lazy-loading pages in `app/router.tsx` would split it.
@@ -175,10 +175,11 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
 
 ## In progress
 
-| What                                                                                                            | Files               | Session started |
-| --------------------------------------------------------------------------------------------------------------- | ------------------- | --------------- |
-| Walkthrough: dev worker and web started (API was already running); no code changes                              | none                | 2026-10-16      |
-| Learning doc `docs/sequelize.md` describing the Sequelize work above (read-only on code; writes only that file) | `docs/sequelize.md` | 2026-10-16      |
+| What                                                                                                                                                                                           | Files                                                                              | Session started |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | --------------- |
+| Walkthrough: dev worker and web started (API was already running); no code changes                                                                                                             | none                                                                               | 2026-10-16      |
+| Learning doc `docs/sequelize.md` describing the Sequelize work above (read-only on code; writes only that file)                                                                                | `docs/sequelize.md`                                                                | 2026-10-16      |
+| Readability cleanup in 4 commits: comments and constants; core refactors (`AskJobRunner`, `job-errors.ts`, `streamJob`); web `useJobRunner` and `@mantine/form` in the wizard; onboarding docs | core `ask/` and `jobs/`, api `auth/` and `jobs/`, web `lib/` and `features/`, docs | 2026-10-18      |
 
 ## Session log
 
@@ -196,3 +197,5 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
   - Stage 2b: response classes in `*.responses.ts` for every route, and a padlock test that reads the real `AuthGuard` metadata. Live responses matched the docs. This completes Swagger.
   - Web app grouped by feature (`app/`, `lib/`, `components/`, `features/`), with each feature's requests in its `api.ts` (ADR 0014 "Code layout", `docs/ai-reviews/2026-10-16-web-feature-layout.md`). Type-check, 68 web tests, lint, format, and `vite build` passed; browser tests not run (dev servers in use).
   - Prisma replaced by Sequelize (ADR 0015, `docs/ai-reviews/2026-10-16-sequelize.md`). Rewritten migrations matched Prisma's schema exactly; `ayd` adopted and its time columns made `TIMESTAMPTZ` with no data change. Unit, `test:int` (97), and `test:e2e` (3) passed; browser tests not run.
+- **2026-10-18:**
+  - Readability cleanup, commit 1 of 4: a "what this is for" comment on the auth, controller, package, and model files; wrong or stale comments fixed; and magic numbers named (new `user-database/sqlstate.ts`). No behaviour change (`docs/ai-reviews/2026-10-18-comments-and-constants.md`). The build, lint, and unit tests passed; the API suite needed one rerun (the health spec).

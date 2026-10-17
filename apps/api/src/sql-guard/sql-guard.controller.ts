@@ -6,6 +6,11 @@ import { SqlGuardService } from '@ayd/core';
 import { CheckSqlDto } from './check-sql.dto';
 import { SqlCheckResultDto } from './sql-guard.responses';
 
+/**
+ * POST /v1/connections/:id/sql/check: a dry run of the SQL guard. It answers whether SQL
+ * would be allowed, and how it would be rewritten, without opening the customer's
+ * database, so it runs here in the API rather than in the worker.
+ */
 @ApiTags('sql guard')
 @ApiBearerAuth()
 @ApiErrors(401)

@@ -14,6 +14,7 @@ import type {
 import { User } from './user.model';
 
 // The primary key is (user_id, day), so the model has no id column.
+/** One user's usage on one UTC day (questions, rows, tokens), for the usage page. The quota itself is counted in Redis. */
 @Table({ tableName: 'usage_counters', underscored: true, timestamps: false })
 export class UsageCounter
   extends Model<UsageCounterAttributes, UsageCounterCreationAttributes>

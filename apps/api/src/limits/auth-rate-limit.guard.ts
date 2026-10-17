@@ -5,6 +5,8 @@ import { PinoLogger } from 'nestjs-pino';
 import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env';
 
+const ONE_MINUTE_MS = 60_000;
+
 /**
  * Limits sign-in, refresh, and the Google callback to AUTH_REQUESTS_PER_MINUTE per IP
  * address, across every API instance, so one source cannot flood them: each call costs a
@@ -32,7 +34,7 @@ export class AuthRateLimitGuard implements CanActivate {
         'auth',
         request.ip ?? 'unknown',
         this.env.AUTH_REQUESTS_PER_MINUTE,
-        60_000,
+        ONE_MINUTE_MS,
       );
     } catch (error) {
       this.logger.warn(

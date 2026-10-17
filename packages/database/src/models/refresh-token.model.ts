@@ -14,6 +14,7 @@ import type {
 } from '../types/refresh-token.types';
 import { User } from './user.model';
 
+/** One refresh token, stored only as its hash. Tokens of one sign-in share a family, revoked together on reuse. */
 @Table({
   tableName: 'refresh_tokens',
   underscored: true,

@@ -17,6 +17,7 @@ import type {
 } from '../types/connection.types';
 import { User } from './user.model';
 
+/** A customer database connection. The login is stored only as ciphertext (see @ayd/crypto). */
 @Table({ tableName: 'connections', underscored: true, timestamps: true })
 export class Connection
   extends Model<ConnectionAttributes, ConnectionCreationAttributes>

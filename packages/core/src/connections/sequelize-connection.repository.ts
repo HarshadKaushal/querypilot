@@ -74,8 +74,8 @@ export class SequelizeConnectionRepository implements ConnectionRepository {
 }
 
 /**
- * Drops keys whose value is undefined. Prisma skipped them; Sequelize would write NULL, and
- * a partial patch leaves the fields it does not mention unset.
+ * Drops keys whose value is undefined. Sequelize would write NULL for them, but a partial
+ * patch must leave the fields it does not mention as they are.
  */
 function withoutUndefined<T extends object>(patch: T): Partial<T> {
   return Object.fromEntries(

@@ -18,6 +18,7 @@ import { User } from './user.model';
 
 // timestamps is off: created_at is when the job was submitted, which the caller passes in,
 // and Sequelize's automatic createdAt would overwrite it with the insert time.
+/** One query history entry (QueryHistory): never result rows. */
 @Table({ tableName: 'queries', underscored: true, timestamps: false })
 export class QueryRecord
   extends Model<QueryRecordAttributes, QueryRecordCreationAttributes>

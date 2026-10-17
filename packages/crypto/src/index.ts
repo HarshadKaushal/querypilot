@@ -1,5 +1,17 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
+// Envelope encryption of a customer database's login (ADR 0007). Each connection gets its
+// own random data key, which encrypts the username and password; a master key from
+// MASTER_KEYS encrypts ("wraps") the data key. The app database stores only ciphertext, so
+// a copy of it is useless without the master key, and a new master key needs only the small
+// data keys re-wrapped, not every password re-encrypted.
+
+const ALGORITHM = 'aes-256-gcm';
+// AES-256 keys are 32 bytes; 12 bytes is the IV length GCM is designed for.
+const KEY_BYTES = 32;
+const IV_BYTES = 12;
+
+/** What is stored for one connection's login: each value with its IV and GCM tag. */
 export interface SealedCredentials {
   usernameCiphertext: string;
   usernameIv: string;
@@ -13,6 +25,7 @@ export interface SealedCredentials {
   keyVersion: number;
 }
 
+/** The master keys by version. New logins are sealed with the current one. */
 export class MasterKeyRing {
   constructor(
     readonly currentVersion: number,
@@ -28,6 +41,7 @@ export class MasterKeyRing {
   }
 }
 
+/** Reads MASTER_KEYS, written as `version:base64key,version:base64key`. */
 export function parseMasterKeyRing(
   serialized: string,
   currentVersion: number,
@@ -41,7 +55,7 @@ export function parseMasterKeyRing(
     }
     const version = Number(trimmed.slice(0, separator));
     const raw = Buffer.from(trimmed.slice(separator + 1), 'base64');
-    if (!Number.isInteger(version) || version < 1 || raw.length !== 32) {
+    if (!Number.isInteger(version) || version < 1 || raw.length !== KEY_BYTES) {
       throw new Error('invalid master key ring');
     }
     keys.set(version, raw);
@@ -57,7 +71,7 @@ export function sealCredentials(
   password: string,
   ring: MasterKeyRing,
 ): SealedCredentials {
-  const dataKey = randomBytes(32);
+  const dataKey = randomBytes(KEY_BYTES);
   const usernameSealed = encrypt(username, dataKey);
   const passwordSealed = encrypt(password, dataKey);
   const wrapped = encrypt(dataKey.toString('base64url'), ring.key(ring.currentVersion));
@@ -104,6 +118,11 @@ export function openCredentials(
   };
 }
 
+/**
+ * Re-wraps the data key with the current master key, leaving the username and password
+ * ciphertext as it is. For rotating master keys; the job that would run it over every
+ * connection is not built yet, so only its tests call it today.
+ */
 export function rewrapCredentials(
   sealed: SealedCredentials,
   ring: MasterKeyRing,
@@ -128,8 +147,8 @@ function encrypt(
   plaintext: string,
   key: Buffer,
 ): { ciphertext: string; iv: string; tag: string } {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const iv = randomBytes(IV_BYTES);
+  const cipher = createCipheriv(ALGORITHM, key, iv);
   const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
   return {
     ciphertext: ciphertext.toString('base64url'),
@@ -139,7 +158,7 @@ function encrypt(
 }
 
 function decrypt(ciphertext: string, iv: string, tag: string, key: Buffer): string {
-  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(iv, 'base64url'));
+  const decipher = createDecipheriv(ALGORITHM, key, Buffer.from(iv, 'base64url'));
   decipher.setAuthTag(Buffer.from(tag, 'base64url'));
   return Buffer.concat([
     decipher.update(Buffer.from(ciphertext, 'base64url')),

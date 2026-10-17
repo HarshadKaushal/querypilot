@@ -3,6 +3,11 @@ import { isNumericColumn, isTimeColumn, toNumber } from './facts';
 
 /** At most this many points are sent for a chart (blueprint 9.8: downsample). */
 export const MAX_CHART_POINTS = 200;
+/** A pie needs at least two slices, and stops being readable past five. */
+const PIE_MIN_ROWS = 2;
+const PIE_MAX_ROWS = 5;
+/** More bars than this become unreadable, so the table is shown instead. */
+const BAR_MAX_ROWS = 50;
 
 export type ChartType = 'stat' | 'line' | 'bar' | 'pie' | 'table';
 
@@ -59,13 +64,13 @@ export function selectChart(
   }
   if (
     rest.length === 1 &&
-    rows.length >= 2 &&
-    rows.length <= 5 &&
+    rows.length >= PIE_MIN_ROWS &&
+    rows.length <= PIE_MAX_ROWS &&
     rows.every((row) => (toNumber(row[1]) ?? -1) >= 0)
   ) {
     return { type: 'pie', x: first.name, y, points: rows };
   }
-  if (rows.length <= 50) {
+  if (rows.length <= BAR_MAX_ROWS) {
     return { type: 'bar', x: first.name, y, points: rows };
   }
   return { type: 'table' };

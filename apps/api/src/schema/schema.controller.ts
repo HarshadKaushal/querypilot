@@ -19,6 +19,11 @@ import { JobViewDto } from '../jobs/jobs.responses';
 import { UpdateAllowlistDto } from './allowlist.dto';
 import { AllowlistViewDto, SchemaViewDto } from './schema.responses';
 
+/**
+ * A connection's schema and allowlist under /v1/connections/:id. Reading the database's
+ * tables again is a job for the worker; viewing the snapshot and reading or changing the
+ * allowlist (which tables and columns the AI may see) happen here, against the app database.
+ */
 @ApiTags('schema and allowlist')
 @ApiBearerAuth()
 @ApiErrors(401)

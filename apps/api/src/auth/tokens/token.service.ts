@@ -24,6 +24,23 @@ export interface OAuthSeal {
   verifier: string;
 }
 
+// AES-256-GCM layout of a sealed cookie: IV, then authentication tag, then ciphertext.
+const SEAL_ALGORITHM = 'aes-256-gcm';
+const IV_BYTES = 12;
+const TAG_BYTES = 16;
+// The shortest ciphertext a payload can have is `{}`: two bytes.
+const MIN_SEALED_BYTES = IV_BYTES + TAG_BYTES + 2;
+// 32 random bytes (256 bits) for a refresh token, so it cannot be guessed.
+const REFRESH_TOKEN_BYTES = 32;
+
+/**
+ * Makes and checks every token the API hands out: short-lived access tokens (an HS256 JWT,
+ * signed with AUTH_JWT_SECRET), long-lived refresh tokens (random strings, stored only as a
+ * SHA-256 hash), and the sealed cookie that carries the OAuth state through the Google
+ * redirect. The JWT is written by hand on purpose: it has one algorithm and three claims, so
+ * a library would add options to misconfigure (such as `alg: none`) without adding safety.
+ * Sessions themselves (rotation, reuse detection) live in AuthService.
+ */
 @Injectable()
 export class TokenService {
   constructor(@Inject(APP_ENV) private readonly env: AppEnv) {}
@@ -79,7 +96,7 @@ export class TokenService {
 
   issueRefresh(familyId?: string, now = new Date()): IssuedRefresh {
     const resolvedFamily = familyId ?? randomUUID();
-    const raw = randomBytes(32).toString('base64url');
+    const raw = randomBytes(REFRESH_TOKEN_BYTES).toString('base64url');
     return {
       id: randomUUID(),
       familyId: resolvedFamily,
@@ -100,8 +117,8 @@ export class TokenService {
    */
   seal(payload: OAuthSeal): string {
     const key = createHash('sha256').update(this.env.AUTH_JWT_SECRET).digest();
-    const iv = randomBytes(12);
-    const cipher = createCipheriv('aes-256-gcm', key, iv);
+    const iv = randomBytes(IV_BYTES);
+    const cipher = createCipheriv(SEAL_ALGORITHM, key, iv);
     const ciphertext = Buffer.concat([
       cipher.update(JSON.stringify(payload), 'utf8'),
       cipher.final(),
@@ -113,14 +130,14 @@ export class TokenService {
   open(sealed: string): OAuthSeal | null {
     try {
       const buffer = Buffer.from(sealed, 'base64url');
-      if (buffer.length < 12 + 16 + 2) {
+      if (buffer.length < MIN_SEALED_BYTES) {
         return null;
       }
       const key = createHash('sha256').update(this.env.AUTH_JWT_SECRET).digest();
-      const iv = buffer.subarray(0, 12);
-      const tag = buffer.subarray(12, 28);
-      const ciphertext = buffer.subarray(28);
-      const decipher = createDecipheriv('aes-256-gcm', key, iv);
+      const iv = buffer.subarray(0, IV_BYTES);
+      const tag = buffer.subarray(IV_BYTES, IV_BYTES + TAG_BYTES);
+      const ciphertext = buffer.subarray(IV_BYTES + TAG_BYTES);
+      const decipher = createDecipheriv(SEAL_ALGORITHM, key, iv);
       decipher.setAuthTag(tag);
       const json = Buffer.concat([
         decipher.update(ciphertext),

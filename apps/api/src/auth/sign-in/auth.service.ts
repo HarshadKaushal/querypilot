@@ -25,6 +25,25 @@ export interface SessionResult {
   user: PublicUser;
 }
 
+// Random sizes for the Google sign-in round trip. The PKCE verifier must be 43 to 128
+// characters; 32 bytes encode to 43.
+const OAUTH_STATE_BYTES = 16;
+const PKCE_VERIFIER_BYTES = 32;
+
+// Dev login fills in these values when the form leaves them empty, and caps the lengths at
+// the users table's column sizes.
+const DEV_DEFAULT_EMAIL = 'dev@localhost';
+const DEV_DEFAULT_NAME = 'Local developer';
+const MAX_EMAIL_LENGTH = 200;
+const MAX_NAME_LENGTH = 80;
+
+/**
+ * Owns the sign-in session: Google sign-in (and dev login outside production) starts one,
+ * refresh rotates its refresh token, and logout or account deletion ends it. A refresh token
+ * works once; presenting a used one revokes its whole login family (reuse detection). Token
+ * formats are in TokenService, storage is behind AuthRepository, and cookies are set by
+ * AuthController.
+ */
 @Injectable()
 export class AuthService {
   constructor(
@@ -42,8 +61,8 @@ export class AuthService {
         HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
-    const state = randomBytes(16).toString('base64url');
-    const verifier = randomBytes(32).toString('base64url');
+    const state = randomBytes(OAUTH_STATE_BYTES).toString('base64url');
+    const verifier = randomBytes(PKCE_VERIFIER_BYTES).toString('base64url');
     const url = this.google.authorizationUrl({
       state,
       codeChallenge: codeChallenge(verifier),
@@ -105,11 +124,15 @@ export class AuthService {
     if (this.env.NODE_ENV === 'production' || !this.env.DEV_LOGIN_ENABLED) {
       throw notFound();
     }
-    const email = (input.email?.trim().toLowerCase() || 'dev@localhost').slice(0, 200);
+    const email = (input.email?.trim().toLowerCase() || DEV_DEFAULT_EMAIL).slice(
+      0,
+      MAX_EMAIL_LENGTH,
+    );
+    // Only "something@something": dev login needs a plausible address, not a deliverable one.
     if (!/^[^\s@]+@[^\s@]+$/.test(email)) {
       throw invalidRequest();
     }
-    const name = (input.name?.trim() || 'Local developer').slice(0, 80);
+    const name = (input.name?.trim() || DEV_DEFAULT_NAME).slice(0, MAX_NAME_LENGTH);
     const user = await this.repo.upsertGoogleUser({
       googleSubject: `dev:${email}`,
       email,

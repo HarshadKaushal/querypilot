@@ -13,6 +13,7 @@ import type { UserAttributes, UserCreationAttributes } from '../types/user.types
 // constraints are not repeated here. Every @Column names its type, because tsx (the worker's
 // dev runner) does not emit the metadata sequelize-typescript would otherwise read it from.
 
+/** A person who signed in with Google (or dev login). Deleting one deletes everything they own. */
 @Table({ tableName: 'users', underscored: true, timestamps: true, updatedAt: false })
 export class User
   extends Model<UserAttributes, UserCreationAttributes>

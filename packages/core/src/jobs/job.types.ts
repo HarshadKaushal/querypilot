@@ -178,7 +178,10 @@ export const NO_JOB_CONTEXT: JobContext = { report: async () => undefined };
 
 export const CANCELLED_MESSAGE = 'The job was cancelled.';
 
-/** The outcome of a job its owner cancelled. Never retried. */
+/**
+ * The outcome of a job its owner cancelled. The queue never runs it again, but `retryable`
+ * is true because `retryable` tells the client whether the owner may submit it again.
+ */
 export function cancelledOutcome(): { ok: false; error: JobError } {
   return {
     ok: false,
