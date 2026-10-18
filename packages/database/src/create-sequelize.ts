@@ -1,5 +1,5 @@
 import { Sequelize, type SequelizeOptions } from 'sequelize-typescript';
-import { models } from './models';
+import { models } from './tables';
 
 /**
  * Settings shared by the app (through DatabaseModule in @ayd/core) and by scripts and tests.

@@ -6,31 +6,31 @@ When this page and the code disagree, the code is right; fix this page. Step-by-
 
 ## Where code lives
 
-| Kind of code                                                                              | Where                                                  | Why                                                                      |
-| ----------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------ |
-| HTTP: routes, guards, request DTOs, response docs                                         | `apps/api/src/<feature>/`                              | Only the API speaks HTTP.                                                |
-| Work both processes need (connections, schema, jobs, the ask pipeline, the model, limits) | `packages/core/src/<area>/`                            | The API and the worker share it without importing each other (ADR 0006). |
-| Pure checks with no Nest or database                                                      | `packages/sql-guard`, `ssrf-guard`, `crypto`, `shared` | Small, fully tested, and easy to read alone.                             |
-| Tables                                                                                    | `packages/database` (models, types, enums, migrations) | One place owns the schema (ADR 0004, ADR 0015).                          |
-| Screens                                                                                   | `apps/web/src/features/<feature>/`                     | A reader can follow a button to the URL it calls (ADR 0014).             |
+| Kind of code                                                                              | Where                                                   | Why                                                                      |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------ |
+| HTTP: routes, guards, request DTOs, response docs                                         | `apps/api/src/<feature>/`                               | Only the API speaks HTTP.                                                |
+| Work both processes need (connections, schema, jobs, the ask pipeline, the model, limits) | `packages/core/src/<area>/`                             | The API and the worker share it without importing each other (ADR 0006). |
+| Pure checks with no Nest or database                                                      | `packages/sql-guard`, `ssrf-guard`, `crypto`, `shared`  | Small, fully tested, and easy to read alone.                             |
+| Tables                                                                                    | `packages/database` (`src/tables/<table>/`, migrations) | One place owns the schema (ADR 0004, ADR 0015).                          |
+| Screens                                                                                   | `apps/web/src/features/<feature>/`                      | A reader can follow a button to the URL it calls (ADR 0014).             |
 
 Packages are imported as `@ayd/<name>` and run from their built `dist/` folder. After changing a package, run `npm run build` before running the app or tests that use it.
 
 ## File names
 
-| Suffix                           | Holds                                                                                 | Example                                      |
-| -------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------- |
-| `*.module.ts`                    | A Nest module: what it provides and imports                                           | `connections.module.ts`                      |
-| `*.controller.ts`                | HTTP routes only; no business rules                                                   | `jobs.controller.ts`                         |
-| `*.service.ts`, `*.runner.ts`    | Business rules and job steps                                                          | `connection.service.ts`, `ask-job.runner.ts` |
-| `*.repository.ts`                | The storage interface and its injection token                                         | `connection.repository.ts`                   |
-| `sequelize-*.repository.ts`      | The Sequelize implementation of that interface                                        | `sequelize-connection.repository.ts`         |
-| `*.dto.ts`                       | What a client **sends**, validated by class-validator                                 | `connection.dto.ts`                          |
-| `*.responses.ts`                 | What a client **gets back**; for the Swagger docs only                                | `connection.responses.ts`                    |
-| `*.model.ts`                     | A Sequelize model (`packages/database`)                                               | `user.model.ts`                              |
-| `*.spec.ts(x)`                   | A unit test, beside the file it tests                                                 | `chart-summary.spec.ts`                      |
-| `*.http.spec.ts`                 | A unit test that sends HTTP requests to the Nest app, with fakes instead of databases | `jobs.http.spec.ts`                          |
-| `*.int-spec.ts`, `*.e2e-spec.ts` | Tests against real Postgres and Redis                                                 | see [testing.md](testing.md)                 |
+| Suffix                                  | Holds                                                                                              | Example                                      |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `*.module.ts`                           | A Nest module: what it provides and imports                                                        | `connections.module.ts`                      |
+| `*.controller.ts`                       | HTTP routes only; no business rules                                                                | `jobs.controller.ts`                         |
+| `*.service.ts`, `*.runner.ts`           | Business rules and job steps                                                                       | `connection.service.ts`, `ask-job.runner.ts` |
+| `*.repository.ts`                       | The storage interface and its injection token                                                      | `connection.repository.ts`                   |
+| `sequelize-*.repository.ts`             | The Sequelize implementation of that interface                                                     | `sequelize-connection.repository.ts`         |
+| `*.dto.ts`                              | What a client **sends**, validated by class-validator                                              | `connection.dto.ts`                          |
+| `*.responses.ts`                        | What a client **gets back**; for the Swagger docs only                                             | `connection.responses.ts`                    |
+| `*.model.ts`, `*.types.ts`, `*.enum.ts` | A table's model, row types, and value lists, in its `packages/database/src/tables/<table>/` folder | `user.model.ts`                              |
+| `*.spec.ts(x)`                          | A unit test, beside the file it tests                                                              | `chart-summary.spec.ts`                      |
+| `*.http.spec.ts`                        | A unit test that sends HTTP requests to the Nest app, with fakes instead of databases              | `jobs.http.spec.ts`                          |
+| `*.int-spec.ts`, `*.e2e-spec.ts`        | Tests against real Postgres and Redis                                                              | see [testing.md](testing.md)                 |
 
 ## Comments
 

@@ -8,11 +8,8 @@ import {
   PrimaryKey,
   Table,
 } from 'sequelize-typescript';
-import type {
-  AuditLogAttributes,
-  AuditLogCreationAttributes,
-} from '../types/audit-log.types';
-import { User } from './user.model';
+import type { AuditLogAttributes, AuditLogCreationAttributes } from './audit-log.types';
+import { User } from '../user/user.model';
 
 /** An append-only record of a security-relevant event (sign-in, deletes, changes), with no secrets. */
 @Table({ tableName: 'audit_log', underscored: true, timestamps: true, updatedAt: false })

@@ -11,8 +11,8 @@ import {
 import type {
   AllowedObjectAttributes,
   AllowedObjectCreationAttributes,
-} from '../types/allowed-object.types';
-import { Connection } from './connection.model';
+} from './allowed-object.types';
+import { Connection } from '../connection/connection.model';
 
 /** One row of the allowlist: a table or column of a snapshot, and whether the AI may see it. */
 @Table({

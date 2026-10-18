@@ -1,6 +1,6 @@
 import type { Optional } from 'sequelize';
-import type { ConnectionStatus } from '../enums/connection-status.enum';
-import type { SslMode } from '../enums/ssl-mode.enum';
+import type { ConnectionStatus } from './connection-status.enum';
+import type { SslMode } from './ssl-mode.enum';
 
 /**
  * A connections row: where a customer database is, and its login sealed with envelope

@@ -120,7 +120,7 @@ $env:DATABASE_URL = "postgresql://ayd:ayd@localhost:5434/ayd"
 npm run migrate --workspace=@ayd/database
 ```
 
-The schema lives in `packages/database`: Sequelize models in `src/models/` and sequelize-cli migrations in `migrations/` (ADR 0015). The command reads `DATABASE_URL` from the root `.env` when it is not set. `npm run migrate:status --workspace=@ayd/database` lists which migrations have run. On a database that Prisma migrated before 2026-10-16, the first run records Prisma's history for sequelize-cli and then converts the time columns to `TIMESTAMPTZ`; nothing else changes. The container entrypoint runs that migrate command on its own, so `npm run up` does not need this step.
+The schema lives in `packages/database`: Sequelize models in `src/tables/` (one folder per table) and sequelize-cli migrations in `migrations/` (ADR 0015). The command reads `DATABASE_URL` from the root `.env` when it is not set. `npm run migrate:status --workspace=@ayd/database` lists which migrations have run. On a database that Prisma migrated before 2026-10-16, the first run records Prisma's history for sequelize-cli and then converts the time columns to `TIMESTAMPTZ`; nothing else changes. The container entrypoint runs that migrate command on its own, so `npm run up` does not need this step.
 
 ## Run the web app
 

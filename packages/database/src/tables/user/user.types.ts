@@ -1,5 +1,5 @@
 import type { Optional } from 'sequelize';
-import type { PlanTier } from '../enums/plan-tier.enum';
+import type { PlanTier } from './plan-tier.enum';
 
 /** A users row. One per Google account. */
 export interface UserAttributes {

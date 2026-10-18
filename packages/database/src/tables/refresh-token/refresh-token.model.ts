@@ -11,8 +11,8 @@ import {
 import type {
   RefreshTokenAttributes,
   RefreshTokenCreationAttributes,
-} from '../types/refresh-token.types';
-import { User } from './user.model';
+} from './refresh-token.types';
+import { User } from '../user/user.model';
 
 /** One refresh token, stored only as its hash. Tokens of one sign-in share a family, revoked together on reuse. */
 @Table({

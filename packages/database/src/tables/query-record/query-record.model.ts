@@ -7,14 +7,14 @@ import {
   PrimaryKey,
   Table,
 } from 'sequelize-typescript';
-import type { QueryKind } from '../enums/query-kind.enum';
-import type { QueryStatus } from '../enums/query-status.enum';
+import type { QueryKind } from './query-kind.enum';
+import type { QueryStatus } from './query-status.enum';
 import type {
   QueryRecordAttributes,
   QueryRecordCreationAttributes,
-} from '../types/query-record.types';
-import { Connection } from './connection.model';
-import { User } from './user.model';
+} from './query-record.types';
+import { Connection } from '../connection/connection.model';
+import { User } from '../user/user.model';
 
 // timestamps is off: created_at is when the job was submitted, which the caller passes in,
 // and Sequelize's automatic createdAt would overwrite it with the insert time.

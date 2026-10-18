@@ -10,8 +10,8 @@ import {
 import type {
   UsageCounterAttributes,
   UsageCounterCreationAttributes,
-} from '../types/usage-counter.types';
-import { User } from './user.model';
+} from './usage-counter.types';
+import { User } from '../user/user.model';
 
 // The primary key is (user_id, day), so the model has no id column.
 /** One user's usage on one UTC day (questions, rows, tokens), for the usage page. The quota itself is counted in Redis. */

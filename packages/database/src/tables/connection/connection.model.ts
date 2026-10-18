@@ -9,13 +9,13 @@ import {
   Table,
   UpdatedAt,
 } from 'sequelize-typescript';
-import type { ConnectionStatus } from '../enums/connection-status.enum';
-import type { SslMode } from '../enums/ssl-mode.enum';
+import type { ConnectionStatus } from './connection-status.enum';
+import type { SslMode } from './ssl-mode.enum';
 import type {
   ConnectionAttributes,
   ConnectionCreationAttributes,
-} from '../types/connection.types';
-import { User } from './user.model';
+} from './connection.types';
+import { User } from '../user/user.model';
 
 /** A customer database connection. The login is stored only as ciphertext (see @ayd/crypto). */
 @Table({ tableName: 'connections', underscored: true, timestamps: true })

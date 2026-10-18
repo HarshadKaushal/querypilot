@@ -1,6 +1,6 @@
 import type { Optional } from 'sequelize';
-import type { QueryKind } from '../enums/query-kind.enum';
-import type { QueryStatus } from '../enums/query-status.enum';
+import type { QueryKind } from './query-kind.enum';
+import type { QueryStatus } from './query-status.enum';
 
 /**
  * A queries row: one finished question or SQL job, for the owner's history (blueprint 7 and

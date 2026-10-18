@@ -7,10 +7,18 @@ The app database's schema: Sequelize models, their TypeScript types, enums, and 
 | Path                      | Holds                                                                                             |
 | ------------------------- | ------------------------------------------------------------------------------------------------- |
 | `migrations/`             | The tables, as sequelize-cli migrations. These are the source of truth for the schema.            |
-| `src/models/`             | One `sequelize-typescript` model per table, for queries                                           |
-| `src/types/`              | Each table's attributes, and which of them are needed to create a row                             |
-| `src/enums/`              | Fixed lists of values (plan tier, connection status, and others)                                  |
+| `src/tables/<table>/`     | Everything about one table: its model, its row types, its enums, and an `index.ts`                |
+| `src/tables/index.ts`     | Re-exports every table folder, and the `models` list Sequelize registers                          |
 | `src/create-sequelize.ts` | The shared Sequelize settings (every model, pool, timeout), and an instance for scripts and tests |
+
+Inside a table folder, for example `src/tables/connection/`:
+
+| File                        | Holds                                                                                   |
+| --------------------------- | --------------------------------------------------------------------------------------- |
+| `connection.model.ts`       | The `sequelize-typescript` class (`@Table`, `@Column`) that queries use                 |
+| `connection.types.ts`       | `ConnectionAttributes` (a row) and `ConnectionCreationAttributes` (what creating needs) |
+| `connection-status.enum.ts` | A fixed list of values a column holds (`ConnectionStatus.Active`, `.Failing`)           |
+| `index.ts`                  | Exports the folder, so importers write `from '@ayd/database'`                           |
 
 **Rules** (they cost time once):
 

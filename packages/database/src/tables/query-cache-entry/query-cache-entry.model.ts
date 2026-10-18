@@ -11,8 +11,8 @@ import {
 import type {
   QueryCacheEntryAttributes,
   QueryCacheEntryCreationAttributes,
-} from '../types/query-cache-entry.types';
-import { Connection } from './connection.model';
+} from './query-cache-entry.types';
+import { Connection } from '../connection/connection.model';
 
 /** A saved SQL proposal for a question, reused while the schema fingerprint is unchanged (ProposalCache). */
 @Table({

@@ -6,8 +6,8 @@ import {
   PrimaryKey,
   Table,
 } from 'sequelize-typescript';
-import { PlanTier } from '../enums/plan-tier.enum';
-import type { UserAttributes, UserCreationAttributes } from '../types/user.types';
+import { PlanTier } from './plan-tier.enum';
+import type { UserAttributes, UserCreationAttributes } from './user.types';
 
 // The migrations own the tables. These models only describe them for queries, so indexes and
 // constraints are not repeated here. Every @Column names its type, because tsx (the worker's

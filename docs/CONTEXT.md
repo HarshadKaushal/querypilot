@@ -55,7 +55,7 @@ Last updated: 2026-10-18, after the readability cleanup (4 commits, base `cfe5b9
 | `packages/sql-guard`  | SQL guard (`guard.ts`, rules in `analyzer.ts`)                                                                           |
 | `packages/ssrf-guard` | Host and address checks                                                                                                  |
 | `packages/crypto`     | Envelope encryption of credentials                                                                                       |
-| `packages/database`   | Sequelize `src/models/`, `src/types/`, `src/enums/`, and sequelize-cli `migrations/` (`npm run migrate`)                 |
+| `packages/database`   | Sequelize `src/tables/<table>/` (model, types, enums), and sequelize-cli `migrations/` (`npm run migrate`)               |
 | `packages/shared`     | Error codes and envelope, request id                                                                                     |
 | `e2e/`                | Playwright browser tests (own API on 3100, web on 5174, queue `ayd-e2e`)                                                 |
 | `docs/`               | Request flow, conventions, blueprint, ADRs 0001 to 0015, features, implementation, testing, `extra.md`, AI reviews       |
@@ -176,10 +176,11 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
 
 ## In progress
 
-| What                                                                                                            | Files               | Session started |
-| --------------------------------------------------------------------------------------------------------------- | ------------------- | --------------- |
-| Walkthrough: dev worker and web started (API was already running); no code changes                              | none                | 2026-10-16      |
-| Learning doc `docs/sequelize.md` describing the Sequelize work above (read-only on code; writes only that file) | `docs/sequelize.md` | 2026-10-16      |
+| What                                                                                                                                                                                   | Files                                                                                   | Session started |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------- |
+| Walkthrough: dev worker and web started (API was already running); no code changes                                                                                                     | none                                                                                    | 2026-10-16      |
+| Learning doc `docs/sequelize.md` describing the Sequelize work above (read-only on code; writes only that file)                                                                        | `docs/sequelize.md`                                                                     | 2026-10-16      |
+| Layout: `packages/database` one folder per table; core storage split into `*.repository.ts` + `sequelize-*.repository.ts` (history, proposal cache, usage, audit). No behaviour change | `packages/database/src/`, `packages/core/src/{history,ask,limits,audit,testing}/`, docs | 2026-10-18      |
 
 ## Session log
 
@@ -203,3 +204,4 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
   - Commit 3 of 4: `lib/use-job-runner.ts` replaces five copies of the job-progress code; `lib/notify.ts` replaces four error toasts; the connect wizard uses `useForm` from `@mantine/form` 9.7.2, which is a new dependency (`docs/ai-reviews/2026-10-18-web-job-runner-and-form.md`). 72 web tests, the type-check, lint, and `vite build` passed; browser tests wait for Docker.
   - Commit 4 of 4: new `docs/request-flow.md`, `docs/conventions.md`, and a README in each app and package. The root README, `features.md`, `implementation.md`, `docs/README.md`, and the stack in `CLAUDE.md` (now Vite and Sequelize) were brought up to date (`docs/ai-reviews/2026-10-18-onboarding-docs.md`).
   - **Not yet run for the cleanup:** `npm run test:int` and `npm run test:browser`, because Docker Desktop was not running.
+  - Layout, commit 1 of 2: `packages/database/src` is one folder per table (`src/tables/<table>/` with model, types, enums, and `index.ts`); exported names unchanged, so no importer changed (`docs/ai-reviews/2026-10-18-database-by-table.md`). Build, a model-registration check, lint, and unit tests passed; `test:int` waits for Docker.
