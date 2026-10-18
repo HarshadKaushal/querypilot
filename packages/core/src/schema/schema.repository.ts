@@ -1,4 +1,4 @@
-import type { AuditEntry } from '../audit/audit-log';
+import type { AuditEntry } from '../audit/audit.repository';
 import type { AllowlistEntry } from './allowed-schema';
 import type { SchemaDocument } from './schema-document';
 

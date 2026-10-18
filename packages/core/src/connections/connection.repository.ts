@@ -1,6 +1,6 @@
 import type { SealedCredentials } from '@ayd/crypto';
 import type { ConnectionStatus, SslMode } from '@ayd/database';
-import type { AuditEntry } from '../audit/audit-log';
+import type { AuditEntry } from '../audit/audit.repository';
 
 export interface PublicConnection {
   id: string;

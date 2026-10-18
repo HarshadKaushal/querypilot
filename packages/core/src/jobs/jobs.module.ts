@@ -1,9 +1,12 @@
 import { Module } from '@nestjs/common';
 import { AskJobRunner } from '../ask/ask-job.runner';
-import { SequelizeProposalCache, PROPOSAL_CACHE } from '../ask/proposal-cache';
-import { AUDIT_WRITER, SequelizeAuditWriter } from '../audit/audit-writer';
+import { PROPOSAL_CACHE } from '../ask/proposal-cache.repository';
+import { SequelizeProposalCache } from '../ask/sequelize-proposal-cache.repository';
+import { AUDIT_WRITER } from '../audit/audit.repository';
+import { SequelizeAuditWriter } from '../audit/sequelize-audit.repository';
 import { HistoryModule } from '../history/history.module';
-import { SequelizeUsageCounters, USAGE_COUNTERS } from '../limits/usage-counters';
+import { USAGE_COUNTERS } from '../limits/usage-counters.repository';
+import { SequelizeUsageCounters } from '../limits/sequelize-usage-counters.repository';
 import { LlmModule } from '../llm/llm.module';
 import { ConnectionsCoreModule } from '../connections/connections-core.module';
 import { SchemaCoreModule } from '../schema/schema-core.module';

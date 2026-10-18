@@ -32,7 +32,7 @@ import {
   questionKey,
   type CachedProposal,
   type ProposalCache,
-} from './proposal-cache';
+} from './proposal-cache.repository';
 import {
   buildSummaryPrompt,
   SUMMARY_SAMPLE_ROWS,

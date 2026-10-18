@@ -1,17 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import { Injectable } from '@nestjs/common';
 import { AuditLog } from '@ayd/database';
 import type { Transaction } from 'sequelize';
-
-/**
- * One audit_log row. Metadata holds ids and outcomes only: never passwords, tokens, emails,
- * or result rows. userId is null once the account has been deleted.
- */
-export interface AuditEntry {
-  userId: string | null;
-  eventType: string;
-  metadata: Record<string, string>;
-  ip: string | null;
-}
+import type { AuditEntry, AuditWriter } from './audit.repository';
 
 /**
  * The single writer for audit rows, used by every Sequelize repository. Pass `transaction`
@@ -31,4 +22,11 @@ export async function writeAuditLog(
     },
     { transaction },
   );
+}
+
+@Injectable()
+export class SequelizeAuditWriter implements AuditWriter {
+  async write(entry: AuditEntry): Promise<void> {
+    await writeAuditLog(entry);
+  }
 }

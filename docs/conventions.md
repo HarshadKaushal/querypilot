@@ -58,6 +58,13 @@ Messages are always written in this codebase. Never pass on a message from Postg
 ## Dependency injection and storage
 
 - **Storage behind an interface.** A service depends on an interface plus a `Symbol` token (`CONNECTION_REPOSITORY`), not on Sequelize. The module provides the Sequelize class, and unit tests provide an in-memory one (`packages/core/src/testing/`, `apps/api/src/testing/`).
+- **Two files per storage area.** `<name>.repository.ts` holds the interface, its token, its types, and pure helpers; `sequelize-<name>.repository.ts` holds the `@Injectable` class with the queries. Every area follows this: `connections/`, `schema/`, `history/`, `ask/` (proposal cache), `limits/` (usage counters), and `audit/`. Auth's storage is the same, in `apps/api/src/auth/storage/`.
+- **Layers, from the table up:**
+  1. `packages/database/src/tables/<table>/`: what a row looks like (model, types, enums). No queries.
+  2. `*.repository.ts` and `sequelize-*.repository.ts`: the queries and transactions.
+  3. `*.service.ts` and `*.runner.ts`: the rules (validation, ownership, job steps). They call repositories through their tokens.
+  4. `apps/api/src/<feature>/*.controller.ts`: HTTP only.
+- **No pass-through services.** History, the proposal cache, usage counters, and audit have no rules beyond storage, so code injects their repository token directly. Add a service when real rules appear, not before.
 - **Transactions.** Pass `{ transaction }` to every query inside `db.transaction(async (transaction) => ...)`. A query without it runs outside the transaction and is not rolled back.
 - **Audit rows for a change** are written in the same transaction as the change.
 
@@ -79,9 +86,6 @@ The patterns below differ from file to file. They work, and they were left as th
 - **Result shapes:**
   - Most results use `{ ok: true | false }`.
   - `SqlCheckResult` uses `allowed`, `UpdatePlan` uses `check`, `SqlRun` uses `ran`, and a few results are plain strings.
-- **Repository layout:**
-  - `connections/` and `schema/` split the interface and the Sequelize class into two files.
-  - `history/query-history.ts` and `ask/proposal-cache.ts` keep both in one file.
 - **Audit writes:**
   - Some repositories have a `writeAudit` method.
   - `JobProcessor` uses `AUDIT_WRITER`.

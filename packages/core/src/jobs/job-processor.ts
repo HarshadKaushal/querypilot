@@ -1,14 +1,14 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { AskJobRunner } from '../ask/ask-job.runner';
-import { AUDIT_WRITER, type AuditWriter } from '../audit/audit-writer';
+import { AUDIT_WRITER, type AuditWriter } from '../audit/audit.repository';
 import { INTERNAL_ERROR_MESSAGE } from '../errors/app.exception';
 import { utcDay } from '../limits/daily-quota';
-import { USAGE_COUNTERS, type UsageCounters } from '../limits/usage-counters';
+import { USAGE_COUNTERS, type UsageCounters } from '../limits/usage-counters.repository';
 import {
   historyEntryFor,
   QUERY_HISTORY,
   type QueryHistory,
-} from '../history/query-history';
+} from '../history/query-history.repository';
 import { ConnectionJobRunner } from './connection-job.runner';
 import { JobCancellation } from './job-cancellation';
 import {

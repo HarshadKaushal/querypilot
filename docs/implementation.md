@@ -299,7 +299,7 @@ Before adding a phase, check that the current one passes `npm test`, `npm run li
 
 **Audit and logs:**
 
-- Write audit rows with `writeAuditLog` (`packages/core/src/audit/audit-log.ts`). Put ids and outcomes in the metadata, never secrets.
+- Write audit rows with `writeAuditLog` (`packages/core/src/audit/sequelize-audit.repository.ts`). Put ids and outcomes in the metadata, never secrets.
 - An audit row for a delete or change goes in the same transaction as that change, and only when something changed (as `SequelizeConnectionRepository.delete` and `SequelizeQueryHistory.delete` do).
 - Log errors with `safeErrorDetail`, which strips connection URLs.
 

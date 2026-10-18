@@ -1,4 +1,4 @@
-import type { CachedProposal, ProposalCache } from '../ask/proposal-cache';
+import type { CachedProposal, ProposalCache } from '../ask/proposal-cache.repository';
 
 /** In-memory ProposalCache for unit tests, with the same rules as the Sequelize one. */
 export class MemoryProposalCache implements ProposalCache {

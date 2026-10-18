@@ -1,5 +1,5 @@
 import type { AskJobRunner } from '../ask/ask-job.runner';
-import type { QueryHistory } from '../history/query-history';
+import type { QueryHistory } from '../history/query-history.repository';
 import { MemoryAuditWriter, MemoryUsageCounters } from '../testing/memory-limits';
 import type { ConnectionJobRunner } from './connection-job.runner';
 import type { JobCancellation } from './job-cancellation';

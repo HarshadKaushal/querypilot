@@ -8,7 +8,7 @@ import {
   encodeCursor,
   historyEntryFor,
   type QueryHistory,
-} from './query-history';
+} from './query-history.repository';
 
 const createdAt = new Date('2026-10-14T10:00:00.000Z');
 const ask = { userId: 'u1', connectionId: 'c1', question: 'How many orders?' };

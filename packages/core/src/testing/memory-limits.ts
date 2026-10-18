@@ -1,7 +1,11 @@
-import type { AuditEntry } from '../audit/audit-log';
-import type { AuditWriter } from '../audit/audit-writer';
+import type { AuditEntry } from '../audit/audit.repository';
+import type { AuditWriter } from '../audit/audit.repository';
 import { utcDay } from '../limits/daily-quota';
-import type { DailyUsage, UsageCounters, UsageDelta } from '../limits/usage-counters';
+import type {
+  DailyUsage,
+  UsageCounters,
+  UsageDelta,
+} from '../limits/usage-counters.repository';
 
 /** In-process stand-in for RateLimiter. Same sliding window, no Redis. */
 export class MemoryRateLimiter {

@@ -1,4 +1,4 @@
-import type { AuditEntry } from '../audit/audit-log';
+import type { AuditEntry } from '../audit/audit.repository';
 import type { AllowlistEntry } from '../schema/allowed-schema';
 import {
   SNAPSHOTS_KEPT,

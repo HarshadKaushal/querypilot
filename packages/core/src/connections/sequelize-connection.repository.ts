@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { AllowedObject, Connection, SchemaSnapshot } from '@ayd/database';
-import { writeAuditLog, type AuditEntry } from '../audit/audit-log';
+import type { AuditEntry } from '../audit/audit.repository';
+import { writeAuditLog } from '../audit/sequelize-audit.repository';
 import { DatabaseService } from '../database/database.service';
 import {
   toPublicConnection,

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
-import { SequelizeQueryHistory, QUERY_HISTORY } from './query-history';
+import { QUERY_HISTORY } from './query-history.repository';
+import { SequelizeQueryHistory } from './sequelize-query-history.repository';
 
 /** Query history storage: written by the worker, read and deleted by the API. */
 @Module({
