@@ -16,7 +16,7 @@
     "@mantine/hooks": "^9.7.2",
     "@mantine/notifications": "^9.7.2",
     "@tanstack/react-query": "^5.104.2",
-    "@tanstack/react-virtual": "^3.14.19",
+    "@tanstack/react-virtual": "^3.14.21",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router": "^8.4.0",
