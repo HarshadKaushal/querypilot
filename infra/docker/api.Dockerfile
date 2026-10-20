@@ -1,4 +1,4 @@
-FROM node:24-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /repo
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
@@ -15,7 +15,7 @@ RUN npm ci
 COPY . .
 RUN npm run build --workspace=@ayd/shared && npm run build --workspace=@ayd/ssrf-guard && npm run build --workspace=@ayd/crypto && npm run build --workspace=@ayd/sql-guard && npm run build --workspace=@ayd/database && npm run build --workspace=@ayd/core && npm run build --workspace=@ayd/api
 
-FROM node:24-alpine
+FROM node:26-alpine
 WORKDIR /repo
 ENV NODE_ENV=production
 COPY --from=build /repo /repo
