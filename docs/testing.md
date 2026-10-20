@@ -63,4 +63,8 @@ On every push: lint, format check, unit tests (including the web app's), and bui
 
 On every push, in a second job: migrate a Postgres service, then integration and API end-to-end tests.
 
+CI runs on a clean machine, with no `dist` folders, so each root test script builds the packages it needs first, in dependency order, starting with `@ayd/shared`. A script that skips one passes on a laptop that still has an old `dist`, and fails in CI. Add new packages to every script's build list.
+
+Dependabot (`.github/dependabot.yml`) checks npm packages, GitHub Actions, and the Dockerfiles in `infra/docker` weekly, and opens a pull request for each update. Each pull request runs the CI above.
+
 Browser tests run locally for now (the user's choice); a CI job needs the whole stack started in GitHub Actions and comes with the deployment work. Evaluation runs when `eval/` exists, on a schedule and when prompts or models change.

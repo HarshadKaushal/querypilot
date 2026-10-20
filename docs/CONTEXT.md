@@ -2,7 +2,7 @@
 
 The shared starting point for every Claude session on this repository, including several running at once. **Read this first, then update it** (see "Keeping this file current"). The code is the source of truth; this file says where things stand and what was decided, so a new session does not have to rediscover it.
 
-Last updated: 2026-10-18, after the storage layout change (2 commits, base `e474b61`).
+Last updated: 2026-10-20, after the first push to GitHub (`main` at `324679c`).
 
 ## Keeping this file current
 
@@ -20,7 +20,7 @@ Last updated: 2026-10-18, after the storage layout change (2 commits, base `e474
 - **Phases 0 to 9 of the blueprint are done.** Phases 10 (observability and hardening), 11 (evaluation and load tests), and 12 (deployment) are not started.
 - **Against the assignment brief,** two items are open, the evaluation dataset with results and deployment instructions. Swagger docs and DTO validation are done. See "Open items".
 - **The application database uses Sequelize** (since 2026-10-16, ADR 0015), not Prisma. The development database `ayd` is migrated.
-- **All work is committed locally on `main`;** nothing is pushed. The user reviews commits afterwards.
+- **`main` is on GitHub (2026-10-20):** public repo `HarshadKaushal/querypilot` (remote `origin`), pushed at `324679c`. Only `main` was pushed; `backup/before-squash` stays local. The user reviews commits afterwards.
 - **Onboarding docs exist (2026-10-18):** `docs/request-flow.md` (one question through every file), `docs/conventions.md`, and a README in every app and package. Keep them in step with the code, like the other docs.
 - **Storage layout (2026-10-18):** `packages/database/src/tables/<table>/` per table; every core storage area is `*.repository.ts` plus `sequelize-*.repository.ts`. Layer rules are in `docs/conventions.md`.
 
@@ -81,14 +81,14 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
 
 ## Tests and checks
 
-| Command                                                 | What                                            | Last result                                                                                                                 |
-| ------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `npm test`                                              | Unit tests, no Docker                           | API 112, web 68, worker 6, core 293, guard 310, ssrf 25, crypto 4, shared 4 (exits 1: see sql-guard coverage in loose ends) |
-| `npm run test:int`                                      | Real Postgres and Redis                         | 97                                                                                                                          |
-| `npm run test:e2e`                                      | API end to end                                  | 3                                                                                                                           |
-| `npm run test:browser`                                  | Playwright demo flow and axe, desktop and phone | 6                                                                                                                           |
-| `npm run test:browser:live`                             | One real-Gemini question (opt-in)               | 1                                                                                                                           |
-| `npm run lint`, `npm run format:check`, `npm run build` |                                                 | pass (one known lint warning: TanStack Virtual and the React Compiler)                                                      |
+| Command                                                 | What                                            | Last result                                                                                                    |
+| ------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `npm test`                                              | Unit tests, no Docker                           | API 112, web 68, worker 6, core 293, guard 311 (coverage passes since 2026-10-20), ssrf 25, crypto 4, shared 4 |
+| `npm run test:int`                                      | Real Postgres and Redis                         | 97                                                                                                             |
+| `npm run test:e2e`                                      | API end to end                                  | 3                                                                                                              |
+| `npm run test:browser`                                  | Playwright demo flow and axe, desktop and phone | 6                                                                                                              |
+| `npm run test:browser:live`                             | One real-Gemini question (opt-in)               | 1                                                                                                              |
+| `npm run lint`, `npm run format:check`, `npm run build` |                                                 | pass (one known lint warning: TanStack Virtual and the React Compiler)                                         |
 
 `test:int`, `test:browser`, and `build` rebuild packages: see the parallel-session rules above.
 
@@ -97,7 +97,8 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
 - **Read `CLAUDE.md`.** The user is learning full-stack development: explain beginner-style, explain the plan and the affected files before implementing, and keep changes small.
 - **Bugs:** explain the cause and suggest fixes; **the user decides** what to do.
 - **Commits:**
-  - Commit locally only, and never push.
+  - Commit locally. Push to `origin` only when the user asks (the repo is public, so check for secrets first).
+  - Never push `backup/before-squash`.
   - Bundle small fixes together; amend a commit if the user has not reviewed it yet.
   - End commit messages with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - **One AI review file per commit** in `docs/ai-reviews/YYYY-MM-DD-<subject>.md`, with sections: What changed, AI usage, Suggestions accepted, Suggestions rejected, Decisions, Problems found, What was checked, Still open.
@@ -127,6 +128,7 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
   - Migrations rewritten as sequelize-cli JavaScript (not Prisma's SQL kept).
   - Models, types, enums, the Nest module, and the service each in their own files.
   - Time columns are `TIMESTAMPTZ(3)`.
+- **GitHub (2026-10-20):** a public repo, `HarshadKaushal/querypilot`, with only `main` pushed. Commits keep the existing author email.
 - **API docs file names:** `*.dto.ts` holds what a client sends (validated); `*.responses.ts` holds what it gets back (docs only).
 - **API docs (Swagger), in two stages:**
   - Stage 1 (done 2026-10-16): `/docs` with tags, summaries, status codes, and example bodies.
@@ -172,7 +174,7 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
 - **Not built yet:** a chart-type switcher, example question-and-SQL pairs in the prompt, a circuit breaker per model provider, a key re-wrap job, readiness checks for the queue and the model, data export, partitions and retention, a rate limit on connection tests, browser tests in CI, and editing a connection's login in the app.
 - **The main web bundle is about 715 kB** before compression (measured 2026-10-18, after `@mantine/form`; 695 kB on 2026-10-16). Lazy-loading pages in `app/router.tsx` would split it.
 - **Browser tests not yet run on the web feature layout, on Sequelize, or on the 2026-10-18 cleanup**, and `test:int` not run on the cleanup or the storage layout change: run `npm run test:int` and `npm run test:browser` when Docker is up and no dev servers are in use. The browser demo flow fills in the connect wizard, which now uses `@mantine/form`.
-- **`npm test` exits 1 on sql-guard's coverage threshold** (functions 98.83% against 100%, in `index.ts`), although all 310 tests pass. Found 2026-10-16; it predates the Sequelize move (no sql-guard file or package version changed). Decide whether to cover `index.ts` or exclude it.
+- **CI on GitHub not yet green after the 2026-10-20 fixes:** confirm with `gh run list --branch main` after the next push. `test:int` and `test:e2e` in CI also include tests not run locally since the cleanup (see the browser and `test:int` item above), so a new failure there may be real.
 - **`sequelize-typescript` has had no release since 2023.** Check it first when upgrading Sequelize.
 
 ## In progress
@@ -206,3 +208,5 @@ npm run dev:web      # web app on :5173 (proxies /v1 to :3000)
   - **Not yet run for the cleanup:** `npm run test:int` and `npm run test:browser`, because Docker Desktop was not running.
   - Layout, commit 1 of 2: `packages/database/src` is one folder per table (`src/tables/<table>/` with model, types, enums, and `index.ts`); exported names unchanged, so no importer changed (`docs/ai-reviews/2026-10-18-database-by-table.md`). Build, a model-registration check, lint, and unit tests passed; `test:int` waits for Docker.
   - Layout, commit 2 of 2: history, proposal cache, usage counters, and audit in core each split into `<name>.repository.ts` (interface, token, helpers) and `sequelize-<name>.repository.ts`, like `connections/`; `conventions.md` now has the layer rules (`docs/ai-reviews/2026-10-18-core-repository-layout.md`). Build, export check, lint, and unit tests passed; `test:int` waits for Docker.
+- **2026-10-20:** Learning session (Redis, job cancellation, `AskJobRunner`; no code changes). First push: created the public repo `HarshadKaushal/querypilot` and pushed `main` (55 commits). Before pushing, checked that `.env` was never committed, that `.env.example` holds only placeholders, and that no commit contains key-like strings. The uncommitted `api-client.ts` change and `docs/sequelize.md` were not pushed.
+  - The first CI run on GitHub failed in three places, and all three were fixed in one commit (`docs/ai-reviews/2026-10-20-ci-fixes.md`): `test:int` and `test:e2e` now build `@ayd/shared` first (it only worked locally because of an old `dist`); a sql-guard test reads `ALLOWED_FUNCTIONS` through `index.ts` (function coverage 100%, closing the 2026-10-16 loose end); and Dependabot's `docker` entry for `/` was removed, because there is no Dockerfile there.

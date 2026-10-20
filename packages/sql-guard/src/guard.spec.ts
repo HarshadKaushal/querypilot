@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { checkSql, MAX_SQL_LENGTH, type GuardVerdict } from './index';
+import { FUNCTIONS } from './allowlists';
+import { ALLOWED_FUNCTIONS, checkSql, MAX_SQL_LENGTH, type GuardVerdict } from './index';
 import { ATTACKS } from './__fixtures__/attacks';
 import { SAFE } from './__fixtures__/safe';
 import { ROW_CAP, TABLES } from './__fixtures__/tables';
@@ -162,5 +163,10 @@ describe('package', () => {
       'libpg-query',
       'pgsql-deparser',
     ]);
+  });
+
+  it('exports the same function allowlist the guard checks, for the model prompt', () => {
+    expect(ALLOWED_FUNCTIONS).toBe(FUNCTIONS);
+    expect(ALLOWED_FUNCTIONS.size).toBeGreaterThan(0);
   });
 });

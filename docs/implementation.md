@@ -131,7 +131,7 @@ Name resolution needs hidden columns too. The guard is given every snapshot tabl
 
 `pgsql-deparser` turns the tree back into SQL. It is not PostgreSQL's code, so its output is parsed and checked again, and has to come back unchanged. A test with a faulty deparser shows that a hidden column put back at that step is caught.
 
-The corpus lives in `src/__fixtures__`: one attack or safe query per line, so a new case is one line. The package's Jest config requires 99% statement and 95% branch coverage.
+The corpus lives in `src/__fixtures__`: one attack or safe query per line, so a new case is one line. The package's Jest config requires 99% statement, 95% branch, 100% function, and 99% line coverage. Re-exports in `index.ts` count as functions, so each export needs a test that reads it through `./index`.
 
 `POST /v1/connections/:id/sql/check` is the API's use of the guard for now. `SqlGuardService` loads the connection's allowlist view, which also checks ownership and that a snapshot exists, and passes it to `checkSql` with `SQL_ROW_CAP`. A rejection is a 200 response, because checking succeeded.
 
